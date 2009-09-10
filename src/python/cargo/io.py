@@ -1,5 +1,5 @@
 """
-cargo/io.py
+cargo/kit/io.py
 
 Operations associated with the filesystem.
 
@@ -69,4 +69,15 @@ def write_from_file(tf, ff, chunk_size = 2**16):
             tf.write(chunk)
         else:
             return
+
+def escape_for_latex(text):
+    """
+    Escape a text string for use in a LaTeX document.
+    """
+
+    return \
+        replace_all(
+            text,
+            ("%", r"\%"),
+            ("_", r"\_"))
 

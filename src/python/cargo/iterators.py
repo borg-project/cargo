@@ -1,60 +1,17 @@
 """
-cargo/kit.py
+cargo/kit/iterators.py
 
 General support routines.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import re
-import sys
 import numpy
-import traceback
 
-from abc import ABCMeta
-from optparse import (
-    Option,
-    OptionParser,
-    OptionValueError)
-from itertools import chain
 from contextlib import (
     nested,
-    closing)
-
-def print_ignored_error(message = "An error was unavoidably ignored:"):
-    """
-    We're in an exception handler, but can't handle the exception.
-    """
-
-    sys.stderr.write("\n%s\n" % message)
-
-    traceback.print_exc()
-
-    sys.stderr.write("\n")
-
-class ABC(object):
-    """
-    Base class for abstract base classes.
-
-    Completely unecessary, but makes ABCs slightly more convenient.
-    """
-
-    __metaclass__ = ABCMeta
-
-class Raised(object):
-    """
-    Store the currently-handled exception.
-
-    The current exception must be saved before errors during error handling are
-    handled, so that the original exception can be re-raised with its context
-    information intact.
-    """
-
-    def __init__(self):
-        (self.cls, self.value, self.traceback) = sys.exc_info()
-
-    def re_raise(self):
-        raise self.cls, self.value, self.traceback
+    closing,
+    )
 
 def shuffled(sequence, random = numpy.random):
     """
@@ -150,15 +107,4 @@ def non_none(*args):
         return (a for a in args if a is not None).next()
     except StopIteration:
         return None
-
-def escape_for_latex(text):
-    """
-    Escape a text string for use in a LaTeX document.
-    """
-
-    return \
-        replace_all(
-            text,
-            ("%", r"\%"),
-            ("_", r"\_"))
 
