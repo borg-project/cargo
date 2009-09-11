@@ -1,5 +1,5 @@
 """
-cargo/kit/errors.py
+cargo/errors.py
 
 General error routines.
 

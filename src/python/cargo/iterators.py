@@ -1,7 +1,7 @@
 """
-cargo/kit/iterators.py
+cargo/iterators.py
 
-General support routines.
+General support iterators.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """

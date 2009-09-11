@@ -14,7 +14,14 @@ import datetime
 
 from itertools import count
 from logging import (
+    INFO,
+    DEBUG,
+    ERROR,
+    NOTSET,
     Filter,
+    Logger,
+    WARNING,
+    CRITICAL,
     Formatter,
     FileHandler,
     StreamHandler,
@@ -24,20 +31,20 @@ from cargo.flags import (
     FlagSet,
     )
 
-class DefaultLogger(object):
+class DefaultLogger(logging.getLoggerClass()):
     """
     Simple standard logging.
     """
 
-    def __new__(cls, name):
+    def __init__(self, name, level = logging.NOTSET):
         """
-        Construct an appropriate logger.
+        Initialize.
         """
 
-        return logging.getLogger(name)
+        if name == "__main__":
+            name = "main"
 
-    # FIXME these method definitions are useless; need to set DefaultLogger as
-    # FIXME our logger class
+        Logger.__init__(self, name, level)
 
     def detail(message, *args, **kwargs):
         """
@@ -53,7 +60,21 @@ class DefaultLogger(object):
 
         return self.log(logging.NOTE, *args, **kwargs)
 
-log = DefaultLogger("cargo.log")
+# use our logger class by default
+logging.setLoggerClass(DefaultLogger)
+
+def get_logger(name, level = logging.WARNING):
+    """
+    Get or create a logger.
+    """
+
+    logger = logging.getLogger(name)
+
+    logger.setLevel(level)
+
+    return logger
+
+log = get_logger(__name__)
 
 class Flags(FlagSet):
     """
@@ -92,7 +113,7 @@ class Flags(FlagSet):
 
 flags = Flags.given
 
-class ConciseTtyFormatter(Formatter):
+class TTY_ConciseFormatter(Formatter):
     """
     A concise log formatter for console output.
     """
@@ -108,9 +129,9 @@ class ConciseTtyFormatter(Formatter):
         format = "%(message)s"
 
         # initialize this formatter
-        Formatter.__init__(self, format, ConciseTtyFormatter._DATE_FORMAT)
+        Formatter.__init__(self, format, TTY_ConciseFormatter._DATE_FORMAT)
 
-class VerboseTtyFormatter(Formatter):
+class TTY_VerboseFormatter(Formatter):
     """
     A verbose log formatter for console output.
     """
@@ -140,16 +161,16 @@ class VerboseTtyFormatter(Formatter):
             if curses.tigetnum("colors") > 2:
                 format = \
                     "%s%%(name)s%s - %s%%(levelname)s%s - %%(message)s" % (
-                        VerboseTtyFormatter._NAME_COLOR,
-                        VerboseTtyFormatter._COLOR_END,
-                        VerboseTtyFormatter._LEVEL_COLOR,
-                        VerboseTtyFormatter._COLOR_END)
+                        TTY_VerboseFormatter._NAME_COLOR,
+                        TTY_VerboseFormatter._COLOR_END,
+                        TTY_VerboseFormatter._LEVEL_COLOR,
+                        TTY_VerboseFormatter._COLOR_END)
 
         if format is None:
             format = "%(name)s - %(levelname)s - %(message)s"
 
         # initialize this formatter
-        Formatter.__init__(self, format, VerboseTtyFormatter._DATE_FORMAT)
+        Formatter.__init__(self, format, TTY_VerboseFormatter._DATE_FORMAT)
 
 class VerboseFileFormatter(Formatter):
     """
@@ -166,9 +187,28 @@ class VerboseFileFormatter(Formatter):
 
         Formatter.__init__(self, VerboseFileFormatter._FORMAT, VerboseFileFormatter._DATE_FORMAT)
 
+class OpaqueFilter(Filter):
+    """
+    Exclude all records.
+    """
+
+    def __init__(self):
+        """
+        Initialize.
+        """
+
+        Filter.__init__(self)
+
+    def filter(self, record):
+        """
+        Allow no records.
+        """
+
+        return 0
+
 class ExactExcludeFilter(Filter):
     """
-    Log filter for exact exclusion.
+    Exclude records with a specific name.
     """
 
     def __init__(self, exclude):
@@ -200,18 +240,16 @@ def enable_console(level = logging.NOTSET, verbose = True):
     handler = StreamHandler(sys.stdout)
 
     if verbose:
-        formatter = VerboseTtyFormatter
+        formatter = TTY_VerboseFormatter
     else:
-        formatter = ConciseTtyFormatter
+        formatter = TTY_ConciseFormatter
 
     handler.setFormatter(formatter(sys.stdout))
     handler.setLevel(level)
 
     logging.root.addHandler(handler)
 
-    today = datetime.datetime.today()
-
-    log.debug("enabled console log at %s" % (today.isoformat()))
+    log.debug("enabled logging to stdout at %s", datetime.datetime.today().isoformat())
 
     return handler
 
@@ -239,9 +277,7 @@ def enable_disk(prefix = None, level = logging.NOTSET):
 
     logging.root.addHandler(handler)
 
-    today = datetime.datetime.today()
-
-    log.debug("enabled disk log %s at %s" % (path, today.isoformat()))
+    log.debug("enabled logging to %s at %s", path, datetime.datetime.today().isoformat())
 
     return handler
 
@@ -257,7 +293,7 @@ def defaults():
     logging.addLevelName(logging.DETAIL, "DETAIL")
     logging.addLevelName(logging.NOTE, "NOTE")
 
-    # default setup
+    # default setup (FIXME which is silly: should enable the disk log via flag or environment)
     if sys.stdout.isatty():
         enable_console()
     else:
