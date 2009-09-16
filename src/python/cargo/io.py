@@ -1,18 +1,23 @@
 """
-cargo/kit/io.py
+cargo/io.py
 
 Operations associated with the filesystem.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import os
 import os.path
+import errno
 import fnmatch
+import hashlib
+import threading
 import mimetypes
 import subprocess
 
 from bz2 import BZ2File
 from gzip import GzipFile
+from cargo.errors import print_ignored_error
 
 def files_under(path, pattern = "*"):
     """
@@ -57,6 +62,33 @@ def openz(path, mode = 'r'):
     else:
         raise RuntimeError("unsupported file encoding")
 
+def hash_file(path, algorithm_name = None):
+    """
+    Return a deterministic hash of the contents of C{bytes}.
+
+    @return (algorithm_name, hash)
+    """
+
+    with open(path) as path_file:
+        return hash_bytes(path_file.read(), algorithm_name)
+
+def hash_bytes(bytes, algorithm_name = None):
+    """
+    Return a deterministic hash of C{bytes}.
+
+    @return (algorithm_name, hash)
+    """
+
+    if algorithm_name is None:
+        algorithm = hashlib.sha512()
+        algorithm_name = "sha512"
+    else:
+        algorithm = hashlib.new(algorithm_name)
+
+    algorithm.update(bytes)
+
+    return (algorithm_name, algorithm.digest())
+
 def write_from_file(tf, ff, chunk_size = 2**16):
     """
     Write the contents of file object C{ff} to file object C{tf}.
@@ -69,6 +101,51 @@ def write_from_file(tf, ff, chunk_size = 2**16):
             tf.write(chunk)
         else:
             return
+
+def write_file_atomically(path, data):
+    """
+    Write a temporary file, fsync, rename, and clean up.
+    """
+
+    # FIXME untested, unfinished, unused
+
+    # grab the existing mode bits, if any
+    try:
+        stat_info = os.stat(path)
+    except OSError, error:
+        if error.errno != errno.ENOENT:
+            raise
+        else:
+            stat_info = None
+
+    # generate a unique temporary path
+    (path_dir, path_base) = os.path.split(path)
+    temp_path = os.path.join(path_dir, ".%s~%i" % (path_base, uuid4()))
+
+    # write data to the temporary
+    temp_fd = None
+
+    try:
+        temp_fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat_info.st_mode)
+        written = 0
+
+        while written < len(data):
+            written += os.write(temp_fd, data[written:])
+
+        os.fdatasync(temp_fd)
+        temp_fd_ = temp_fd
+        temp_fd = None
+        os.close(temp_fd_)
+        os.rename(temp_path, path)
+        os.unlink(temp_path)
+    except:
+        try:
+            if temp_fd != None:
+                os.close(temp_fd)
+
+            os.unlink(temp_path)
+        except:
+            print_ignored_error()
 
 def escape_for_latex(text):
     """

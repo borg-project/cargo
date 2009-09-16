@@ -1,5 +1,5 @@
 """
-cargo/kit/bases.py
+cargo/bases.py
 
 General support base classes.
 

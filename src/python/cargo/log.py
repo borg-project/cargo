@@ -46,14 +46,14 @@ class DefaultLogger(logging.getLoggerClass()):
 
         Logger.__init__(self, name, level)
 
-    def detail(message, *args, **kwargs):
+    def detail(self, message, *args, **kwargs):
         """
         Write a log message at the DETAIL level.
         """
 
         return self.log(logging.DETAIL, *args, **kwargs)
 
-    def note(message, *args, **kwargs):
+    def note(self, message, *args, **kwargs):
         """
         Write a log message at the NOTE level.
         """
