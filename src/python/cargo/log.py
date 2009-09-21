@@ -204,7 +204,7 @@ class OpaqueFilter(Filter):
         Allow no records.
         """
 
-        return 0
+        return False
 
 class ExactExcludeFilter(Filter):
     """
@@ -228,9 +228,9 @@ class ExactExcludeFilter(Filter):
         """
 
         if record.name != self.__exclude:
-            return 1
+            return True
         else:
-            return 0
+            return False
 
 def enable_console(level = logging.NOTSET, verbose = True):
     """
