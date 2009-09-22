@@ -258,7 +258,7 @@ class CondorSubmission(object):
         with NamedTemporaryFile(suffix = ".condor") as temporary:
             self.write(temporary)
 
-            check_call(["condor_submit", temporary.name])
+            check_call(["/usr/bin/env", "condor_submit", temporary.name])
 
     def run_or_submit(self):
         """
