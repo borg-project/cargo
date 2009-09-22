@@ -10,6 +10,8 @@ import os
 import sys
 import cPickle as pickle
 
+from cargo.flags import parse_given
+
 def main():
     """
     Application entry point.
@@ -25,6 +27,8 @@ def main():
     # load and run the job
     with open("job.pickle") as job_file:
         job = pickle.load(job_file)
+
+    parse_given()
 
     job.run()
 

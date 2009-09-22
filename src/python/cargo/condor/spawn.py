@@ -163,13 +163,14 @@ class CondorSubmission(object):
                 help   = "spawn condor jobs?",
                 )
 
-    def __init__(self, jobs, matching = None, description = "cluster job", flags = Flags.given):
+    def __init__(self, jobs, matching = None, argv = (), description = "cluster job", flags = Flags.given):
         """
         Initialize.
         """
 
         self.jobs        = jobs
         self.matching    = matching
+        self.argv        = argv
         self.description = description
         self.flags       = flags
 
@@ -187,50 +188,51 @@ class CondorSubmission(object):
 
         submit = CondorSubmissionFile(file)
 
-        with submit.file:
-            # write the job-matching section
-            if self.matching:
-                submit.write_header("node matching")
-                submit.write_blank()
-                submit.write_pair("requirements", self.matching)
-                submit.write_blank(2)
-
-            # write the general condor section
-            submit.write_header("condor configuration")
+        # write the job-matching section
+        if self.matching:
+            submit.write_header("node matching")
             submit.write_blank()
-            submit.write_pairs_dict({
-                "+Group":              "GRAD",
-                "+Project":            "AI_ROBOTICS",
-                "+ProjectDescription": self.description,
-                })
-            submit.write_blank()
-            submit.write_pairs(
-                universe     = "vanilla",
-                notification = "Error",
-                kill_sig     = "SIGINT",
-                Log          = "condor.log",
-                Error        = "condor.err",
-                Output       = "condor.out",
-                Input        = "job.pickle",
-                Executable   = "python",
-                )
-            submit.write_blank()
-            submit.write_environment(
-                CONDOR_CLUSTER  = "$(Cluster)",
-                CONDOR_PROCESS  = "$(Process)",
-                LD_LIBRARY_PATH = os.environ.get("LD_LIBRARY_PATH", ""),
-                PYTHONPATH      = os.environ.get("PYTHONPATH", ""),
-                )
+            submit.write_pair("requirements", self.matching)
             submit.write_blank(2)
 
-            # write the jobs section
-            submit.write_header("condor jobs")
-            submit.write_blank()
+        # write the general condor section
+        submit.write_header("condor configuration")
+        submit.write_blank()
+        submit.write_pairs_dict({
+            "+Group":              "GRAD",
+            "+Project":            "AI_ROBOTICS",
+            "+ProjectDescription": "\"%s\"" % self.description,
+            })
+        submit.write_blank()
+        submit.write_pairs(
+            universe     = "vanilla",
+            notification = "Error",
+            kill_sig     = "SIGINT",
+            Log          = "condor.log",
+            Error        = "condor.err",
+            Output       = "condor.out",
+            Input        = "/dev/null",
+            Executable   = "/lusr/bin/python",
+            Arguments    = "-m cargo.condor.host " + " ".join(self.argv),
+            )
+        submit.write_blank()
+        submit.write_environment(
+            CONDOR_CLUSTER  = "$(Cluster)",
+            CONDOR_PROCESS  = "$(Process)",
+            LD_LIBRARY_PATH = os.environ.get("LD_LIBRARY_PATH", ""),
+            PYTHONPATH      = os.environ.get("PYTHONPATH", ""),
+            )
+        submit.write_blank(2)
 
-            for job in self.jobs:
-                submit.write_comment("job %s" % job.uuid)
-                submit.write_pair("Initialdir", self.get_job_directory(job))
-                submit.write_blank()
+        # write the jobs section
+        submit.write_header("condor jobs")
+        submit.write_blank()
+
+        for job in self.jobs:
+            submit.write_comment("job %s" % job.uuid)
+            submit.write_pair("Initialdir", self.get_job_directory(job))
+            submit.write_queue(1)
+            submit.write_blank()
 
     def run(self):
         """
@@ -257,6 +259,7 @@ class CondorSubmission(object):
         # generate and send the submission file
         with NamedTemporaryFile(suffix = ".condor") as temporary:
             self.write(temporary)
+            temporary.flush()
 
             check_call(["/usr/bin/env", "condor_submit", temporary.name])
 
