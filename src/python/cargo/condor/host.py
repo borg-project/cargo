@@ -23,7 +23,8 @@ def main():
     open(identifier_path, "w").close()
 
     # load and run the job
-    job = pickle.load(sys.stdin)
+    with open("job.pickle") as job_file:
+        job = pickle.load(job_file)
 
     job.run()
 
