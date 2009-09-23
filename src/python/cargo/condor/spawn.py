@@ -21,11 +21,13 @@ from cargo.flags import (
 
 log = get_logger(__name__, level = None)
 
+# FIXME clean all this stuff up
+
 class CondorJob(object):
     """
     Manage configuration of a single condor job.
 
-    Picklable if the specified function is picklable.
+    Must remain picklable.
     """
 
     def __init__(self, function, *args, **kwargs):
@@ -43,10 +45,37 @@ class CondorJob(object):
         Run this job in-process.
         """
 
+        # FIXME
 #         if sys.argv[1:] != self.argv:
 #             raise ValueError("process arguments do not match job arguments")
 
         self.function(*self.args, **self.kwargs)
+
+class CondorJobs(CondorJob):
+    """
+    Manage configuration of multiple condor jobs.
+
+    Must remain picklable.
+    """
+
+    def __init__(self, jobs = None):
+        """
+        Initialize.
+        """
+
+        if jobs is None:
+            jobs = []
+
+        self.jobs = jobs
+        self.uuid = uuid4()
+
+    def run(self):
+        """
+        Run this job in-process.
+        """
+
+        for job in self.jobs:
+            job.run()
 
 class CondorSubmissionFile(object):
     """
