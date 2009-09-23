@@ -40,6 +40,7 @@ from cargo.flags import (
     FlagSet,
     with_flags_parsed,
     )
+from cargo.sugar import TimeDelta
 
 SQL_Base        = declarative_base()
 SQL_SessionCore = sessionmaker()
@@ -59,10 +60,14 @@ class ModuleFlags(FlagSet):
             help    = "connect to database PATH [%default]",
             )
 
-flags   = ModuleFlags.given
-engine  = None
+flags  = ModuleFlags.given
+engine = None
 
 def get_sql_engine():
+    """
+    Return the default global SQL engine.
+    """
+
     global engine
 
     if engine is None:
@@ -73,10 +78,22 @@ def get_sql_engine():
     return engine
 
 def create_sql_metadata():
+    """
+    Create metadata for all global SQL structures.
+    """
+
     SQL_Base.metadata.create_all(get_sql_engine())
 
 class SQL_Session(SQL_SessionCore):
+    """
+    More convenient SQL session.
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize.
+        """
+
         assert "bind" not in kwargs
 
         # base
@@ -153,11 +170,11 @@ class UTC_DateTime(TypeDecorator):
         Initialize.
         """
 
-        # base
-        TypeDecorator.__init__(self, timezone = True)
-
         # members
         self.zone = pytz.utc
+
+        # base
+        TypeDecorator.__init__(self, timezone = self.zone)
 
     def process_bind_param(self, value, dialect = None):
         """
@@ -179,7 +196,11 @@ class UTC_DateTime(TypeDecorator):
         Return a Python instance from SQL data.
         """
 
-        assert value.tzinfo is None
+#         if value.tzinfo is not None:
+#             print value.tzinfo.tzname(value)
+
+        # FIXME
+#         assert value.tzinfo is None
 
         if value:
             return value.replace(tzinfo = self.zone)
@@ -227,6 +248,53 @@ class SQL_JSON(TypeDecorator):
             return None
         else:
             return json.loads(value)
+
+    def is_mutable(self):
+        """
+        Are instances mutable?
+        """
+
+        return False
+
+class SQL_TimeDelta(TypeDecorator):
+    """
+    Column for data structures representable as JSON strings.
+    """
+
+    impl = Interval
+
+    def __init__(self):
+        """
+        Initialize.
+        """
+
+        # base
+        TypeDecorator.__init__(self)
+
+#     def process_bind_param(self, value, dialect = None):
+#         """
+#         Return SQL data from a Python instance.
+#         """
+
+#         if value is None:
+#             return None
+#         else:
+#             return json.dumps(value)
+
+    def process_result_value(self, value, dialect = None):
+        """
+        Return a Python instance from SQL data.
+        """
+
+        if value is None:
+            return None
+        else:
+            return \
+                TimeDelta(
+                    days = value.days,
+                    seconds = value.seconds,
+                    microseconds = value.microseconds,
+                    )
 
     def is_mutable(self):
         """
