@@ -1,7 +1,7 @@
 """
-cargo/condor/spawn.py
+cargo/condor/submit.py
 
-Build and spawn condor jobs.
+Submit condor jobs.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -181,7 +181,7 @@ class CondorSubmission(object):
         condor_home_flag = \
             Flag(
                 "--condor-home",
-                default = "condor-jobs",
+                default = "jobs-%s" % uuid4(),
                 metavar = "PATH",
                 help    = "generate job directories under PATH [%default]",
                 )

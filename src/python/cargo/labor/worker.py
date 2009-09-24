@@ -28,6 +28,8 @@ def main():
     with open("job.pickle") as job_file:
         job = pickle.load(job_file)
 
+    parse_given()
+
     job.run()
 
 if __name__ == "__main__":
