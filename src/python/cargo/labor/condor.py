@@ -302,3 +302,17 @@ class CondorSubmission(object):
         else:
             self.run()
 
+def main():
+    # FIXME
+
+    # condor!
+    submission = \
+        CondorSubmission(
+            jobs        = jobs,
+            matching    = matching,
+            argv        = argv,
+            description = "sampling randomized heuristic solver outcome distributions",
+            )
+
+    submission.run_or_submit()
+

@@ -50,7 +50,7 @@ class FlagSet(object):
     __metaclass__ = FlagSetCollector
 
     # defaults
-    flag_set_title = ""
+    flag_set_title   = ""
     flag_set_message = ""
     flag_set_enabled = True
 

@@ -56,48 +56,51 @@ class ModuleFlags(FlagSet):
         Flag(
             "--database",
             default = "sqlite:///:memory:",
-            metavar = "PATH",
-            help    = "connect to database PATH [%default]",
+            metavar = "DATABASE",
+            help    = "use DATABASE by default [%default]",
             )
 
-flags  = ModuleFlags.given
-engine = None
+flags   = ModuleFlags.given
+engines = {}
 
-def get_sql_engine():
+def get_sql_engine(database = None):
     """
     Return the default global SQL engine.
     """
 
     global engine
 
-    if engine is None:
-        engine  = create_engine(flags.database)
+    if database is None:
+        database = flags.database
 
-        create_sql_metadata()
+    try:
+        return engines[database]
+    except KeyError:
+        engine = engines[database] = create_engine(database)
 
-    return engine
+        create_sql_metadata(database)
 
-def create_sql_metadata():
+        return engine
+
+def create_sql_metadata(database = None):
     """
     Create metadata for all global SQL structures.
     """
 
-    SQL_Base.metadata.create_all(get_sql_engine())
+    SQL_Base.metadata.create_all(get_sql_engine(database))
 
 class SQL_Session(SQL_SessionCore):
     """
-    More convenient SQL session.
+    Convenient but restricted SQL session construction.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, database = None):
         """
         Initialize.
         """
 
-        assert "bind" not in kwargs
-
         # base
-        SQL_SessionCore.__init__(self, *args, bind = get_sql_engine(), **kwargs)
+        SQL_SessionCore.__init__(self, bind = get_sql_engine(database))
 
 class SQL_UUID(TypeDecorator):
     """
@@ -254,7 +257,7 @@ class SQL_JSON(TypeDecorator):
         Are instances mutable?
         """
 
-        return False
+        return True
 
 class SQL_TimeDelta(TypeDecorator):
     """
@@ -350,5 +353,5 @@ class SQL_List(TypeDecorator):
         Are instances mutable?
         """
 
-        return False
+        return True
 

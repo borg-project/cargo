@@ -51,14 +51,14 @@ class DefaultLogger(logging.getLoggerClass()):
         Write a log message at the DETAIL level.
         """
 
-        return self.log(logging.DETAIL, *args, **kwargs)
+        return self.log(logging.DETAIL, message, *args, **kwargs)
 
     def note(self, message, *args, **kwargs):
         """
         Write a log message at the NOTE level.
         """
 
-        return self.log(logging.NOTE, *args, **kwargs)
+        return self.log(logging.NOTE, message, *args, **kwargs)
 
 # use our logger class by default
 logging.setLoggerClass(DefaultLogger)
