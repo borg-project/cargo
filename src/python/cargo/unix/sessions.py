@@ -37,7 +37,7 @@ def spawn_pty_session(arguments):
             print_ignored_error()
 
         # something went wrong
-        os._exit(os.ERR_OSERR)
+        os._exit(os.EX_OSERR)
     else:
         # we are the parent
         os.close(dup_stderr_fd)

@@ -1,10 +1,15 @@
 """
-cargo/condor/spawn.py
+cargo/labor/condor.py
 
-Build and spawn condor jobs.
+Spawn condor workers.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
+
+if __name__ == "__main__":
+    from cargo.labor.condor import main
+
+    raise SystemExit(main())
 
 import os
 import sys
@@ -17,65 +22,30 @@ from cargo.log import get_logger
 from cargo.flags import (
     Flag,
     FlagSet,
+    with_flags_parsed,
     )
 
 log = get_logger(__name__, level = None)
 
-# FIXME clean all this stuff up
+# FIXME clean this all up a bit
 
-class CondorJob(object):
+class ModuleFlags(FlagSet):
     """
-    Manage configuration of a single condor job.
-
-    Must remain picklable.
+    Flags that apply to this module.
     """
 
-    def __init__(self, function, *args, **kwargs):
-        """
-        Initialize.
-        """
+    flag_set_title = "Worker Configuration"
 
-        self.function = function
-        self.args     = args
-        self.kwargs   = kwargs
-        self.uuid     = uuid4()
+    poll_work_flag = \
+        Flag(
+            "--workers",
+            type    = int,
+            default = 64,
+            metavar = "INT",
+            help    = "submit INT workers to Condor [%default]",
+            )
 
-    def run(self):
-        """
-        Run this job in-process.
-        """
-
-        # FIXME
-#         if sys.argv[1:] != self.argv:
-#             raise ValueError("process arguments do not match job arguments")
-
-        self.function(*self.args, **self.kwargs)
-
-class CondorJobs(CondorJob):
-    """
-    Manage configuration of multiple condor jobs.
-
-    Must remain picklable.
-    """
-
-    def __init__(self, jobs = None):
-        """
-        Initialize.
-        """
-
-        if jobs is None:
-            jobs = []
-
-        self.jobs = jobs
-        self.uuid = uuid4()
-
-    def run(self):
-        """
-        Run this job in-process.
-        """
-
-        for job in self.jobs:
-            job.run()
+flags = ModuleFlags.given
 
 class CondorSubmissionFile(object):
     """
@@ -192,25 +162,23 @@ class CondorSubmission(object):
                 help   = "spawn condor jobs?",
                 )
 
-    def __init__(self, jobs, matching = None, argv = (), description = "cluster job", flags = Flags.given):
+    def __init__(
+        self,
+        matching = None,
+        argv = (),
+        description = "distributed Python worker processes",
+        flags = Flags.given,
+        ):
         """
         Initialize.
         """
 
-        self.jobs        = jobs
         self.matching    = matching
         self.argv        = argv
         self.description = description
         self.flags       = flags
 
-    def get_job_directory(self, job):
-        """
-        Get the working directory configured for C{job}.
-        """
-
-        return os.path.join(self.flags.condor_home, str(job.uuid))
-
-    def write(self, file):
+    def write(self, file, job_paths):
         """
         Generate a submission file.
         """
@@ -242,7 +210,7 @@ class CondorSubmission(object):
             Output       = "condor.out",
             Input        = "/dev/null",
             Executable   = "/lusr/bin/python",
-            Arguments    = "-m cargo.condor.host " + " ".join(self.argv),
+            Arguments    = "-m cargo.labor.worker " + " ".join(self.argv),
             )
         submit.write_blank()
         submit.write_environment(
@@ -257,62 +225,46 @@ class CondorSubmission(object):
         submit.write_header("condor jobs")
         submit.write_blank()
 
-        for job in self.jobs:
-            submit.write_comment("job %s" % job.uuid)
-            submit.write_pair("Initialdir", self.get_job_directory(job))
+        for job_path in job_paths:
+            submit.write_pair("Initialdir", job_path)
             submit.write_queue(1)
             submit.write_blank()
 
-    def run(self):
-        """
-        Run all jobs in-process, bypassing Condor.
-        """
-
-        for job in self.jobs:
-            job.run()
-
-    def submit(self):
+    def spawn(self, nworkers = 1):
         """
         Submit all jobs to Condor.
         """
 
         # populate per-job working directories
-        for job in self.jobs:
-            job_path = self.get_job_directory(job)
+        job_paths = [os.path.join(self.flags.condor_home, str(uuid4())) for i in xrange(nworkers)]
 
+        for job_path in job_paths:
             os.makedirs(job_path)
-
-            with open(os.path.join(job_path, "job.pickle"), "w") as job_file:
-                pickle.dump(job, job_file)
 
         # generate and send the submission file
         with NamedTemporaryFile(suffix = ".condor") as temporary:
-            self.write(temporary)
+            self.write(temporary, job_paths)
             temporary.flush()
 
             check_call(["/usr/bin/env", "condor_submit", temporary.name])
 
-    def run_or_submit(self):
-        """
-        Run in-process or submit to Condor, depending on flags.
-        """
-
-        if self.flags.condor:
-            self.submit()
-        else:
-            self.run()
-
-def main():
-    # FIXME
+@with_flags_parsed()
+def main(positional):
+    """
+    Spawn condor workers.
+    """
 
     # condor!
+    # FIXME
+    matching = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
+
     submission = \
         CondorSubmission(
-            jobs        = jobs,
             matching    = matching,
-            argv        = argv,
+            # FIXME
+            argv        = ("--labor-database", "postgresql://postgres@zerogravitas.csres.utexas.edu:5432/labor"),
             description = "sampling randomized heuristic solver outcome distributions",
             )
 
-    submission.run_or_submit()
+    submission.spawn(flags.workers)
 

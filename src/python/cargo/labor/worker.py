@@ -111,11 +111,35 @@ def find_work(session, worker):
                     ),
             )
 
+    # grab a unit of work
     session.connection().execute(statement)
     session.expire(worker)
     session.commit()
 
     return worker.job
+
+def do_work(job_record):
+    """
+    Get the job done.
+    """
+
+    job = job_record.work
+
+    try:
+        set_up = type(job).class_set_up
+    except AttributeError:
+        pass
+    else:
+        set_up()
+
+    job.run()
+
+    try:
+        tear_down = type(job).class_tear_down
+    except AttributeError:
+        pass
+    else:
+        tear_down()
 
 def labor_loop(session, worker):
     """
@@ -130,7 +154,7 @@ def labor_loop(session, worker):
 
             sleep(flags.poll_work)
         else:
-            job_record.work.run()
+            do_work(job_record)
 
             job_record.completed = True
             worker.job           = None
@@ -172,7 +196,7 @@ def main(positional):
     """
 
     # logging setup
-    get_logger("sqlalchemy.engine").setLevel(logging.INFO)
+    get_logger("sqlalchemy.engine").setLevel(logging.WARNING)
 
     # worker body
     main_loop()

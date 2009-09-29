@@ -115,18 +115,25 @@ class CondorWorkerRecord(WorkerRecord):
     cluster = Column(Integer)
     process = Column(Integer)
 
-def outsource(jobs):
+def outsource(jobs, name = None):
     """
     Appropriately outsource a set of jobs.
     """
 
     session = LaborSession()
+    job_set = JobRecordSet(name = name)
 
     for job in jobs:
-        job_record = JobRecord(completed = False, work = job)
+        job_record = \
+            JobRecord(
+                job_set   = job_set,
+                completed = False,
+                work      = job,
+                )
 
         session.add(job_record)
 
+    session.add(job_set)
     session.commit()
     session.close()
 

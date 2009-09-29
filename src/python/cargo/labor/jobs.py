@@ -96,27 +96,3 @@ class Jobs(Job):
         for job in self.jobs:
             job.run()
 
-class SQL_Job(Job):
-    """
-    Run a child job in a SQL transaction.
-    """
-
-    def __init__(self, job):
-        """
-        Initialize.
-        """
-
-        self.job = job
-
-    def run(self):
-        """
-        Run.
-        """
-
-        self.session = SQL_Session()
-
-        with self.session.begin():
-            self.job.run()
-
-        self.session.close()
-
