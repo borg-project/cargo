@@ -29,7 +29,7 @@ from sqlalchemy.sql.functions import (
 from cargo.log import get_logger
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     with_flags_parsed,
     )
 from cargo.sugar import run_once
@@ -41,25 +41,18 @@ from cargo.labor.storage import (
     )
 from cargo.errors import print_ignored_error
 
-log = get_logger(__name__, level = None)
-
-class ModuleFlags(FlagSet):
-    """
-    Flags that apply to this module.
-    """
-
-    flag_set_title = "Worker Configuration"
-
-    poll_work_flag = \
+log          = get_logger(__name__, level = None)
+script_flags = \
+    Flags(
+        "Worker Configuration",
         Flag(
             "--poll-work",
             type    = int,
             default = 16,
             metavar = "SECONDS",
             help    = "poll for work with period SECONDS [%default]",
-            )
-
-flags = ModuleFlags.given
+            ),
+        )
 
 class NoWorkError(Exception):
     """
@@ -152,7 +145,7 @@ def labor_loop(session, worker):
         if job_record is None:
             log.note("no work available; sleeping")
 
-            sleep(flags.poll_work)
+            sleep(script_flags.given.poll_work)
         else:
             do_work(job_record)
 

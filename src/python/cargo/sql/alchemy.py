@@ -37,31 +37,24 @@ from sqlalchemy.dialects.postgresql.base import (
     )
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     with_flags_parsed,
     )
 from cargo.sugar import TimeDelta
 
 SQL_Base        = declarative_base()
 SQL_SessionCore = sessionmaker()
-
-class ModuleFlags(FlagSet):
-    """
-    Flags that apply to this module.
-    """
-
-    flag_set_title = "SQL Configuration"
-
-    database_flag = \
+engines         = {}
+module_flags    = \
+    Flags(
+        "SQL Configuration",
         Flag(
             "--database",
             default = "sqlite:///:memory:",
             metavar = "DATABASE",
             help    = "use DATABASE by default [%default]",
-            )
-
-flags   = ModuleFlags.given
-engines = {}
+            ),
+        )
 
 def get_sql_engine(database = None):
     """
@@ -71,7 +64,7 @@ def get_sql_engine(database = None):
     global engine
 
     if database is None:
-        database = flags.database
+        database = module_flags.database
 
     try:
         return engines[database]

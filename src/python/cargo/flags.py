@@ -22,44 +22,63 @@ from itertools import (
     ifilter,
     )
 
-_flag_set_classes = []
-_flag_sets_given = []
-
-class FlagSetCollector(type):
-    """
-    Collect flag sets as they are defined.
-    """
-
-    def __init__(cls, name, bases, dct):
-        """
-        Collect.
-        """
-
-        if bases != (object,):
-            _flag_set_classes.append(cls)
-
-            cls.given = cls()
-
-            _flag_sets_given.append(cls.given)
+_flag_sets = []
 
 class FlagSet(object):
     """
     Set of flags.
     """
 
-    __metaclass__ = FlagSetCollector
-
-    # defaults
-    flag_set_title   = ""
-    flag_set_message = ""
-    flag_set_enabled = True
-
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        title   = "",
+        message = "",
+        enabled = True,
+        flags   = (),
+        given   = {},
+        ):
         """
         Initialize.
         """
 
-        self.__dict__.update(kwargs)
+        self.title   = title
+        self.message = message
+        self.enabled = enabled
+        self.given   = dict(given)
+        self.flags   = flags
+
+        for flag in self.flags:
+            assert isinstance(flag, Flag)
+
+        _flag_sets.append(self)
+
+    def merged(self, values):
+        """
+        Return a new, merged value dictionary.
+        """
+
+        new = dict(self.given)
+
+        try:
+            items = values.iteritems()
+        except AttributeError:
+            items = values.__dict__.iteritems()
+
+        new.update(items)
+
+        return new
+
+class Flags(FlagSet):
+    """
+    Typical flag set: a title and a set of flags.
+    """
+
+    def __init__(self, title, *args):
+        """
+        Initialize.
+        """
+
+        FlagSet.__init__(self, title = title, flags = args)
 
 class Flag(object):
     """
@@ -72,7 +91,7 @@ class Flag(object):
         """
 
         # keep our arguments around
-        self.__flag_args = args
+        self.__flag_args   = args
         self.__flag_kwargs = kwargs
 
         # but construct a basic option now
@@ -164,10 +183,10 @@ class IntRange(object):
         raise OptionValueError("option %s got invalid range value \"%s\"" % (option, value))
 
     # properties
-    start = property(lambda self: self.__start)
-    stop = property(lambda self: self.__stop)
-    step = property(lambda self: self.__step)
-    range = property(lambda self: range(self.__start, self.__stop, self.__step))
+    start  = property(lambda self: self.__start)
+    stop   = property(lambda self: self.__stop)
+    step   = property(lambda self: self.__step)
+    range  = property(lambda self: range(self.__start, self.__stop, self.__step))
     xrange = property(lambda self: xrange(self.__start, self.__stop, self.__step))
 
 class FloatRange(object):
@@ -221,8 +240,8 @@ class FloatRange(object):
         m = FloatRange.__range_re.match(value)
 
         if m:
-            groups = m.groupdict()
-            start = float(groups["start"])
+            groups      = m.groupdict()
+            start       = float(groups["start"])
             size_string = groups["size"]
 
             if size_string is None:
@@ -354,13 +373,13 @@ class ExtendedOption(Option):
     An optparse option class with support for some useful option types.
     """
 
-    TYPES = Option.TYPES + ("IntRange", "IntRanges", "FloatRange", "FloatRanges", "TimeSpec")
-    TYPE_CHECKER = dict(Option.TYPE_CHECKER)
-    TYPE_CHECKER["IntRange"] = IntRange.optparse_check
-    TYPE_CHECKER["IntRanges"] = IntRanges.optparse_check
-    TYPE_CHECKER["FloatRange"] = FloatRange.optparse_check
+    TYPES                       = Option.TYPES + ("IntRange", "IntRanges", "FloatRange", "FloatRanges", "TimeSpec")
+    TYPE_CHECKER                = dict(Option.TYPE_CHECKER)
+    TYPE_CHECKER["IntRange"]    = IntRange.optparse_check
+    TYPE_CHECKER["IntRanges"]   = IntRanges.optparse_check
+    TYPE_CHECKER["FloatRange"]  = FloatRange.optparse_check
     TYPE_CHECKER["FloatRanges"] = FloatRanges.optparse_check
-    TYPE_CHECKER["TimeSpec"] = optparse_check_time_spec
+    TYPE_CHECKER["TimeSpec"]    = optparse_check_time_spec
 
     @staticmethod
     def get_parser(usage = None):
@@ -371,40 +390,42 @@ class ExtendedOption(Option):
         return OptionParser(option_class = ExtendedOption, usage = usage)
 
 def parse_given(
-    argv = sys.argv,
-    enable = set(),
-    disable = set(),
+    argv        = sys.argv,
+    enable      = set(),
+    disable     = set(),
     npositional = None,
-    usage = None,
+    usage       = None,
     ):
     """
     Parse the given flags.
     """
 
-    # collect our flags, constructing a parser
     def is_enabled(s):
+        """
+        Collect our flags, constructing a parser.
+        """
+
         return (s.flag_set_enabled and s not in disable) or s in enable
 
-    parser = ExtendedOption.get_parser(usage = usage)
+    parser  = ExtendedOption.get_parser(usage = usage)
     origins = {}
 
-    for flag_set_class in ifilter(is_enabled, _flag_set_classes):
-        flag_set = flag_set_class.given
-        group = OptionGroup(parser, flag_set_class.flag_set_title, flag_set_class.flag_set_message)
+    for flag_set in ifilter(is_enabled, __flag_sets):
+        values = flag_set.given
+        group  = OptionGroup(parser, flag_set.title, flag_set.message)
 
-        for (name, value) in flag_set_class.__dict__.iteritems():
-            if isinstance(value, Flag):
-                option = value.add_to(group)
+        for flag in flag_set.flags:
+            option = flag.add_to(group)
 
-                assert option.dest not in origins
-                assert option.dest not in flag_set.__dict__
-                assert option.dest == value.option.dest
+            assert option.dest not in origins
+            assert option.dest not in values
+            assert option.dest == value.option.dest
 
-                origins[option.dest] = flag_set
+            origins[option.dest] = flag_set
 
-                if value.has_default:
-                    # FIXME use OptionGroup.defaults instead
-                    flag_set.__dict__[option.dest] = option.default
+            if value.has_default:
+                # FIXME use OptionGroup.defaults instead
+                values[option.dest] = option.default
 
         if group.option_list:
             parser.add_option_group(group)
@@ -417,7 +438,7 @@ def parse_given(
 
     # store flag values
     for (dest, flag_set) in origins.iteritems():
-        flag_set.__dict__[dest] = nominal.__dict__[dest]
+        flag_set.given[dest] = nominal.__dict__[dest]
 
     # done
     return positional

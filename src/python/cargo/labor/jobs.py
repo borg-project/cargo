@@ -9,10 +9,6 @@ Units of work.
 from abc import abstractmethod
 from uuid import uuid4
 from cargo.log import get_logger
-from cargo.flags import (
-    Flag,
-    FlagSet,
-    )
 from cargo.sugar import ABC
 
 log = get_logger(__name__, level = None)

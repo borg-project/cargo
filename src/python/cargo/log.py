@@ -28,7 +28,7 @@ from logging import (
     )
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     )
 
 class DefaultLogger(logging.getLoggerClass()):
@@ -76,13 +76,6 @@ def get_logger(name, level = logging.WARNING):
 
 log = get_logger(__name__)
 
-class Flags(FlagSet):
-    """
-    Module-level flags.
-    """
-
-    flag_set_title = "Logging"
-
 #    log_to_console_flag = \
 #        Flag(
 #            "--log-to-console",
@@ -95,23 +88,24 @@ class Flags(FlagSet):
 #            action = "store_true",
 #            help = "force logging to script.log.N",
 #            )
-    log_file_prefix_flag = \
+
+flags = \
+    Flags(
+        "Logging",
         Flag(
             "--log-file-prefix",
             default = "script.log",
             metavar = "PREFIX",
-            help = "file logging will write to PREFIX.N [script.log]",
-            )
-    verbosity_flag = \
+            help    = "file logging will write to PREFIX.N [script.log]",
+            ),
         Flag(
             "-v",
             "--verbosity",
             default = logging.INFO,
             metavar = "N",
-            help = "log messages of at least level N [%default]",
-            )
-
-flags = Flags.given
+            help    = "log messages of at least level N [%default]",
+            ),
+        )
 
 class TTY_ConciseFormatter(Formatter):
     """
@@ -260,7 +254,7 @@ def enable_disk(prefix = None, level = logging.NOTSET):
 
     # generate an unused log file path
     if prefix is None:
-        #prefix = flags.log_file_prefix
+        #prefix = flags.given.log_file_prefix
         prefix = "script.log" # FIXME use the flag
 
     for i in count():

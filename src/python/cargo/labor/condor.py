@@ -21,31 +21,24 @@ from subprocess import check_call
 from cargo.log import get_logger
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     with_flags_parsed,
     )
 
-log = get_logger(__name__, level = None)
-
-# FIXME clean this all up a bit
-
-class ModuleFlags(FlagSet):
-    """
-    Flags that apply to this module.
-    """
-
-    flag_set_title = "Worker Configuration"
-
-    poll_work_flag = \
+log          = get_logger(__name__, level = None)
+script_flags = \
+    Flags(
+        "Worker Configuration",
         Flag(
             "--workers",
             type    = int,
             default = 64,
             metavar = "INT",
             help    = "submit INT workers to Condor [%default]",
-            )
+            ),
+        )
 
-flags = ModuleFlags.given
+# FIXME clean this all up a bit
 
 class CondorSubmissionFile(object):
     """
@@ -141,33 +134,28 @@ class CondorSubmission(object):
     Manage job submission to Condor.
     """
 
-    class Flags(FlagSet):
-        """
-        Flags that apply to this module.
-        """
-
-        flag_set_title = "Condor Submission Configuration"
-
-        condor_home_flag = \
+    class_flags = \
+        Flags(
+            "Condor Submission Configuration",
             Flag(
                 "--condor-home",
                 default = "jobs-%s" % uuid4(),
                 metavar = "PATH",
                 help    = "generate job directories under PATH [%default]",
-                )
-        condor_flag = \
+                ),
             Flag(
                 "--condor",
                 action = "store_true",
                 help   = "spawn condor jobs?",
-                )
+                ),
+            )
 
     def __init__(
         self,
-        matching = None,
-        argv = (),
+        matching    = None,
+        argv        = (),
         description = "distributed Python worker processes",
-        flags = Flags.given,
+        flags       = class_flags.given,
         ):
         """
         Initialize.

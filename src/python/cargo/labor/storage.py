@@ -24,27 +24,20 @@ from cargo.sql.alchemy import (
     )
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     )
 
-log = get_logger(__name__, level = None)
-
-class ModuleFlags(FlagSet):
-    """
-    Flags that apply to this module.
-    """
-
-    flag_set_title = "Labor Storage Configuration"
-
-    jobs_database_flag = \
+log   = get_logger(__name__, level = None)
+flags = \
+    Flags(
+        "Labor Storage Configuration",
         Flag(
             "--labor-database",
             default = "sqlite:///:memory:",
             metavar = "DATABASE",
             help    = "use labor DATABASE [%default]",
-            )
-
-flags = ModuleFlags.given
+            ),
+        )
 
 class LaborSession(SQL_Session):
     """
@@ -56,7 +49,7 @@ class LaborSession(SQL_Session):
         Initialize.
         """
 
-        SQL_Session.__init__(self, database = flags.labor_database)
+        SQL_Session.__init__(self, database = flags.given.labor_database)
 
 class JobRecordSet(SQL_Base):
     """
