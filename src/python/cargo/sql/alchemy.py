@@ -64,7 +64,7 @@ def get_sql_engine(database = None):
     global engine
 
     if database is None:
-        database = module_flags.database
+        database = module_flags.given.database
 
     try:
         return engines[database]
