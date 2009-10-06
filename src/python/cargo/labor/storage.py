@@ -7,6 +7,7 @@ Store and retrieve labor records.
 """
 
 from uuid import uuid4
+from contextlib import closing
 from sqlalchemy import (
     Column,
     String,
@@ -15,20 +16,25 @@ from sqlalchemy import (
     PickleType,
     ForeignKey,
     )
-from sqlalchemy.orm import relation
+from sqlalchemy.orm import (
+    relation,
+    sessionmaker,
+    )
+from sqlalchemy.ext.declarative import declarative_base
 from cargo.log import get_logger
 from cargo.sql.alchemy import (
-    SQL_Base,
     SQL_UUID,
-    SQL_Session,
+    SQL_Engines,
     )
 from cargo.flags import (
     Flag,
     Flags,
     )
 
-log   = get_logger(__name__, level = None)
-flags = \
+log          = get_logger(__name__, level = None)
+LaborBase    = declarative_base()
+LaborSession = sessionmaker()
+module_flags = \
     Flags(
         "Labor Storage Configuration",
         Flag(
@@ -39,19 +45,7 @@ flags = \
             ),
         )
 
-class LaborSession(SQL_Session):
-    """
-    Use labor storage defaults for a new session.
-    """
-
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        SQL_Session.__init__(self, database = flags.given.labor_database)
-
-class JobRecordSet(SQL_Base):
+class JobRecordSet(LaborBase):
     """
     Related set of job records.
     """
@@ -61,7 +55,7 @@ class JobRecordSet(SQL_Base):
     uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
     name = Column(String)
 
-class JobRecord(SQL_Base):
+class JobRecord(LaborBase):
     """
     Stored record of a unit of work.
     """
@@ -75,7 +69,7 @@ class JobRecord(SQL_Base):
 
     job_set = relation(JobRecordSet)
 
-class WorkerRecord(SQL_Base):
+class WorkerRecord(LaborBase):
     """
     Stored record of a worker.
     """
@@ -108,25 +102,46 @@ class CondorWorkerRecord(WorkerRecord):
     cluster = Column(Integer)
     process = Column(Integer)
 
-def outsource(jobs, name = None):
+def outsource(jobs, name = None, Session = LaborSession):
     """
     Appropriately outsource a set of jobs.
     """
 
-    session = LaborSession()
-    job_set = JobRecordSet(name = name)
+    session = Session()
 
-    for job in jobs:
-        job_record = \
-            JobRecord(
-                job_set   = job_set,
-                completed = False,
-                work      = job,
-                )
+    with closing(session):
+        job_set = JobRecordSet(name = name)
 
-        session.add(job_record)
+        for (i, job) in enumerate(jobs):
+            job_record = \
+                JobRecord(
+                    job_set   = job_set,
+                    completed = False,
+                    work      = job,
+                    )
 
-    session.add(job_set)
-    session.commit()
-    session.close()
+            session.add(job_record)
+
+            if i > 0 and (i + 1) % 4096 == 0:
+                log.note("outsourced %i jobs so far", i + 1)
+
+        log.note("outsourced all %i jobs", len(jobs))
+
+        session.add(job_set)
+
+        log.note("committing job insertions")
+
+        session.commit()
+
+def labor_connect(engines = SQL_Engines.default, flags = module_flags.given):
+    """
+    Connect to acridid storage.
+    """
+
+    flags  = module_flags.merged(flags)
+    engine = engines.get(flags.labor_database)
+
+    LaborBase.metadata.create_all(engine)
+
+    return engine
 

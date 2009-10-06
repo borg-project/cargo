@@ -33,34 +33,26 @@ class Job(ABC):
 
         pass
 
-class CallableJob(Job):
-    """
-    Manage configuration of a single condor job.
-
-    Must remain picklable.
-    """
-
-    def __init__(self, function, *args, **kwargs):
+    def run_with_fixture(self):
         """
-        Initialize.
+        Run, calling setup and teardown methods.
         """
 
-        # base
-        Job.__init__(self)
+        try:
+            set_up = type(self).class_set_up
+        except AttributeError:
+            pass
+        else:
+            set_up()
 
-        # members
-        self.function = function
-        self.argv     = argv
-        self.args     = args
-        self.kwargs   = kwargs
-        self.uuid     = uuid4()
+        self.run()
 
-    def run(self):
-        """
-        Run this job in-process.
-        """
-
-        self.function(*self.args, **self.kwargs)
+        try:
+            tear_down = type(self).class_tear_down
+        except AttributeError:
+            pass
+        else:
+            tear_down()
 
 class Jobs(Job):
     """
@@ -90,5 +82,29 @@ class Jobs(Job):
         """
 
         for job in self.jobs:
-            job.run()
+            job.run_with_fixture()
+
+class CallableJob(Job):
+    """
+    Wrap a callable as a job.
+    """
+
+    def __init__(self, callable, *args, **kwargs):
+        """
+        Initialize.
+        """
+
+        Job.__init__(
+            self,
+            callable = callable,
+            args     = args,
+            kwargs   = kwargs,
+            )
+
+    def run(self):
+        """
+        Run!
+        """
+
+        self.callable(*self.args, **self.kwargs)
 

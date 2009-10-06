@@ -12,6 +12,7 @@ import pytz
 import sqlalchemy.dialects.postgresql
 
 from uuid import UUID
+from contextlib import contextmanager
 from sqlalchemy import (
     Column,
     Binary,
@@ -41,59 +42,51 @@ from cargo.flags import (
     with_flags_parsed,
     )
 from cargo.sugar import TimeDelta
+from cargo.errors import print_ignored_error
 
-SQL_Base        = declarative_base()
-SQL_SessionCore = sessionmaker()
-engines         = {}
-module_flags    = \
-    Flags(
-        "SQL Configuration",
-        Flag(
-            "--database",
-            default = "sqlite:///:memory:",
-            metavar = "DATABASE",
-            help    = "use DATABASE by default [%default]",
-            ),
-        )
-
-def get_sql_engine(database = None):
+class SQL_Engines(object):
     """
-    Return the default global SQL engine.
+    Manage a collection of engines.
     """
 
-    global engine
-
-    if database is None:
-        database = module_flags.given.database
-
-    try:
-        return engines[database]
-    except KeyError:
-        engine = engines[database] = create_engine(database)
-
-        create_sql_metadata(database)
-
-        return engine
-
-def create_sql_metadata(database = None):
-    """
-    Create metadata for all global SQL structures.
-    """
-
-    SQL_Base.metadata.create_all(get_sql_engine(database))
-
-class SQL_Session(SQL_SessionCore):
-    """
-    Convenient but restricted SQL session construction.
-    """
-
-    def __init__(self, database = None):
+    def __init__(self):
         """
         Initialize.
         """
 
-        # base
-        SQL_SessionCore.__init__(self, bind = get_sql_engine(database))
+        self.engines = {}
+
+    def __enter__(self):
+        """
+        Enter context.
+        """
+
+        return self
+
+    def __exit__(self, *args):
+        """
+        Leave context.
+        """
+
+        try:
+            for engine in self.engines.itervalues():
+                engine.dispose()
+        except:
+            print_ignored_error()
+
+    def get(self, database):
+        """
+        Return the default global SQL engine.
+        """
+
+        try:
+            return self.engines[database]
+        except KeyError:
+            engine = self.engines[database] = create_engine(database)
+
+            return engine
+
+SQL_Engines.default = SQL_Engines()
 
 class SQL_UUID(TypeDecorator):
     """

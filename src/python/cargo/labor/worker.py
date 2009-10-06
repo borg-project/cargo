@@ -15,6 +15,10 @@ import os
 import logging
 
 from time import sleep
+from uuid import (
+    UUID,
+    uuid4,
+    )
 from socket import getfqdn
 from sqlalchemy import (
     select,
@@ -27,6 +31,7 @@ from sqlalchemy.sql.functions import (
     random,
     )
 from cargo.log import get_logger
+from cargo.sql.alchemy import SQL_Engines
 from cargo.flags import (
     Flag,
     Flags,
@@ -38,6 +43,7 @@ from cargo.labor.storage import (
     LaborSession,
     WorkerRecord,
     CondorWorkerRecord,
+    labor_connect,
     )
 from cargo.errors import print_ignored_error
 
@@ -46,11 +52,17 @@ script_flags = \
     Flags(
         "Worker Configuration",
         Flag(
-            "--poll-work",
+            "--poll-period",
             type    = int,
             default = 16,
             metavar = "SECONDS",
             help    = "poll for work with period SECONDS [%default]",
+            ),
+        Flag(
+            "--worker-uuid",
+            default = str(uuid4()),
+            metavar = "UUID",
+            help    = "this worker is UUID [%default]",
             ),
         )
 
@@ -66,14 +78,17 @@ def get_worker():
     Create and return a record for this worker.
     """
 
+    uuid = UUID(script_flags.given.worker_uuid)
+
     try:
         cluster = os.environ["CONDOR_CLUSTER"]
         process = os.environ["CONDOR_PROCESS"]
     except KeyError:
-        worker = WorkerRecord()
+        worker = WorkerRecord(uuid = uuid)
     else:
         worker = \
             CondorWorkerRecord(
+                uuid    = uuid,
                 cluster = cluster,
                 process = process,
                 )
@@ -111,29 +126,6 @@ def find_work(session, worker):
 
     return worker.job
 
-def do_work(job_record):
-    """
-    Get the job done.
-    """
-
-    job = job_record.work
-
-    try:
-        set_up = type(job).class_set_up
-    except AttributeError:
-        pass
-    else:
-        set_up()
-
-    job.run()
-
-    try:
-        tear_down = type(job).class_tear_down
-    except AttributeError:
-        pass
-    else:
-        tear_down()
-
 def labor_loop(session, worker):
     """
     Labor until death.
@@ -143,16 +135,27 @@ def labor_loop(session, worker):
         job_record = find_work(session, worker)
 
         if job_record is None:
-            log.note("no work available; sleeping")
+            if script_flags.given.poll_period >= 0:
+                log.note("no work available; sleeping")
 
-            sleep(script_flags.given.poll_work)
+                sleep(script_flags.given.poll_period)
+
+                log.note("woke up")
+            else:
+                log.note("no work available; terminating")
+
+                break
         else:
-            do_work(job_record)
+            log.note("working on job %s", job_record.uuid)
+
+            job_record.work.run_with_fixture()
 
             job_record.completed = True
             worker.job           = None
 
             session.commit()
+
+            log.note("finished job")
 
 def main_loop():
     """
@@ -165,18 +168,23 @@ def main_loop():
     try:
         while True:
             try:
+                LaborSession.configure(bind = labor_connect())
+
                 session = LaborSession()
                 worker  = session.merge(worker)
 
                 session.commit()
 
                 labor_loop(session, worker)
+
+                break
             except OperationalError, error:
                 log.warning("operational error in database layer:\n%s", error)
 
             sleep(WAIT_TO_RECONNECT)
     finally:
         try:
+            session.rollback()
             session.delete(worker)
             session.commit()
         except:
@@ -192,5 +200,6 @@ def main(positional):
     get_logger("sqlalchemy.engine").setLevel(logging.WARNING)
 
     # worker body
-    main_loop()
+    with SQL_Engines.default:
+        main_loop()
 

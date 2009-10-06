@@ -11,6 +11,7 @@ import sys
 import numpy
 import optparse
 
+from copy import copy
 from optparse import (
     Option,
     OptionGroup,
@@ -24,6 +25,13 @@ from itertools import (
 
 _flag_sets = []
 
+class FlagSetValues(object):
+    """
+    Container for flag set values.
+    """
+
+    pass
+
 class FlagSet(object):
     """
     Set of flags.
@@ -35,7 +43,7 @@ class FlagSet(object):
         message = "",
         enabled = True,
         flags   = (),
-        given   = {},
+        given   = FlagSetValues(),
         ):
         """
         Initialize.
@@ -44,7 +52,7 @@ class FlagSet(object):
         self.title   = title
         self.message = message
         self.enabled = enabled
-        self.given   = dict(given)
+        self.given   = copy(given)
         self.flags   = flags
 
         for flag in self.flags:
@@ -57,14 +65,14 @@ class FlagSet(object):
         Return a new, merged value dictionary.
         """
 
-        new = dict(self.given)
+        new = copy(self.given)
 
         try:
             items = values.iteritems()
         except AttributeError:
             items = values.__dict__.iteritems()
 
-        new.update(items)
+        new.__dict__.update(items)
 
         return new
 
@@ -405,12 +413,12 @@ def parse_given(
         Collect our flags, constructing a parser.
         """
 
-        return (s.flag_set_enabled and s not in disable) or s in enable
+        return (s.enabled and s not in disable) or s in enable
 
     parser  = ExtendedOption.get_parser(usage = usage)
     origins = {}
 
-    for flag_set in ifilter(is_enabled, __flag_sets):
+    for flag_set in ifilter(is_enabled, _flag_sets):
         values = flag_set.given
         group  = OptionGroup(parser, flag_set.title, flag_set.message)
 
@@ -418,14 +426,14 @@ def parse_given(
             option = flag.add_to(group)
 
             assert option.dest not in origins
-            assert option.dest not in values
-            assert option.dest == value.option.dest
+            assert option.dest not in values.__dict__
+            assert option.dest == flag.option.dest
 
             origins[option.dest] = flag_set
 
-            if value.has_default:
+            if flag.has_default:
                 # FIXME use OptionGroup.defaults instead
-                values[option.dest] = option.default
+                values.__dict__[option.dest] = option.default
 
         if group.option_list:
             parser.add_option_group(group)
@@ -438,7 +446,7 @@ def parse_given(
 
     # store flag values
     for (dest, flag_set) in origins.iteritems():
-        flag_set.given[dest] = nominal.__dict__[dest]
+        flag_set.given.__dict__[dest] = nominal.__dict__[dest]
 
     # done
     return positional
