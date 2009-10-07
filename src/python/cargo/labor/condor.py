@@ -57,6 +57,11 @@ module_flags = \
             metavar = "STRING",
             help    = "use cluster description STRING [%default]",
             ),
+        Flag(
+            "--job-set-uuid",
+            metavar = "UUID",
+            help    = "run only jobs in set UUID",
+            ),
         )
 
 class CondorSubmissionFile(object):
@@ -176,24 +181,26 @@ class CondorSubmission(object):
 
     def __init__(
         self,
-        matching    = None,
-        description = "distributed Python worker process(es)",
-        group       = "GRAD",
-        project     = "AI_ROBOTICS",
-        flags       = class_flags.given,
-        poll_period = 16,
+        matching     = None,
+        description  = "distributed Python worker process(es)",
+        job_set_uuid = None,
+        group        = "GRAD",
+        project      = "AI_ROBOTICS",
+        poll_period  = 16,
+        flags        = class_flags.given,
         ):
         """
         Initialize.
         """
 
-        self.matching    = matching
-        self.description = description
-        self.group       = group
-        self.project     = project
-        self.poll_period = poll_period
-        self.flags       = self.class_flags.merged(flags)
-        self.workers     = []
+        self.matching     = matching
+        self.description  = description
+        self.job_set_uuid = job_set_uuid
+        self.group        = group
+        self.project      = project
+        self.poll_period  = poll_period
+        self.flags        = self.class_flags.merged(flags)
+        self.workers      = []
 
     def write(self, file):
         """
@@ -250,6 +257,9 @@ class CondorSubmission(object):
                     str(worker.uuid),
                     poll_period,
                     )
+
+            if self.job_set_uuid:
+                arguments += " --job-set-uuid %s" % str(self.job_set_uuid)
 
             submit.write_pairs(
                 Initialdir = worker.working,
@@ -337,16 +347,17 @@ def pfork_job(job, matching):
     # spawn the process
     submission.submit()
 
-def submit_workers(nworkers, database, matching, description):
+def submit_workers(nworkers, database, matching, description, job_set_uuid):
     """
     Fork worker submission.
     """
 
     submission = \
         CondorSubmission(
-            matching    = matching,
-            description = description,
-            flags       = {"condor_home": "workers-%s" % datetime.datetime.now().isoformat()},
+            matching     = matching,
+            description  = description,
+            job_set_uuid = job_set_uuid,
+            flags        = {"condor_home": "workers-%s" % datetime.datetime.now().isoformat()},
             )
 
     submission.add_many(nworkers, database)
@@ -369,5 +380,6 @@ def main(positional):
         database,
         module_flags.given.matching,
         module_flags.given.description,
+        module_flags.given.job_set_uuid,
         )
 

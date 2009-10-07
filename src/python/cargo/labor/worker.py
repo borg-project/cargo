@@ -64,6 +64,11 @@ script_flags = \
             metavar = "UUID",
             help    = "this worker is UUID [%default]",
             ),
+        Flag(
+            "--job-set-uuid",
+            metavar = "UUID",
+            help    = "run only jobs in set UUID",
+            ),
         )
 
 class NoWorkError(Exception):
@@ -102,8 +107,13 @@ def find_work(session, worker):
     Find, acquire, and return a unit of work.
     """
 
-    # some SQL (which we generate via SA to stay kinda portable)
-    statement  =                                                \
+    # some SQL (which we generate via SA to stay portable)
+    if script_flags.given.job_set_uuid:
+        job_filter = (JobRecord.completed == False) & (JobRecord.job_set_uuid == UUID(script_flags.given.job_set_uuid))
+    else:
+        job_filter = JobRecord.completed == False
+
+    statement =                                                 \
         WorkerRecord.__table__                                  \
         .update()                                               \
         .where(WorkerRecord.uuid == worker.uuid)                \
@@ -111,7 +121,7 @@ def find_work(session, worker):
             job_uuid =                                          \
                 select(
                     (JobRecord.uuid,),
-                    JobRecord.completed == False,
+                    job_filter,
                     from_obj = (JobRecord.__table__.outerjoin(WorkerRecord.job),),
                     group_by = JobRecord.uuid,
                     order_by = (count(WorkerRecord.uuid), random()),
@@ -197,7 +207,7 @@ def main(positional):
     """
 
     # logging setup
-    get_logger("sqlalchemy.engine").setLevel(logging.WARNING)
+    get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
 
     # worker body
     with SQL_Engines.default:
