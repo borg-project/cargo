@@ -30,6 +30,7 @@ from cargo.flags import (
     Flag,
     Flags,
     )
+from cargo.labor.jobs import Jobs
 
 log          = get_logger(__name__, level = None)
 LaborBase    = declarative_base()
@@ -42,6 +43,11 @@ module_flags = \
             default = "sqlite:///:memory:",
             metavar = "DATABASE",
             help    = "use labor DATABASE [%default]",
+            ),
+        Flag(
+            "--outsource-jobs",
+            action  = "store_true",
+            help    = "outsource labor to workers",
             ),
         )
 
@@ -101,6 +107,23 @@ class CondorWorkerRecord(WorkerRecord):
         )
     cluster = Column(Integer)
     process = Column(Integer)
+
+def outsource_or_run(jobs, name = None, flags = module_flags.given):
+    """
+    Outsource or run a set of jobs based on flags.
+    """
+
+    jobs    = list(jobs)
+    Session = sessionmaker()
+
+    if flags.outsource_jobs:
+        Session.configure(bind = labor_connect(flags = flags))
+
+        outsource(jobs, name, Session = Session)
+    else:
+        log.note("running %i jobs", len(jobs))
+
+        Jobs(jobs).run()
 
 def outsource(jobs, name = None, Session = LaborSession):
     """
