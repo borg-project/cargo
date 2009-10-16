@@ -13,6 +13,7 @@ if __name__ == "__main__":
 
 import os
 import logging
+import numpy
 
 from time import sleep
 from uuid import (
@@ -52,11 +53,18 @@ script_flags = \
     Flags(
         "Worker Configuration",
         Flag(
-            "--poll-period",
-            type    = int,
-            default = 16,
+            "--poll-mu",
+            type    = float,
+            default = 64.0,
             metavar = "SECONDS",
-            help    = "poll for work with period SECONDS [%default]",
+            help    = "poll with mean SECONDS [%default]",
+            ),
+        Flag(
+            "--poll-sigma",
+            type    = float,
+            default = 32.0,
+            metavar = "SECONDS",
+            help    = "poll with standard deviation SECONDS [%default]",
             ),
         Flag(
             "--worker-uuid",
@@ -145,10 +153,19 @@ def labor_loop(session, worker):
         job_record = find_work(session, worker)
 
         if job_record is None:
-            if script_flags.given.poll_period >= 0:
-                log.note("no work available; sleeping")
+            if script_flags.given.poll_mu >= 0:
+                sleep_for = \
+                    max(
+                        0.0,
+                        numpy.random.normal(
+                            script_flags.given.poll_mu,
+                            script_flags.given.poll_sigma,
+                            ),
+                        )
 
-                sleep(script_flags.given.poll_period)
+                log.note("no work available; sleeping for %.2f s", sleep_for)
+
+                sleep(sleep_for)
 
                 log.note("woke up")
             else:

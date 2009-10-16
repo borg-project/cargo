@@ -133,7 +133,7 @@ def outsource(jobs, name = None, Session = LaborSession):
     session = Session()
 
     with closing(session):
-        job_set = JobRecordSet(name = name)
+        job_set = session.merge(JobRecordSet(name = name))
 
         for (i, job) in enumerate(jobs):
             job_record = \
@@ -153,6 +153,8 @@ def outsource(jobs, name = None, Session = LaborSession):
         session.add(job_set)
 
         log.note("committing job insertions")
+
+        # FIXME the commit is very slow---but, on reinspection, that may be a sqlalchemy issue
 
         session.commit()
 
