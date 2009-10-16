@@ -130,31 +130,48 @@ def outsource(jobs, name = None, Session = LaborSession):
     Appropriately outsource a set of jobs.
     """
 
-    session = Session()
+    CHUNK_SIZE = 8192
+    njobs      = len(jobs)
+    session    = Session()
 
     with closing(session):
+        # create the job set
         job_set = JobRecordSet(name = name)
 
-        for (i, job) in enumerate(jobs):
-            job_record = \
-                JobRecord(
-                    job_set   = job_set,
-                    completed = False,
-                    work      = job,
-                    )
-
-            session.add(job_record)
-
-            if i > 0 and (i + 1) % 4096 == 0:
-                log.note("outsourced %i jobs so far", i + 1)
-
-        log.note("outsourced all %i jobs", len(jobs))
-
         session.add(job_set)
+        session.flush()
 
-        log.note("committing job insertions")
+        log.note("inserting %i jobs into set %s", njobs, job_set.uuid)
+
+        # insert the jobs
+        ninserted = 0
+
+        while ninserted < njobs:
+            chunk = jobs[ninserted:ninserted + CHUNK_SIZE]
+
+            session.connection().execute(
+                JobRecord.__table__.insert(),
+                [
+                    {
+                        "job_set_uuid": job_set.uuid,
+                        "completed":    False,
+                        "work":         job,
+                        }                             \
+                    for job in chunk
+                    ]
+                )
+
+            ninserted += CHUNK_SIZE
+
+            log.note(
+                "inserted %i jobs so far (%i%%)",
+                ninserted,
+                ninserted * 100.0 / njobs,
+                )
 
         session.commit()
+
+        log.note("committed job insertions")
 
 def labor_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
