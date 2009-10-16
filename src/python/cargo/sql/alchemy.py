@@ -12,6 +12,7 @@ import pytz
 import sqlalchemy.dialects.postgresql
 
 from uuid import UUID
+from datetime import timedelta
 from contextlib import contextmanager
 from sqlalchemy import (
     Column,
@@ -41,8 +42,8 @@ from cargo.flags import (
     Flags,
     with_flags_parsed,
     )
-from cargo.sugar import TimeDelta
 from cargo.errors import print_ignored_error
+from cargo.temporal import TimeDelta
 
 class SQL_Engines(object):
     """
@@ -260,15 +261,20 @@ class SQL_TimeDelta(TypeDecorator):
         # base
         TypeDecorator.__init__(self)
 
-#     def process_bind_param(self, value, dialect = None):
-#         """
-#         Return SQL data from a Python instance.
-#         """
+    def process_bind_param(self, value, dialect = None):
+        """
+        Return SQL data from a Python instance.
+        """
 
-#         if value is None:
-#             return None
-#         else:
-#             return json.dumps(value)
+        if value is None:
+            return None
+        else:
+            return \
+                timedelta(
+                    days = value.days,
+                    seconds = value.seconds,
+                    microseconds = value.microseconds,
+                    )
 
     def process_result_value(self, value, dialect = None):
         """

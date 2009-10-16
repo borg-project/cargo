@@ -9,10 +9,25 @@ Code relating to time.
 import datetime
 import pytz
 
+from datetime import timedelta
+
 def utc_now():
     """
     Return a non-naive UTC datetime instance, zoned pytz.utc.
     """
 
     return pytz.utc.localize(datetime.datetime.utcnow())
+
+class TimeDelta(timedelta):
+    """
+    Wrap datetime.timedelta with a few convenience methods.
+    """
+
+    @property
+    def as_s(self):
+        """
+        Return the equivalent number of seconds, floating-point.
+        """
+
+        return self.days * 86400.0 + self.seconds + self.microseconds / 1E6
 

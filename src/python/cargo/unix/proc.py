@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-from datetime import timedelta
+from cargo.temporal import TimeDelta
 
 class ProcFileParseError(RuntimeError):
     """
@@ -135,7 +135,7 @@ class ProcessStat(object):
         Convert kernel clock ticks to a Python timedelta value.
         """
 
-        return timedelta(seconds = float(ticks) / self.__ticks_per_second)
+        return TimeDelta(seconds = float(ticks) / self.__ticks_per_second)
 
     # expose the relevant fields
     pid                 = property(lambda self: int(self.__d["pid"]))
