@@ -358,6 +358,7 @@ def submit_workers(nworkers, database, matching, description, job_set_uuid):
             matching     = matching,
             description  = description,
             job_set_uuid = job_set_uuid,
+            poll         = False,
             flags        = {"condor_home": "workers-%s" % datetime.datetime.now().isoformat()},
             )
 
