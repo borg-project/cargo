@@ -186,7 +186,7 @@ class CondorSubmission(object):
         job_set_uuid = None,
         group        = "GRAD",
         project      = "AI_ROBOTICS",
-        poll_period  = 16,
+        poll         = True,
         flags        = class_flags.given,
         ):
         """
@@ -198,7 +198,7 @@ class CondorSubmission(object):
         self.job_set_uuid = job_set_uuid
         self.group        = group
         self.project      = project
-        self.poll_period  = poll_period
+        self.poll         = poll
         self.flags        = self.class_flags.merged(flags)
         self.workers      = []
 
@@ -250,16 +250,17 @@ class CondorSubmission(object):
         submit.write_blank()
 
         for worker in self.workers:
-            poll_period = -1 if self.poll_period is None else self.poll_period
             arguments   = \
-                "-m cargo.labor.worker --labor-database %s --worker-uuid %s --poll-period %s" % (
+                "-m cargo.labor.worker --labor-database %s --worker-uuid %s" % (
                     worker.database,
                     str(worker.uuid),
-                    poll_period,
                     )
 
             if self.job_set_uuid:
                 arguments += " --job-set-uuid %s" % str(self.job_set_uuid)
+
+            if not self.poll:
+                arguments += " --poll-mu -1"
 
             submit.write_pairs(
                 Initialdir = worker.working,
@@ -330,7 +331,7 @@ def pfork_job(job, matching):
     """
 
     # create the job directory
-    submission = CondorSubmission(matching = matching, poll_period = None)
+    submission = CondorSubmission(matching = matching, poll = False)
     process    = submission.add(database = "sqlite:///labor.sqlite")
 
     submission.prepare()

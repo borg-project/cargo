@@ -1,0 +1,105 @@
+-------
+SUMMARY
+-------
+
+Because I'm a glutton for punishment, I feel the need to write my own general
+array interface.
+
+
+-----
+GOALS
+-----
+
+The overall goal is math code that can target both C++ and Python well.
+
+Specifically:
+
+(1) support numpy, C, and Fortran storage
+(2) multidimensional (ie, not just matrices)
+(3) reasonably straightforward implementation
+(4) reasonably fast
+(5) an interface that isn't physically painful (ie, not ublas)
+
+The numpy array Python interface is, in general, excellent; when possible we'll
+mimic that in C++.
+
+
+--------------
+DESIGN OUTLINE
+--------------
+
+Array classes typically have three variants, with
+
+(1) dynamic dimensionality and dynamic dimensions ("YY"),
+(2) fixed dimensionality and dynamic dimensions ("FY"), or
+(3) fixed dimensionality and fixed dimensions ("FF").
+
+
+---------
+ITERATORS
+---------
+
+    AlphaArray::const_iterator alpha_d0 = alpha.begin<0>();
+    CountsArray::const_iterator counts_d1 = counts.begin<1>();
+
+    for(; alpha_d0 != alpha.end<0>(); ++alpha_d0, ++counts_d1)
+
+//    for(AlphaArray::iterator_nd alpha_i = alpha.begin(); alpha_i.has_next<1>(); alpha_i.next<1>())
+//    {
+//        double numerator = 0.0;
+
+//        for(; alpha_i.has_next<0>(); alpha_i.next<0>())
+//        {
+//        }
+//    }
+
+
+-------------------------
+ARRAY CONCEPTS PSEUDOCODE
+-------------------------
+
+// in utexas
+
+template<typename ElementType>
+struct Array
+{
+    template<typename OtherArray>
+    void operator =(const OtherArray& other);
+
+    template<size_t D>
+    size_t get_d() const;
+};
+
+template<typename ElementType>
+struct ArrayIterator
+{
+    ElementType& operator *();
+    ElementType operator *() const;
+
+    template<size_t D>
+    ... begin() const;
+};
+
+
+------------------------
+METAFUNCTIONS PSEUDOCODE
+------------------------
+
+// in utexas::ndmath
+
+template<typename T>
+struct identity { static const T value = ...; };
+
+
+---------------------
+ALGORITHMS PSEUDOCODE
+---------------------
+
+// in utexas::ndmath
+
+template<typename Array>
+typename Array::ElementType sum(const Array& a);
+
+template<typename ArrayA, typename ArrayB>
+typename ArrayA::ElementType abs_difference(const ArrayA& a, const ArrayB& b);
+
