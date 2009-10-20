@@ -1,5 +1,5 @@
 """
-utexas/statistics/mixture.py
+cargo/statistics/mixture.py
 
 Finite mixture distributions.
 
@@ -7,15 +7,11 @@ Finite mixture distributions.
 """
 
 import numpy
-import scipy
-import utexas.alog
 
-from itertools import count
 from numpy import newaxis
-from scipy.special.basic import psi
-from utexas.alog import DefaultLogger
+from cargo.log import get_logger
 
-log = DefaultLogger("utexas.statistics.mixture")
+log = get_logger(__name__)
 
 class FiniteMixture(object):
     """

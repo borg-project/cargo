@@ -1,5 +1,5 @@
 """
-utexas/statistics/dcm.py
+cargo/statistics/dcm.py
 
 The Dirichlet compound multinomial (DCM) distribution.
 
@@ -9,18 +9,18 @@ The Dirichlet compound multinomial (DCM) distribution.
 import numpy
 import scipy
 
-from utexas.alog import DefaultLogger
-from utexas.statistics._statistics import (
+from cargo.log import get_logger
+from cargo.statistics._statistics import (
     dcm_log_probability,
     estimate_dcm_minka_fixed,
     estimate_dcm_wallach_recurrence,
     )
-from utexas.statistics.distribution import (
+from cargo.statistics.distribution import (
     Family,
     Estimator,
     )
 
-log = DefaultLogger("utexas.statistics.dcm")
+log = get_logger(__name__)
 
 class DirichletCompoundMultinomial(Family):
     """
@@ -121,13 +121,6 @@ class MinkaFixedPointEstimator(Estimator):
     Extended to allow sample weighting for expectation maximization in mixture models.
     """
 
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        pass
-
     def estimate(self, counts, weights = None, threshold = 1e-6, cutoff = 1e5):
         """
         Return the estimated maximum likelihood distribution.
@@ -155,13 +148,6 @@ class WallachRecurrenceEstimator(Estimator):
 
     Extended to allow sample weighting for expectation maximization in mixture models.
     """
-
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        pass
 
     def estimate(self, counts, weights = None, threshold = 1e-5, cutoff = 1e4):
         """

@@ -1,5 +1,5 @@
 """
-utexas/statistics/distribution.py
+cargo/statistics/distribution.py
 
 The distribution ABC.
 
@@ -8,24 +8,20 @@ The distribution ABC.
 
 import numpy
 
-from abc import (
-    ABCMeta,
-    abstractmethod)
-from itertools import count
+from abc import abstractmethod
 from numpy import newaxis
-from utexas.alog import DefaultLogger
+from cargo.log import get_logger
+from cargo.sugar import ABC
 
-log = DefaultLogger("utexas.statistics.distribution")
+log = get_logger(__name__)
 
-class Family(object):
+class Family(ABC):
     """
     The ABC for probability distributions.
 
     A distribution object is an instantiation of a distribution (eg N(1.0, 1.0));
     a distribution class corresponds to a family of distributions.
     """
-
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def random_variate(self):
@@ -61,12 +57,10 @@ class Family(object):
 
         return sum(self.log_likelihood(s) for s in samples)
 
-class Estimator(object):
+class Estimator(ABC):
     """
     Estimate a distribution from samples.
     """
-
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def estimate(self, samples):
