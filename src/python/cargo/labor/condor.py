@@ -220,9 +220,9 @@ class CondorSubmission(object):
         submit.write_header("condor configuration")
         submit.write_blank()
         submit.write_pairs_dict({
-            "+Group":              self.group,
-            "+Project":            self.project,
-            "+ProjectDescription": "\"%s\"" % self.description,
+            "+Group"              : "\"%s\"" % self.group,
+            "+Project"            : "\"%s\"" % self.project,
+            "+ProjectDescription" : "\"%s\"" % self.description,
             })
         submit.write_blank()
         submit.write_pairs(
