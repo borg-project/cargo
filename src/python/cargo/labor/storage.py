@@ -162,6 +162,7 @@ def outsource(jobs, name = None, Session = LaborSession):
                 )
 
             ninserted += CHUNK_SIZE
+            ninserted  = min(ninserted, len(jobs))
 
             log.note(
                 "inserted %i jobs so far (%i%%)",
