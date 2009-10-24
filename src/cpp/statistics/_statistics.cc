@@ -112,5 +112,6 @@ BOOST_PYTHON_MODULE(_statistics)
     def("estimate_dcm_wallach_recurrence", &estimate_dcm_wallach_recurrence_py);
     def("multinomial_log_probability", &multinomial_log_probability_py);
     def("dcm_log_probability", &dcm_log_probability_py);
+    def("add_log", &add_log);
 }
  

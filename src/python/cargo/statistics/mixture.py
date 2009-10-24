@@ -10,6 +10,7 @@ import numpy
 
 from numpy import newaxis
 from cargo.log import get_logger
+from cargo.statistics.functions import add_log
 
 log = get_logger(__name__)
 
@@ -78,6 +79,8 @@ class FiniteMixture(object):
     def log_likelihood(self, samples):
         """
         Return the log likelihood of C{samples} under this distribution.
+
+        @param samples: List of samples from each of the domains.
         """
 
          # FIXME surely we can be more numerically clever here
@@ -90,17 +93,26 @@ class FiniteMixture(object):
         # draw the sample(s)
         total = 0.0
 
-        raise NotImplementedError() # FIXME I don't think that the expression below is correct
+        for k in xrange(K):
+            ctotal = self.__pi_K[k]
 
-        for m in xrange(M):
-            for k in xrange(K):
-                total += self.__pi_K[k] * numpy.exp(self.__components_MK[m, k].log_likelihood(samples[m]))
+            for m in xrange(M):
+                ctotal += self.__components_MK[m, k].log_likelihood(samples[m])
 
-        return numpy.log(total)
+            total = add_log(total, ctotal)
+
+            log.debug("%f ; %.8f (%i of %i)", ctotal, total, k, K)
+
+        if total == 0.0:
+            log.warning("sample has zero probability: %s", samples)
+
+        return total
 
     def total_log_likelihood(self, samples):
         """
         Return the total log likelihood of many C{samples} lists under this distribution.
+
+        @param samples: List of lists of samples from each of the domains.
         """
 
         return sum(self.log_likelihood(s) for s in samples)
