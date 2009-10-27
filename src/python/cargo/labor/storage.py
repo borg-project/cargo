@@ -174,6 +174,8 @@ def outsource(jobs, name = None, Session = LaborSession):
 
         log.note("committed job insertions")
 
+        return job_set.uuid
+
 def labor_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
     Connect to acridid storage.

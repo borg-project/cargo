@@ -11,13 +11,14 @@ import scipy
 
 from numpy import newaxis
 from scipy.special.basic import gammaln
-from utexas.alog import DefaultLogger
-from utexas.statistics._statistics import multinomial_log_probability
-from utexas.statistics.distribution import (
+from cargo.log import get_logger
+from cargo.statistics._statistics import multinomial_log_probability
+from cargo.statistics.distribution import (
     Family,
-    Estimator)
+    Estimator,
+    )
 
-log = DefaultLogger("utexas.statistics.multinomial")
+log = get_logger(__name__)
 
 class Multinomial(Family):
     """
@@ -31,9 +32,14 @@ class Multinomial(Family):
         @param beta: The distribution parameter vector.
         """
 
-        self.__beta = beta = numpy.asarray(beta)
-        self.__beta /= numpy.sum(beta)
-        self.__log_beta = numpy.nan_to_num(numpy.log(self.__beta))
+        # initialization
+        self.__beta      = beta = numpy.asarray(beta)
+        self.__beta     /= numpy.sum(beta)
+        self.__log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
+
+        # let's not let us be idiots
+        self.__beta.flags.writeable     = False
+        self.__log_beta.flags.writeable = False
 
     def random_variate(self, N):
         """
@@ -83,10 +89,18 @@ class Multinomial(Family):
 
         return self.__beta
 
+    def __get_log_beta(self):
+        """
+        Return the multinomial log parameter vector.
+        """
+
+        return self.__log_beta
+
     # properties
-    shape = property(__get_shape)
-    beta = property(__get_beta)
-    mean = beta
+    shape    = property(__get_shape)
+    beta     = property(__get_beta)
+    log_beta = property(__get_log_beta)
+    mean     = beta
 
 class MultinomialEstimator(Estimator):
     """
@@ -107,10 +121,10 @@ class MultinomialEstimator(Estimator):
         Return the estimated maximum likelihood distribution.
         """
 
-        weights = numpy.ones(counts.shape[0]) if weights is None else weights
-        weighted = counts * weights[:, newaxis]
-        mean = numpy.sum(weighted, 0)
-        mean /= numpy.sum(mean)
+        weights   = numpy.ones(counts.shape[0]) if weights is None else weights
+        weighted  = counts * weights[:, newaxis]
+        mean      = numpy.sum(weighted, 0)
+        mean     /= numpy.sum(mean)
 
         return Multinomial(mean)
 
