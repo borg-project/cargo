@@ -58,6 +58,20 @@ def random_subsets(sequence, sizes, random = numpy.random):
 
     return subsets
 
+def draw(p, normalize = True, random = numpy.random):
+    """
+    Return an index selected according to array of probabilities C{p}.
+
+    Normalizes by default.
+    """
+
+    if normalize:
+        p = p / numpy.sum(p)
+
+    ((i,),) = numpy.nonzero(random.multinomial(1, p))
+
+    return i
+
 def iflatten(v):
     """
     Yield elements from an iterable, recursing into all inner iterables.

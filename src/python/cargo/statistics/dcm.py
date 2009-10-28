@@ -169,10 +169,17 @@ class WallachRecurrenceEstimator(Estimator):
 
         counts = numpy.asarray(counts, dtype = numpy.uint32)
 
-        # estimate
-        alpha = estimate_dcm_wallach_recurrence(counts, weights, threshold, int(cutoff))
+        # FIXME hackishly handle the zero-counts case
+        counts = counts[numpy.sum(counts, 1) > 0]
 
-        return DirichletCompoundMultinomial(alpha)
+        if counts.size == 0:
+            # no counts; be uninformative
+            return DirichletCompoundMultinomial(numpy.ones(counts.shape[1]) * 1e6)
+        else:
+            # counts are available; estimate
+            alpha = estimate_dcm_wallach_recurrence(counts, weights, threshold, int(cutoff))
+
+            return DirichletCompoundMultinomial(alpha)
 
 # select the "best" estimator
 DCM_Estimator = WallachRecurrenceEstimator
