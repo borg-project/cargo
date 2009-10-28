@@ -9,7 +9,6 @@ Operations associated with the filesystem.
 import os
 import os.path
 import errno
-import fnmatch
 import hashlib
 import threading
 import mimetypes
@@ -17,6 +16,7 @@ import subprocess
 
 from bz2 import BZ2File
 from gzip import GzipFile
+from fnmatch import fnmatch
 from cargo.errors import print_ignored_error
 
 def files_under(path, pattern = "*"):
@@ -24,12 +24,15 @@ def files_under(path, pattern = "*"):
     Iterate over the set of paths to files in the specified directory tree.
 
     @param path: Specified path.
-    @param pattern: Optional filter pattern.
+    @param pattern: Optional filter pattern(s).
     """
+
+    if isinstance(pattern, str):
+        pattern = (str,)
 
     for (dirpath, dirnames, filenames) in os.walk(path):
         for filename in filenames:
-            if fnmatch.fnmatch(filename, pattern):
+            if any(fnmatch(filename, p) for p in pattern):
                 yield os.path.join(dirpath, filename)
 
 def bq(arguments, cwd = None):
