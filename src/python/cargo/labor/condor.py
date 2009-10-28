@@ -173,7 +173,7 @@ class CondorSubmission(object):
             "Condor Submission Configuration",
             Flag(
                 "--condor-home",
-                default = "workers-%s" % datetime.datetime.now().isoformat(),
+                default = "workers-%s" % datetime.datetime.now().replace(microsecond = 0).isoformat(),
                 metavar = "PATH",
                 help    = "run workers under PATH [%default]",
                 ),
@@ -186,7 +186,7 @@ class CondorSubmission(object):
         job_set_uuid = None,
         group        = "GRAD",
         project      = "AI_ROBOTICS",
-        poll         = True,
+        poll         = False,
         flags        = class_flags.given,
         ):
         """
@@ -359,12 +359,29 @@ def submit_workers(nworkers, database, matching, description, job_set_uuid):
             description  = description,
             job_set_uuid = job_set_uuid,
             poll         = False,
-            flags        = {"condor_home": "workers-%s" % datetime.datetime.now().isoformat()},
             )
 
     submission.add_many(nworkers, database)
     submission.prepare()
     submission.submit()
+
+def submit_workers_default(database = None, flags = module_flags.given):
+    """
+    Submit workers using default settings.
+    """
+
+    flags = module_flags.merged(flags)
+
+    if database is None:
+        database = cargo.labor.storage.module_flags.given.labor_database
+
+    submit_workers(
+        flags.workers,
+        database,
+        flags.matching,
+        flags.description,
+        flags.job_set_uuid,
+        )
 
 @with_flags_parsed()
 def main(positional):
@@ -372,16 +389,5 @@ def main(positional):
     Spawn condor workers.
     """
 
-    database = cargo.labor.storage.module_flags.given.labor_database
-
-# pfork(
-#     submit_workers,
-#     module_flags.given.matching,
-    submit_workers(
-        module_flags.given.workers,
-        database,
-        module_flags.given.matching,
-        module_flags.given.description,
-        module_flags.given.job_set_uuid,
-        )
+    submit_workers_default()
 

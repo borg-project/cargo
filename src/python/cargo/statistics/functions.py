@@ -12,7 +12,10 @@ import scipy
 from numpy import (
     log,
     exp)
-from utexas.statistics._statistics import pochhammer_ln
+from cargo.statistics._statistics import (
+    add_log,
+    pochhammer_ln,
+    )
 
 #In [2]: pochhammer_ln(1, 2)
 #Out[2]: 0.69314718055994529

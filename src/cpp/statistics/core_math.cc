@@ -123,40 +123,6 @@ double ll_vmf(PyObject* mu_object, double kappa, PyObject* x_object, double xl)
     return ll_vmf_core(x->dimensions[0], aiter_d(mu, 0), kappa, aiter_l(x, 0), xl);
 }
 
-/*! Return log(x + y) given log(x) and log(y).
- *
- *  Tries to be numerically stable.
- */
-long double add_log(long double x, long double y)
-{
-    // FIXME does this function actually work?
-
-    if(x == 0.0)
-    {
-        return y;
-    }
-    else if(y == 0.0)
-    {
-        return x;
-    }
-    else if(x - y > 16.0)
-    {
-        return x;
-    }
-    else if(x > y)
-    {
-        return x + log(1.0 + exp(y - x));
-    }
-    else if (y - x > 16.0)
-    {
-        return y;
-    }
-    else
-    {
-        return y + log(1.0 + exp(x - y));
-    }
-}
-
 /*! \brief Convert out of log space and L1-normalize \p x, in place.
  *  \param n: The dimensionality of \p x.
  */

@@ -35,6 +35,7 @@ class DirichletCompoundMultinomial(Family):
         @param renorm: Ensure that the parameter vector has some minimum L1 norm?
         """
 
+        # initialization
         alpha = numpy.asarray(alpha)
 
         if renorm and numpy.sum(alpha) < 1e-2:
@@ -43,6 +44,9 @@ class DirichletCompoundMultinomial(Family):
             self.__alpha = alpha
 
         self.__sum_alpha = numpy.sum(self.__alpha)
+
+        # let's not let us be idiots
+        self.__alpha.flags.writeable = False
 
     def random_variate(self, N):
         """
@@ -109,9 +113,9 @@ class DirichletCompoundMultinomial(Family):
         return numpy.sum(self.__alpha)
 
     # properties
-    shape = property(__get_shape)
-    alpha = property(__get_alpha)
-    mean = property(__get_mean)
+    shape      = property(__get_shape)
+    alpha      = property(__get_alpha)
+    mean       = property(__get_mean)
     burstiness = property(__get_burstiness)
 
 class MinkaFixedPointEstimator(Estimator):
