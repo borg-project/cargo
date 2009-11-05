@@ -23,6 +23,19 @@ class TimeDelta(timedelta):
     Wrap datetime.timedelta with a few convenience methods.
     """
 
+    @staticmethod
+    def from_timedelta(delta):
+        """
+        Return a TimeDelta from a timedelta.
+        """
+
+        return \
+            TimeDelta(
+                days         = delta.days,
+                seconds      = delta.seconds,
+                microseconds = delta.microseconds,
+                )
+
     @property
     def as_s(self):
         """
