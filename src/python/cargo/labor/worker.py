@@ -55,7 +55,7 @@ script_flags = \
         Flag(
             "--poll-mu",
             type    = float,
-            default = 64.0,
+            default = -1,
             metavar = "SECONDS",
             help    = "poll with mean SECONDS [%default]",
             ),
@@ -76,6 +76,11 @@ script_flags = \
             "--job-set-uuid",
             metavar = "UUID",
             help    = "run only jobs in set UUID",
+            ),
+        Flag(
+            "--work-chattily",
+            action  = "store_true",
+            help    = "enable worker verbosity on startup",
             ),
         )
 
@@ -224,7 +229,8 @@ def main(positional):
     """
 
     # logging setup
-    get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
+    if script_flags.given.work_chattily:
+        get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
 
     # worker body
     with SQL_Engines.default:
