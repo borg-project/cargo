@@ -10,13 +10,14 @@ import os
 import sys
 import pty
 
+from os import putenv
 from cargo.log import get_logger
 from cargo.unix.proc import ProcessStat
 from cargo.errors import print_ignored_error
 
 log = get_logger(__name__)
 
-def spawn_pty_session(arguments):
+def spawn_pty_session(arguments, environment = {}):
     """
     Fork a subprocess in a pseudo-terminal.
     """
@@ -25,6 +26,10 @@ def spawn_pty_session(arguments):
 
     dup_stderr_fd = os.dup(sys.stderr.fileno())
     (child_pid, child_fd) = pty.fork()
+
+    # set our environment
+    for (key, value) in environment.iteritems():
+        putenv(key, value)
 
     if child_pid == 0:
         # we are the child; use the parent's stderr instead of merging to stdout

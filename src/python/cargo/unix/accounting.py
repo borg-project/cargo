@@ -98,7 +98,7 @@ class PollingReader(object):
 
         return None
 
-def run_cpu_limited(arguments, limit, resolution = 0.25):
+def run_cpu_limited(arguments, limit, environment = None, resolution = 0.25):
     """
     Spawn a subprocess whose process tree is granted limited CPU (user) time.
 
@@ -140,7 +140,7 @@ def run_cpu_limited(arguments, limit, resolution = 0.25):
 
     try:
         # start running the child process
-        (child_pid, child_fd) = spawn_pty_session(arguments)
+        (child_pid, child_fd) = spawn_pty_session(arguments, environment)
 
         # read the child's output while accounting (note that the session id
         # is, under Linux, the pid of the session leader)
