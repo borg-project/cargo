@@ -98,9 +98,11 @@ class PollingReader(object):
 
         return None
 
-def run_cpu_limited(arguments, limit, environment = None, resolution = 0.25):
+def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
     """
     Spawn a subprocess whose process tree is granted limited CPU (user) time.
+
+    @param environments Override specific existing environment variables.
 
     The subprocess must not expect input. This method is best suited to
     processes which may run for a reasonable amount of time (eg, at least
@@ -131,12 +133,13 @@ def run_cpu_limited(arguments, limit, environment = None, resolution = 0.25):
 
     # various constants
     KILL_DELAY_SECONDS = 0.1
-    WAITS_BEFORE_SIG9 = 64
-    WAITS_AFTER_SIG9 = 16
+    WAITS_BEFORE_SIG9  = 64
+    WAITS_AFTER_SIG9   = 16
 
     # start the run
-    child_fd = None
+    child_fd  = None
     child_pid = None
+    censored  = False
 
     try:
         # start running the child process
@@ -144,13 +147,13 @@ def run_cpu_limited(arguments, limit, environment = None, resolution = 0.25):
 
         # read the child's output while accounting (note that the session id
         # is, under Linux, the pid of the session leader)
-        chunks = []
+        chunks     = []
         accountant = SessionTimeAccountant(child_pid)
-        reader = PollingReader(child_fd)
+        reader     = PollingReader(child_fd)
 
         while True:
             # read from and audit the child process
-            chunk = reader.read(resolution)
+            chunk     = reader.read(resolution)
             cpu_total = accountant.get_total()
 
             if chunk is not None:
@@ -231,14 +234,14 @@ def run_cpu_limited(arguments, limit, environment = None, resolution = 0.25):
         # unpack the exit status
         if os.WIFEXITED(termination):
             exit_status = os.WEXITSTATUS(termination)
-            elapsed = timedelta(seconds = usage.ru_utime)
-            gap = abs(elapsed - cpu_total)
+            elapsed     = timedelta(seconds = usage.ru_utime)
+            gap         = abs(elapsed - cpu_total)
 
             if gap > timedelta(seconds = 1):
                 log.warning("gap of %s between rusage and /proc reporting", gap)
         else:
             exit_status = None
-            elapsed = cpu_total
+            elapsed     = cpu_total
 
         # done
         return (chunks, elapsed, exit_status)

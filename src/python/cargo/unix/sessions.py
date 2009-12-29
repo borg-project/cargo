@@ -29,7 +29,7 @@ def spawn_pty_session(arguments, environment = {}):
 
     # set our environment
     for (key, value) in environment.iteritems():
-        putenv(key, value)
+        putenv(key, str(value))
 
     if child_pid == 0:
         # we are the child; use the parent's stderr instead of merging to stdout
