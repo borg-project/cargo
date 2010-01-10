@@ -158,7 +158,8 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
 
             if chunk is not None:
                 if chunk != "":
-                    log.debug("got %i bytes at %f cpu seconds", len(chunk), cpu_total)
+                    log.detail("got %i bytes at %s (user time)", len(chunk), cpu_total)
+                    log.debug("chunk follows:\n%s", chunk)
 
                     chunks.append((cpu_total, chunk))
                 else:
