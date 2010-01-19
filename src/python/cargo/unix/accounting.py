@@ -90,6 +90,8 @@ class PollingReader(object):
         changed = self.polling.poll(timeout * 1000)
 
         for (fd, event) in changed:
+            log.debug("event on fd %i is %s", fd, event)
+
             if event & select.POLLIN:
                 # POLLHUP is level-triggered; we'll be back if it was missed
                 return os.read(fd, 65536)
@@ -141,6 +143,8 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
     child_pid = None
     censored  = False
 
+    log.debug("running %s for %s", arguments, limit)
+
     try:
         # start running the child process
         (child_pid, child_fd) = spawn_pty_session(arguments, environment)
@@ -163,9 +167,13 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
 
                     chunks.append((cpu_total, chunk))
                 else:
+                    log.debug("process terminated")
+
                     break
 
             if cpu_total >= limit:
+                log.debug("exceeded user time limit")
+
                 break
 
         # make sure that the session is terminated; we haven't yet waited on our
@@ -207,6 +215,8 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
         # something has gone awry, so we need to kill our children
         raised = Raised()
 
+        log.debug("something went awry!")
+
         if child_pid is not None:
             try:
                 # nuke the entire session
@@ -245,6 +255,8 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
             elapsed     = cpu_total
 
         # done
+        log.debug("completed (status %s); returning %i chunks", exit_status, len(chunks))
+
         return (chunks, elapsed, exit_status)
     finally:
         # let's not leak file descriptors
