@@ -105,7 +105,7 @@ class NumpyArrayFY
 
         E& operator ()(size_t i0)
         {
-            // FIXME this will cause explicit class instantiation to blow up; find a better solution
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
             BOOST_STATIC_ASSERT(ND == 1);
 
             return *static_cast<E*>(PyArray_GETPTR1(_wrapped.get(), i0));
@@ -113,7 +113,7 @@ class NumpyArrayFY
 
         const E& operator ()(size_t i0) const
         {
-            // FIXME this will cause explicit class instantiation to blow up; find a better solution
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
             BOOST_STATIC_ASSERT(ND == 1);
 
             return *static_cast<E*>(PyArray_GETPTR1(_wrapped.get(), i0));
@@ -121,7 +121,7 @@ class NumpyArrayFY
 
         E& operator ()(size_t i0, size_t i1)
         {
-            // FIXME this will cause explicit class instantiation to blow up; find a better solution
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
             BOOST_STATIC_ASSERT(ND == 2);
 
             return *static_cast<E*>(PyArray_GETPTR2(_wrapped.get(), i0, i1));
@@ -129,10 +129,26 @@ class NumpyArrayFY
 
         const E& operator ()(size_t i0, size_t i1) const
         {
-            // FIXME this will cause explicit class instantiation to blow up; find a better solution
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
             BOOST_STATIC_ASSERT(ND == 2);
 
             return *static_cast<E*>(PyArray_GETPTR2(_wrapped.get(), i0, i1));
+        }
+
+        E& operator ()(size_t i0, size_t i1, size_t i2)
+        {
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
+            BOOST_STATIC_ASSERT(ND == 3);
+
+            return *static_cast<E*>(PyArray_GETPTR3(_wrapped.get(), i0, i1, i2));
+        }
+
+        const E& operator ()(size_t i0, size_t i1, size_t i2) const
+        {
+            // FIXME this will cause explicit class instantiation to fail; find a better solution
+            BOOST_STATIC_ASSERT(ND == 3);
+
+            return *static_cast<E*>(PyArray_GETPTR3(_wrapped.get(), i0, i1, i2));
         }
 
         const boost::python::handle<PyObject>& get_wrapped() const

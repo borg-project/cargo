@@ -8,6 +8,7 @@
 #include "dcm.h"
 #include "multinomial.h"
 #include "numpy_array.h"
+#include "portfolio.h"
 
 using namespace std;
 using namespace boost;
@@ -89,6 +90,53 @@ dcm_log_probability_py(
     return dcm_log_probability(sum_alpha, alpha_D, counts_D);
 }
 
+void
+dcm_post_pi_K_py(
+    handle<PyObject> pi_K_py,
+    handle<PyObject> sum_MK_py,
+    handle<PyObject> mix_MKD_py,
+    handle<PyObject> counts_MD_py)
+{
+    NumpyArrayFY<double, 1> pi_K(pi_K_py);
+    NumpyArrayFY<double, 2> sum_MK(sum_MK_py);
+    NumpyArrayFY<double, 3> mix_MKD(mix_MKD_py);
+    NumpyArrayFY<unsigned long, 2> counts_MD(counts_MD_py);
+
+    dcm_post_pi_K(pi_K, sum_MK, mix_MKD, counts_MD);
+}
+
+void
+dcm_model_predict_py(
+    handle<PyObject> post_pi_K_py,
+    handle<PyObject> sum_MK_py,
+    handle<PyObject> mix_MKD_py,
+    handle<PyObject> counts_MD_py,
+    handle<PyObject> out_MD_py)
+{
+    NumpyArrayFY<double, 1> post_pi_K(post_pi_K_py);
+    NumpyArrayFY<double, 2> sum_MK(sum_MK_py);
+    NumpyArrayFY<double, 3> mix_MKD(mix_MKD_py);
+    NumpyArrayFY<unsigned long, 2> counts_MD(counts_MD_py);
+    NumpyArrayFY<double, 2> out_MD(out_MD_py);
+
+    dcm_model_predict(post_pi_K, sum_MK, mix_MKD, counts_MD, out_MD);
+}
+
+void
+multinomial_model_predict_py(
+    handle<PyObject> pi_K_py,
+    handle<PyObject> mix_MKD_py,
+    handle<PyObject> counts_MD_py,
+    handle<PyObject> out_MD_py)
+{
+    NumpyArrayFY<double, 1> pi_K(pi_K_py);
+    NumpyArrayFY<double, 3> mix_MKD(mix_MKD_py);
+    NumpyArrayFY<unsigned long, 2> counts_MD(counts_MD_py);
+    NumpyArrayFY<double, 2> out_MD(out_MD_py);
+
+    multinomial_model_predict(pi_K, mix_MKD, counts_MD, out_MD);
+}
+
 }
 
 
@@ -113,5 +161,8 @@ BOOST_PYTHON_MODULE(_statistics)
     def("multinomial_log_probability", &multinomial_log_probability_py);
     def("dcm_log_probability", &dcm_log_probability_py);
     def("add_log", &add_log);
+    def("dcm_post_pi_K", &dcm_post_pi_K_py);
+    def("dcm_model_predict", &dcm_model_predict_py);
+    def("multinomial_model_predict", &multinomial_model_predict_py);
 }
  

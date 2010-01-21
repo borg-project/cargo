@@ -401,7 +401,7 @@ estimate_dcm_wallach_recurrence(
     }
 }
 
-/*! \brief Calculate the log probability of the multinomial distribution.
+/*! \brief Calculate the log probability of the DCM distribution.
  */
 template<typename AlphaArray, typename CountsArray>
 double
@@ -437,8 +437,93 @@ dcm_log_probability(
     return psigm - ln_poch(sum_alpha, n);
 }
 
+/*! \brief Calculate the log probability of the DCM distribution.
+ *
+ *  This method is exactly the same as the one above, but pulls counts
+ *  from a matrix row. The code duplication is stupid. I'm in a hurry.
+ */
+template<typename AlphaArray, typename CountsArray>
+double
+dcm_log_probability_mkd(
+    double sum_alpha,
+    const AlphaArray& alpha_MKD,
+    const CountsArray& counts_MD,
+    size_t m,
+    size_t k)
+{
+    // sanity
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+
+    // mise en place
+    size_t M = alpha_MKD.template d<0>();
+    size_t D = alpha_MKD.template d<2>();
+
+    BOOST_ASSERT(counts_MD.template d<0>() == M);
+    BOOST_ASSERT(counts_MD.template d<1>() == D);
+
+    // calculate
+    unsigned long n = 0;
+
+    for(size_t d = D; d--;)
+    {
+        n += counts_MD(m, d);
+    }
+
+    double psigm = 0.0;
+
+    for(size_t d = D; d--;)
+    {
+        psigm += ln_poch(alpha_MKD(m, k, d), counts_MD(m, d));
+    }
+
+    return psigm - ln_poch(sum_alpha, n);
+}
+
+/*! \brief Calculate the log probability of the DCM distribution.
+ *
+ *  This method is exactly the same as the one above, but uses a different
+ *  count vector shape. The code duplication is stupid. I'm in a hurry.
+ */
+template<typename AlphaArray, typename CountsArray>
+double
+dcm_log_probability_mkd2(
+    double sum_alpha,
+    const AlphaArray& alpha_MKD,
+    const CountsArray& counts_D,
+    size_t m,
+    size_t k)
+{
+    // sanity
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+
+    // mise en place
+    size_t D = alpha_MKD.template d<2>();
+
+    BOOST_ASSERT(counts_D.template d<0>() == D);
+
+    // calculate
+    unsigned long n = 0;
+
+    for(size_t d = D; d--;)
+    {
+        n += counts_D(d);
+    }
+
+    double psigm = 0.0;
+
+    for(size_t d = D; d--;)
+    {
+        psigm += ln_poch(alpha_MKD(m, k, d), counts_D(d));
+    }
+
+    return psigm - ln_poch(sum_alpha, n);
+}
+
 }
 }
 
 #endif
+
 
