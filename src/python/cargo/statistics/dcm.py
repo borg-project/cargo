@@ -9,6 +9,7 @@ The Dirichlet compound multinomial (DCM) distribution.
 import numpy
 import scipy
 
+from functools import partial
 from cargo.log import get_logger
 from cargo.statistics._statistics import (
     dcm_log_probability,
@@ -43,7 +44,8 @@ class DirichletCompoundMultinomial(Family):
         else:
             self.__alpha = alpha
 
-        self.__sum_alpha = numpy.sum(self.__alpha)
+        self.sum_alpha = numpy.sum(self.__alpha)
+#         self.log_likelihood = partial(dcm_log_probability, self.__sum_alpha, self.__alpha)
 
         # let's not let us be idiots
         self.__alpha.flags.writeable = False
@@ -82,7 +84,7 @@ class DirichletCompoundMultinomial(Family):
         Return the log likelihood of C{counts} under this distribution.
         """
 
-        return dcm_log_probability(self.__sum_alpha, self.__alpha, counts)
+        return dcm_log_probability(self.sum_alpha, self.__alpha, counts)
 
     def __get_shape(self):
         """
@@ -153,7 +155,7 @@ class WallachRecurrenceEstimator(Estimator):
     Extended to allow sample weighting for expectation maximization in mixture models.
     """
 
-    def estimate(self, counts, weights = None, threshold = 1e-5, cutoff = 1e4):
+    def estimate(self, counts, weights = None, threshold = 1e-5, cutoff = 1e3):
         """
         Return the estimated maximum likelihood distribution.
         """

@@ -243,7 +243,7 @@ class ExpectationMaximizationMixtureEstimator(object):
             raise ArgumentError("estimator list must be one- or two-dimensional")
 
         # other parameters
-        self.__iterations = 24 # FIXME
+        self.__iterations = 12 # FIXME
 
     def estimate(self, samples, verbose = False):
         """
