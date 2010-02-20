@@ -46,7 +46,7 @@ from cargo.labor.storage import (
     CondorWorkerRecord,
     labor_connect,
     )
-from cargo.errors import print_ignored_error
+from cargo.errors import Raised
 
 log          = get_logger(__name__, level = None)
 script_flags = \
@@ -220,7 +220,7 @@ def main_loop():
             session.delete(worker)
             session.commit()
         except:
-            print_ignored_error()
+            Raised().print_ignored()
 
 @with_flags_parsed()
 def main(positional):

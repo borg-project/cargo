@@ -6,8 +6,14 @@ Track resource usage.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+if __name__ == "__main__":
+    from cargo.unix.accounting import main
+
+    raise SystemExit(main())
+
 import os
 import re
+import sys
 import time
 import errno
 import select
@@ -17,10 +23,7 @@ import subprocess
 from datetime import timedelta
 from itertools import count
 from cargo.log import get_logger
-from cargo.errors import (
-    print_ignored_error,
-    Raised,
-    )
+from cargo.errors import Raised
 from cargo.unix.proc import ProcessStat
 from cargo.unix.sessions import (
     kill_session,
@@ -100,7 +103,7 @@ class PollingReader(object):
 
         return None
 
-def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
+def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
     """
     Spawn a subprocess whose process tree is granted limited CPU (user) time.
 
@@ -232,7 +235,7 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
 
                     time.sleep(KILL_DELAY_SECONDS)
             except:
-                print_ignored_error()
+                Raised().print_ignored()
 
         raised.re_raise()
     else:
@@ -262,4 +265,14 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.25):
         # let's not leak file descriptors
         if child_fd is not None:
             os.close(child_fd)
+
+def main():
+    """
+    Run a CPU-limited subprocess for testing.
+    """
+
+    (chunks, elapsed, exit_status) = run_cpu_limited(sys.argv[2:], timedelta(seconds = float(sys.argv[1])))
+
+    print elapsed
+    print chunks
 

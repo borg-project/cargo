@@ -6,19 +6,14 @@ General error routines.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import sys
-import traceback
-
-def print_ignored_error(message = "An error was unavoidably ignored:"):
-    """
-    We're in an exception handler, but can't handle the exception.
-    """
-
-    sys.stderr.write("\n%s\n" % message)
-
-    traceback.print_exc()
-
-    sys.stderr.write("\n")
+from sys import (
+    stderr,
+    exc_info,
+    )
+from traceback import (
+    print_exc,
+    format_exception,
+    )
 
 class Raised(object):
     """
@@ -30,8 +25,32 @@ class Raised(object):
     """
 
     def __init__(self):
-        (self.cls, self.value, self.traceback) = sys.exc_info()
+        """
+        Initialize.
+        """
+
+        (self.type, self.value, self.traceback) = exc_info()
+
+    def format(self):
+        """
+        Return a list of lines describing the exception.
+        """
+
+        return format_exception(self.type, self.value, self.traceback)
 
     def re_raise(self):
-        raise self.cls, self.value, self.traceback
+        """
+        Re-raise the stored exception.
+        """
+
+        raise self.type, self.value, self.traceback
+
+    def print_ignored(self, message = "An error was unavoidably ignored:", file = stderr):
+        """
+        Print an exception-was-ignored message.
+        """
+
+        file.write("\n%s\n" % message)
+        file.write("".join(self.format()))
+        file.write("\n")
 

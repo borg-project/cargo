@@ -17,7 +17,7 @@ import subprocess
 from bz2 import BZ2File
 from gzip import GzipFile
 from fnmatch import fnmatch
-from cargo.errors import print_ignored_error
+from cargo.errors import Raised
 
 def files_under(path, pattern = "*"):
     """
@@ -82,13 +82,23 @@ def hash_bytes(bytes, algorithm_name = None):
     @return (algorithm_name, hash)
     """
 
+    return hash_yielded_bytes([bytes])
+
+def hash_yielded_bytes(iterator, algorithm_name = None):
+    """
+    Return a deterministic hash of the C{iterator} of byte strings.
+
+    @return (algorithm_name, hash)
+    """
+
     if algorithm_name is None:
-        algorithm = hashlib.sha512()
+        algorithm      = hashlib.sha512()
         algorithm_name = "sha512"
     else:
         algorithm = hashlib.new(algorithm_name)
 
-    algorithm.update(bytes)
+    for bytes in iterator:
+        algorithm.update(bytes)
 
     return (algorithm_name, algorithm.digest())
 
@@ -148,7 +158,7 @@ def write_file_atomically(path, data):
 
             os.unlink(temp_path)
         except:
-            print_ignored_error()
+            Raised().print_ignored()
 
 def escape_for_latex(text):
     """

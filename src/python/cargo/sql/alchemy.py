@@ -23,6 +23,7 @@ from sqlalchemy import (
     DateTime,
     Interval,
     ForeignKey,
+    text,
     create_engine,
     )
 from sqlalchemy.orm import (
@@ -42,8 +43,20 @@ from cargo.flags import (
     Flags,
     with_flags_parsed,
     )
-from cargo.errors import print_ignored_error
+from cargo.errors import Raised
 from cargo.temporal import TimeDelta
+
+def column(name, type = None):
+    """
+    Return a text-named column, with optional typemap, for use in SQL generation.
+    """
+
+    if type is None:
+        typemap = None
+    else:
+        typemap = {name: type}
+
+    return text(name, typemap = typemap)
 
 class SQL_Engines(object):
     """
@@ -73,7 +86,7 @@ class SQL_Engines(object):
             for engine in self.engines.itervalues():
                 engine.dispose()
         except:
-            print_ignored_error()
+            Raised().print_ignored()
 
     def get(self, database):
         """
