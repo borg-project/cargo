@@ -52,11 +52,6 @@ def spawn_session(arguments, environment = {}):
             putenv(key, str(value))
 
         # and start our own session
-        print "sessionizing..."
-        sys.stdout.flush()
-        time.sleep(5)
-        print "foo!"
-        sys.stdout.flush()
         os.setsid()
 
     # launch the subprocess
