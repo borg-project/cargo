@@ -18,7 +18,6 @@ import time
 import errno
 import select
 import signal
-import subprocess
 
 from datetime import timedelta
 from itertools import count
@@ -27,6 +26,7 @@ from cargo.errors import Raised
 from cargo.unix.proc import ProcessStat
 from cargo.unix.sessions import (
     kill_session,
+    spawn_session,
     spawn_pty_session,
     )
 
@@ -75,15 +75,25 @@ class PollingReader(object):
     Read from file descriptors with timeout.
     """
 
-    def __init__(self, fd):
+    def __init__(self, fds):
         """
         Initialize.
         """
 
-        self.fd = fd
+        self.fds     = fds
         self.polling = select.poll()
 
-        self.polling.register(fd, select.POLLIN)
+        for fd in fds:
+            self.polling.register(fd, select.POLLIN)
+
+    def unregister(self, fds):
+        """
+        Unregister descriptors.
+        """
+
+        for fd in fds:
+            self.polling.unregister(fd)
+            self.fds.remove(fd)
 
     def read(self, timeout = -1):
         """
@@ -93,17 +103,25 @@ class PollingReader(object):
         changed = self.polling.poll(timeout * 1000)
 
         for (fd, event) in changed:
-            log.debug("event on fd %i is %s", fd, event)
+            log.debug("event on fd %i is %#o", fd, event)
 
             if event & select.POLLIN:
                 # POLLHUP is level-triggered; we'll be back if it was missed
-                return os.read(fd, 65536)
+                return (fd, os.read(fd, 65536))
             elif event & select.POLLHUP:
-                return ""
+                return (fd, "")
+            else:
+                raise IOError("unexpected poll response %#o from file descriptor" % event)
 
-        return None
+        return (None, None)
 
-def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
+def run_cpu_limited(
+    arguments,
+    limit,
+    pty         = False,
+    environment = {},
+    resolution  = 0.5,
+    ):
     """
     Spawn a subprocess whose process tree is granted limited CPU (user) time.
 
@@ -114,13 +132,16 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
     several seconds); it will be fairly inefficient (and ineffective) at
     fine-grained limiting of CPU allocation to short-duration processes.
 
-    We run the process in a pseudo-terminal and read its output. Every time we
-    receive a chunk of data, or every C{resolution} seconds, we estimate the
-    total CPU time used by the session---and store that information with the
-    chunk of output, if any. After at least C{limit} CPU seconds have been used
-    by the spawned session, or after the session leader terminates, whichever
-    is first, the session is killed, the session leader waited on, and any data
-    remaining in the pipe is read.
+    We run the process and read its output. Every time we receive a chunk of
+    data, or every C{resolution} seconds, we estimate the total CPU time used
+    by the session---and store that information with the chunk of output, if
+    any. After at least C{limit} CPU seconds have been used by the spawned
+    session, or after the session leader terminates, whichever is first, the
+    session is killed, the session leader waited on, and any data remaining in
+    the pipe is read.
+
+    If C{pty} is specified, the process is run in a pseudo-terminal, stderr is
+    merged with stdout, and the process is unlikely to buffer its output.
 
     Final elapsed CPU time for process trees which do not exceed their CPU time
     limit is taken from kernel-reported resource usage, which includes the sum
@@ -150,29 +171,48 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
 
     try:
         # start running the child process
-        (child_pid, child_fd) = spawn_pty_session(arguments, environment)
+        if pty:
+            (child_pid, child_fd) = spawn_pty_session(arguments, environment)
+            child_fds             = [child_fd]
+            out_chunks            = []
+            err_chunks            = None
+            fd_chunks             = {child_fd: out_chunks}
+        else:
+            popened      = spawn_session(arguments, environment)
+            child_pid    = popened.pid
+            out_chunks   = []
+            err_chunks   = []
+            fd_chunks    = {
+                popened.stdout.fileno(): out_chunks,
+                popened.stderr.fileno(): err_chunks,
+                }
+            child_fds    = fd_chunks.keys()
+
+        log.debug("spawned child with pid %i", child_pid)
 
         # read the child's output while accounting (note that the session id
         # is, under Linux, the pid of the session leader)
         chunks     = []
         accountant = SessionTimeAccountant(child_pid)
-        reader     = PollingReader(child_fd)
+        reader     = PollingReader(child_fds)
 
-        while True:
+        while reader.fds:
             # read from and audit the child process
-            chunk     = reader.read(resolution)
-            cpu_total = accountant.get_total()
+            (chunk_fd, chunk) = reader.read(resolution)
+            cpu_total         = accountant.get_total()
 
             if chunk is not None:
+                chunks = fd_chunks[chunk_fd]
+
                 if chunk != "":
                     log.detail("got %i bytes at %s (user time)", len(chunk), cpu_total)
                     log.debug("chunk follows:\n%s", chunk)
 
                     chunks.append((cpu_total, chunk))
                 else:
-                    log.debug("process terminated")
+                    log.debug("fd %i closed; assuming child terminated", chunk_fd)
 
-                    break
+                    reader.unregister([chunk_fd])
 
             if cpu_total >= limit:
                 log.debug("exceeded user time limit")
@@ -192,7 +232,7 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
             elif i < 15:
                 time.sleep(KILL_DELAY_SECONDS)
 
-        # then nuke any grandchildren in the session; these will reparent
+        # then nuke any process(es) left in the session; grandchildren will reparent
         if session_size > 1:
             log.note("%i orphan(s) survived; nuking the session from orbit", session_size - 1)
 
@@ -218,7 +258,7 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
         # something has gone awry, so we need to kill our children
         raised = Raised()
 
-        log.debug("something went awry!")
+        log.warning("something went awry! (our pid is %i)", os.getpid())
 
         if child_pid is not None:
             try:
@@ -239,28 +279,32 @@ def run_cpu_limited(arguments, limit, environment = {}, resolution = 0.5):
 
         raised.re_raise()
     else:
-        # grab any output left in the pipe's kernel buffer
-        chunk = reader.read()
+        # grab any output left in the kernel buffers
+        while reader.fds:
+            (chunk_fd, chunk) = reader.read()
 
-        if chunk:
-            chunks.append((cpu_total, chunk))
+            if chunk:
+                fd_chunks[chunk_fd].append((cpu_total, chunk))
+            else:
+                reader.unregister(chunk_fd)
 
         # unpack the exit status
         if os.WIFEXITED(termination):
             exit_status = os.WEXITSTATUS(termination)
-            elapsed     = timedelta(seconds = usage.ru_utime)
-            gap         = abs(elapsed - cpu_total)
-
-            if gap > timedelta(seconds = 1):
-                log.warning("gap of %s between rusage and /proc reporting", gap)
         else:
             exit_status = None
-            elapsed     = cpu_total
 
         # done
         log.debug("completed (status %s); returning %i chunks", exit_status, len(chunks))
 
-        return (chunks, elapsed, exit_status)
+        # FIXME return a namedtuple?
+        return (
+            out_chunks,
+            err_chunks,
+            timedelta(seconds = usage.ru_utime),
+            cpu_total,
+            exit_status,
+            )
     finally:
         # let's not leak file descriptors
         if child_fd is not None:
@@ -271,8 +315,22 @@ def main():
     Run a CPU-limited subprocess for testing.
     """
 
-    (chunks, elapsed, exit_status) = run_cpu_limited(sys.argv[2:], timedelta(seconds = float(sys.argv[1])))
+    (out_chunks, err_chunks, usage_elapsed, proc_elapsed, exit_status) = \
+        run_cpu_limited(
+            sys.argv[2:],
+            timedelta(seconds = float(sys.argv[1])),
+            pty = False,
+            )
 
-    print elapsed
-    print chunks
+    print "usage_elapsed:", usage_elapsed
+    print "proc_elapsed:", proc_elapsed
+    print "output chunks follow"
+
+    for (time, chunk) in out_chunks:
+        print "================ (out)", time
+        print chunk
+
+    for (time, chunk) in err_chunks:
+        print "================ (out)", time
+        print chunk
 

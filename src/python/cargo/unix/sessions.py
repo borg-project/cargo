@@ -14,7 +14,9 @@ if __name__ == "__main__":
 import os
 import pty
 import sys
+import time
 import fcntl
+import subprocess
 
 from os import (
     pipe,
@@ -26,11 +28,51 @@ from cPickle import (
     loads,
     )
 from traceback import format_exception
+from subprocess import Popen
 from cargo.log import get_logger
 from cargo.unix.proc import ProcessStat
 from cargo.errors import Raised
 
 log = get_logger(__name__)
+
+def spawn_session(arguments, environment = {}):
+    """
+    Spawn a subprocess in its own session.
+
+    @see: spawn_pty_session
+    """
+
+    def preexec():
+        """
+        Run in the child code prior to execution.
+        """
+
+        # update the environment
+        for (key, value) in environment.iteritems():
+            putenv(key, str(value))
+
+        # and start our own session
+        print "sessionizing..."
+        sys.stdout.flush()
+        time.sleep(5)
+        print "foo!"
+        sys.stdout.flush()
+        os.setsid()
+
+    # launch the subprocess
+    popened = \
+        Popen(
+            arguments,
+            close_fds  = True,
+            stdin      = subprocess.PIPE,
+            stdout     = subprocess.PIPE,
+            stderr     = subprocess.PIPE,
+            preexec_fn = preexec,
+            )
+
+    popened.stdin.close()
+
+    return popened
 
 def spawn_pty_session(arguments, environment = {}):
     """
@@ -40,8 +82,6 @@ def spawn_pty_session(arguments, environment = {}):
 
     @param environment: Additional environment variables; putenved.
     """
-
-    # FIXME race condition: might leak the child if we're signaled
 
     (error_read_fd, error_write_fd) = pipe()
     (child_pid, child_fd)           = pty.fork()
@@ -61,6 +101,7 @@ def spawn_pty_session(arguments, environment = {}):
             for (key, value) in environment.iteritems():
                 putenv(key, str(value))
 
+            # replace the process image
             execvp(arguments[0], arguments)
         except:
             # received an exception; try to pass it to the parent
@@ -107,6 +148,8 @@ def kill_session(sid, number):
     nkilled = 0
 
     for process in ProcessStat.in_session(sid):
+        log.debug("killing pid %i in session %i", process.pid, sid)
+
         os.kill(process.pid, number)
 
         nkilled += 1
