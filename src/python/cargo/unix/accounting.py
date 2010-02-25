@@ -192,7 +192,6 @@ def run_cpu_limited(
 
         # read the child's output while accounting (note that the session id
         # is, under Linux, the pid of the session leader)
-        chunks     = []
         accountant = SessionTimeAccountant(child_pid)
         reader     = PollingReader(child_fds)
 
@@ -286,7 +285,7 @@ def run_cpu_limited(
             if chunk:
                 fd_chunks[chunk_fd].append((cpu_total, chunk))
             else:
-                reader.unregister(chunk_fd)
+                reader.unregister([chunk_fd])
 
         # unpack the exit status
         if os.WIFEXITED(termination):
@@ -295,9 +294,8 @@ def run_cpu_limited(
             exit_status = None
 
         # done
-        log.debug("completed (status %s); returning %i chunks", exit_status, len(chunks))
+        log.debug("completed (status %s)", exit_status)
 
-        # FIXME return a namedtuple?
         return (
             out_chunks,
             err_chunks,

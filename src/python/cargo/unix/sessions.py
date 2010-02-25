@@ -14,8 +14,8 @@ if __name__ == "__main__":
 import os
 import pty
 import sys
-import time
 import fcntl
+import errno
 import subprocess
 
 from os import (
@@ -145,7 +145,13 @@ def kill_session(sid, number):
     for process in ProcessStat.in_session(sid):
         log.debug("killing pid %i in session %i", process.pid, sid)
 
-        os.kill(process.pid, number)
+        try:
+            os.kill(process.pid, number)
+        except OSError, error:
+            # ignore only "no such process" errors, which we ignore because of
+            # the obvious inherent race conditions in process termination
+            if error.errno != errno.ESRCH:
+                raise
 
         nkilled += 1
 
