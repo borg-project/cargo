@@ -14,20 +14,14 @@ if __name__ == "__main__":
 import os
 import pty
 import sys
-import fcntl
 import errno
 import subprocess
 
 from os import (
-    pipe,
     putenv,
-    execvp,
+    fdopen,
     )
-from cPickle import (
-    dumps,
-    loads,
-    )
-from traceback import format_exception
+from functools import partial
 from subprocess import Popen
 from cargo.log import get_logger
 from cargo.unix.proc import ProcessStat
@@ -35,24 +29,24 @@ from cargo.errors import Raised
 
 log = get_logger(__name__)
 
-def spawn_session(arguments, environment = {}):
+def _child_preexec(environment):
+    """
+    Run in the child code prior to execution.
+    """
+
+    # update the environment
+    for (key, value) in environment.iteritems():
+        putenv(key, str(value))
+
+    # start our own session
+    os.setsid()
+
+def spawn_pipe_session(arguments, environment = {}):
     """
     Spawn a subprocess in its own session.
 
     @see: spawn_pty_session
     """
-
-    def preexec():
-        """
-        Run in the child code prior to execution.
-        """
-
-        # update the environment
-        for (key, value) in environment.iteritems():
-            putenv(key, str(value))
-
-        # and start our own session
-        os.setsid()
 
     # launch the subprocess
     popened = \
@@ -62,7 +56,7 @@ def spawn_session(arguments, environment = {}):
             stdin      = subprocess.PIPE,
             stdout     = subprocess.PIPE,
             stderr     = subprocess.PIPE,
-            preexec_fn = preexec,
+            preexec_fn = partial(_child_preexec, environment),
             )
 
     popened.stdin.close()
@@ -71,65 +65,44 @@ def spawn_session(arguments, environment = {}):
 
 def spawn_pty_session(arguments, environment = {}):
     """
-    Fork a subprocess in a pseudo-terminal.
+    Spawn a subprocess in its own session, with stdout routed through a pty.
 
-    Merges child stderr to stdout; waits for successful exec.
-
-    @param environment: Additional environment variables; putenved.
+    @see: spawn_pty_session
     """
 
-    (error_read_fd, error_write_fd) = pipe()
-    (child_pid, child_fd)           = pty.fork()
+    # build a pty
+    (master_fd, slave_fd) = pty.openpty()
 
-    if child_pid == 0:
-        # close the error pipe on execvp success
+    log.debug("opened pty %s", os.ttyname(slave_fd))
+
+    try:
+        # launch the subprocess
+        popened        = \
+            Popen(
+                arguments,
+                close_fds  = True,
+                stdin      = slave_fd,
+                stdout     = slave_fd,
+                stderr     = subprocess.PIPE,
+                preexec_fn = partial(_child_preexec, environment),
+                )
+        popened.stdout = os.fdopen(master_fd)
+
+        os.close(slave_fd)
+
+        return popened
+    except:
+        raised = Raised()
+
         try:
-            old_flags = fcntl.fcntl(error_write_fd, fcntl.F_GETFD)
-
-            fcntl.fcntl(error_write_fd, fcntl.F_SETFD, old_flags | fcntl.FD_CLOEXEC)
+            if master_fd is not None:
+                os.close(master_fd)
+            if slave_fd is not None:
+                os.close(slave_fd)
         except:
             Raised().print_ignored()
 
-        # then exec the command
-        try:
-            # set our environment
-            for (key, value) in environment.iteritems():
-                putenv(key, str(value))
-
-            # replace the process image
-            execvp(arguments[0], arguments)
-        except:
-            # received an exception; try to pass it to the parent
-            raised = Raised()
-
-            try:
-                # the child_traceback attribute is also used by subprocess.Popen
-                raised.value.child_traceback = ''.join(raised.format())
-
-                os.write(error_write_fd, dumps(raised.value))
-            except:
-                raised.print_ignored()
-                Raised().print_ignored()
-
-        # something went wrong
-        os.close(error_write_fd)
-        os._exit(os.EX_OSERR)
-    else:
-        # we are the parent; wait for child exec success or failure
-        os.close(error_write_fd)
-
-        error_data = os.read(error_read_fd, 2**20)
-
-        os.close(error_read_fd)
-
-        if error_data:
-            os.waitpid(child_pid, 0)
-
-            child_error = loads(error_data)
-
-            raise child_error
-
-    return (child_pid, child_fd)
+        raised.re_raise()
 
 def kill_session(sid, number):
     """

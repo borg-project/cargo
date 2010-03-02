@@ -399,6 +399,7 @@ class ExtendedOption(Option):
 
 def parse_given(
     argv        = sys.argv,
+    extra       = [],
     enable      = set(),
     disable     = set(),
     npositional = None,
@@ -439,7 +440,7 @@ def parse_given(
             parser.add_option_group(group)
 
     # parse given
-    (nominal, positional) = arguments = parser.parse_args()
+    (nominal, positional) = arguments = parser.parse_args(argv + extra)
 
     if npositional and len(positional) < npositional:
         raise RuntimeError("too few positional arguments")

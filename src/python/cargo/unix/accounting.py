@@ -21,13 +21,14 @@ import signal
 
 from datetime import timedelta
 from itertools import count
+from collections import namedtuple
 from cargo.log import get_logger
 from cargo.errors import Raised
 from cargo.unix.proc import ProcessStat
 from cargo.unix.sessions import (
     kill_session,
-    spawn_session,
     spawn_pty_session,
+    spawn_pipe_session,
     )
 
 log = get_logger(__name__)
@@ -115,6 +116,19 @@ class PollingReader(object):
 
         return (None, None)
 
+CPU_LimitedRun = \
+    namedtuple(
+        "CPU_LimitedRun",
+        [
+            "out_chunks",
+            "err_chunks",
+            "usage_elapsed",
+            "proc_elapsed",
+            "exit_status",
+            "exit_signal",
+            ],
+        )
+
 def run_cpu_limited(
     arguments,
     limit,
@@ -178,7 +192,7 @@ def run_cpu_limited(
             err_chunks            = None
             fd_chunks             = {child_fd: out_chunks}
         else:
-            popened      = spawn_session(arguments, environment)
+            popened      = spawn_pty_session(arguments, environment)
             child_pid    = popened.pid
             out_chunks   = []
             err_chunks   = []
@@ -187,6 +201,8 @@ def run_cpu_limited(
                 popened.stderr.fileno(): err_chunks,
                 }
             child_fds    = fd_chunks.keys()
+
+        # FIXME consolidate above
 
         log.debug("spawned child with pid %i", child_pid)
 
@@ -209,7 +225,7 @@ def run_cpu_limited(
 
                     chunks.append((cpu_total, chunk))
                 else:
-                    log.debug("fd %i closed; assuming child terminated", chunk_fd)
+                    log.debug("fd %i closed by child", chunk_fd)
 
                     reader.unregister([chunk_fd])
 
@@ -280,29 +296,38 @@ def run_cpu_limited(
     else:
         # grab any output left in the kernel buffers
         while reader.fds:
-            (chunk_fd, chunk) = reader.read()
+            (chunk_fd, chunk) = reader.read(128.0)
 
             if chunk:
                 fd_chunks[chunk_fd].append((cpu_total, chunk))
-            else:
+            elif chunk_fd:
                 reader.unregister([chunk_fd])
+            else:
+                raise RuntimeError("final read from child timed out; undead child?")
 
-        # unpack the exit status
+        # unpack the exit code
         if os.WIFEXITED(termination):
             exit_status = os.WEXITSTATUS(termination)
+            exit_signal = None
+        elif os.WIFSIGNALED(termination):
+            exit_status = None
+            exit_signal = os.WTERMSIG(termination)
         else:
             exit_status = None
+            exit_signal = None
 
         # done
-        log.debug("completed (status %s)", exit_status)
+        log.debug("completed (status %s; signal %s)", exit_status, exit_signal)
 
-        return (
-            out_chunks,
-            err_chunks,
-            timedelta(seconds = usage.ru_utime),
-            cpu_total,
-            exit_status,
-            )
+        return \
+            CPU_LimitedRun(
+                out_chunks,
+                err_chunks,
+                timedelta(seconds = usage.ru_utime),
+                cpu_total,
+                exit_status,
+                exit_signal,
+                )
     finally:
         # let's not leak file descriptors
         if child_fd is not None:
