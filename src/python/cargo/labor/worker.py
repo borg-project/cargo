@@ -22,9 +22,11 @@ from uuid import (
     )
 from socket import getfqdn
 from sqlalchemy import (
+    Integer,
     select,
     bindparam,
     outerjoin,
+    literal_column,
     )
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.sql.functions import (
@@ -82,6 +84,13 @@ script_flags = \
             action  = "store_true",
             help    = "enable worker verbosity on startup",
             ),
+        Flag(
+            "--max-hired",
+            default = 1,
+            type    = int,
+            metavar = "INT",
+            help    = "allow at most INT workers on a job [%default]",
+            ),
         )
 
 class NoWorkError(Exception):
@@ -120,9 +129,11 @@ def find_work(session, worker):
     Find, acquire, and return a unit of work.
     """
 
-    # some SQL (which we generate via SA to stay portable)
+    # some SQL
     if script_flags.given.job_set_uuid:
-        job_filter = (JobRecord.completed == False) & (JobRecord.job_set_uuid == UUID(script_flags.given.job_set_uuid))
+        job_filter =                                                            \
+            (JobRecord.completed == False)                                      \
+            & (JobRecord.job_set_uuid == UUID(script_flags.given.job_set_uuid))
     else:
         job_filter = JobRecord.completed == False
 
@@ -133,16 +144,25 @@ def find_work(session, worker):
         .values(
             job_uuid =                                          \
                 select(
-                    (JobRecord.uuid,),
-                    job_filter,
-                    from_obj = (JobRecord.__table__.outerjoin(WorkerRecord.job),),
-                    group_by = JobRecord.uuid,
-                    order_by = (count(WorkerRecord.uuid), random()),
-                    limit    = 1,
+                    ("uuid",),
+                    literal_column("hired", Integer) < script_flags.given.max_hired,
+                    select(
+                        (
+                            JobRecord.uuid,
+                            count(WorkerRecord.uuid).label("hired"),
+                            ),
+                        job_filter,
+                        from_obj = (JobRecord.__table__.outerjoin(WorkerRecord.job),),
+                        group_by = JobRecord.uuid,
+                        order_by = ("hired", random()),
+                        limit    = 1,
+                        )                                                              \
+                        .alias("uuid_by_hired")
                     ),
             )
 
     # grab a unit of work
+    session.connection().execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
     session.connection().execute(statement)
     session.expire(worker)
     session.commit()
