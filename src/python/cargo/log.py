@@ -12,16 +12,10 @@ import curses
 import logging
 import datetime
 
-from itertools import count
-from logging import (
-    INFO,
-    DEBUG,
-    ERROR,
-    NOTSET,
+from itertools   import count
+from logging     import (
     Filter,
     Logger,
-    WARNING,
-    CRITICAL,
     Formatter,
     FileHandler,
     StreamHandler,
@@ -98,13 +92,13 @@ flags = \
             metavar = "PREFIX",
             help    = "file logging will write to PREFIX.N [script.log]",
             ),
-        Flag(
-            "-v",
-            "--verbosity",
-            default = logging.INFO,
-            metavar = "N",
-            help    = "log messages of at least level N [%default]",
-            ),
+#         Flag(
+#             "-v",
+#             "--verbosity",
+#             default = logging.INFO,
+#             metavar = "N",
+#             help    = "log messages of at least level N [%default]",
+#             ),
         )
 
 class TTY_ConciseFormatter(Formatter):
@@ -264,7 +258,7 @@ def enable_disk(prefix = None, level = logging.NOTSET):
             break
 
     # set up logging
-    handler = FileHandler(path)
+    handler = FileHandler(path, encoding = "UTF-8")
 
     handler.setFormatter(VerboseFileFormatter())
     handler.setLevel(level)

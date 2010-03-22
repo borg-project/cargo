@@ -14,10 +14,22 @@ import threading
 import mimetypes
 import subprocess
 
-from bz2 import BZ2File
-from gzip import GzipFile
-from fnmatch import fnmatch
+from os.path      import (
+    join,
+    expanduser,
+    expandvars,
+    )
+from bz2          import BZ2File
+from gzip         import GzipFile
+from fnmatch      import fnmatch
 from cargo.errors import Raised
+
+def expandpath(path, relative = ""):
+    """
+    Expand and (possibly) extend the specified path.
+    """
+
+    return join(relative, expandvars(expanduser(path)))
 
 def files_under(path, pattern = "*"):
     """
@@ -47,12 +59,16 @@ def bq(arguments, cwd = None):
 
 def openz(path, mode = 'r'):
     """
-    Open a file, transparently [un]compressing it if a known compression extension is present.
+    Open a file, transparently [de]compressing it if a known compression extension is present.
 
     Uses the system MIME type database to detect the presence and type of
     compression encoding, if any. This method is not perfect, but should
     correctly handle common cases.
     """
+
+    # bloody hack
+    if ".xz" not in mimetypes.encodings_map:
+        mimetypes.encodings_map[".xz"] = "xz"
 
     (mime_type, encoding) = mimetypes.guess_type(path)
 
@@ -60,6 +76,8 @@ def openz(path, mode = 'r'):
         return BZ2File(path, mode)
     elif encoding == "gzip":
         return GzipFile(path, mode)
+    elif encoding == "xz":
+        raise NotImplementedError()
     elif encoding is None:
         return open(path, mode)
     else:

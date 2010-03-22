@@ -6,13 +6,21 @@ General flags routines.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from __future__ import absolute_import
+
 import re
 import sys
-import numpy
+import json
 import optparse
+import numpy
 
-from copy import copy
-from optparse import (
+from os        import getenv
+from os.path   import (
+    expanduser,
+    expandvars,
+    )
+from copy      import copy
+from optparse  import (
     Option,
     OptionGroup,
     OptionParser,
@@ -397,6 +405,23 @@ class ExtendedOption(Option):
 
         return OptionParser(option_class = ExtendedOption, usage = usage)
 
+def get_configured_extra():
+    """
+    Read environment-configured extra flags, if any.
+    """
+
+    path = getenv("CARGO_FLAGS_EXTRA_FILE")
+
+    if path:
+        with open(path) as file:
+            loaded = json.load(file)
+
+        configured = sum((l for (m, l) in loaded.items() if m in sys.modules), [])
+    else:
+        configured = []
+
+    return map(expandvars, map(expanduser, configured))
+
 def parse_given(
     argv        = sys.argv,
     extra       = [],
@@ -409,6 +434,7 @@ def parse_given(
     Parse the given flags.
     """
 
+    # build the parser
     def is_enabled(s):
         """
         Collect our flags, constructing a parser.
@@ -440,9 +466,10 @@ def parse_given(
             parser.add_option_group(group)
 
     # parse given
-    (nominal, positional) = arguments = parser.parse_args(argv + extra)
+    all_flags             = get_configured_extra() + extra + argv
+    (nominal, positional) = parser.parse_args(all_flags)
 
-    if npositional and len(positional) < npositional:
+    if npositional and len(positional) - 1 < npositional:
         raise RuntimeError("too few positional arguments")
 
     # store flag values
@@ -450,7 +477,7 @@ def parse_given(
         flag_set.given.__dict__[dest] = nominal.__dict__[dest]
 
     # done
-    return positional
+    return positional[1:]
 
 def with_flags_parsed(*args, **kwargs):
     """

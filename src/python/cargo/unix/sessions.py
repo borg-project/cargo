@@ -14,18 +14,20 @@ if __name__ == "__main__":
 import os
 import pty
 import sys
-import errno
 import subprocess
 
-from os import (
+from os              import (
     putenv,
     fdopen,
     )
-from functools import partial
-from subprocess import Popen
-from cargo.log import get_logger
+from functools       import partial
+from subprocess      import (
+    Popen,
+    call,
+    )
+from cargo.log       import get_logger
 from cargo.unix.proc import ProcessStat
-from cargo.errors import Raised
+from cargo.errors    import Raised
 
 log = get_logger(__name__)
 
@@ -108,27 +110,18 @@ def kill_session(sid, number):
     """
     Send signal C{number} to all processes in session C{sid}.
 
-    Imperfect: see the warnings associated with ProcessStat.
+    Theoretically imperfect, but should be consistently effective---almost
+    certainly paranoid overkill---in practice.
 
     @return: The number of processes signaled.
     """
 
-    nkilled = 0
+    # why do we pkill multiple times? because we're crazy.
+    for i in xrange(2):
+        exit_code = call(["pkill", "-%i" % number, "-s", "%i" % sid])
 
-    for process in ProcessStat.in_session(sid):
-        log.debug("killing pid %i in session %i", process.pid, sid)
-
-        try:
-            os.kill(process.pid, number)
-        except OSError, error:
-            # ignore only "no such process" errors, which we ignore because of
-            # the obvious inherent race conditions in process termination
-            if error.errno != errno.ESRCH:
-                raise
-
-        nkilled += 1
-
-    return nkilled
+        if exit_code not in (0, 1):
+            raise RuntimeError("pkill failure")
 
 def main():
     """
