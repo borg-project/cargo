@@ -30,9 +30,9 @@ DESIGN OUTLINE
 
 Array classes typically have three variants, with
 
-(1) dynamic dimensionality and dynamic dimensions ("YY"),
-(2) fixed dimensionality and dynamic dimensions ("FY"), or
-(3) fixed dimensionality and fixed dimensions ("FF").
+(1) dynamic dimensionality and dynamic size ("YY"),
+(2) fixed dimensionality and dynamic size ("FY"), or
+(3) fixed dimensionality and fixed size ("FF").
 
 
 ---------

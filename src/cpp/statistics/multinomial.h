@@ -1,146 +1,108 @@
-/*! \file multinomial.h
- *  \brief The multinomial distribution.
+/*! \file   multinomial.h
+ *  \brief  Multinomial.
  *  \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
-#ifndef _UTEXAS_MULTINOMIAL_H_
-#define _UTEXAS_MULTINOMIAL_H_
+#ifndef _UTEXAS_STATISTICS_MULTINOMIAL_H_
+#define _UTEXAS_STATISTICS_MULTINOMIAL_H_
 
-#include <gsl/gsl_sf.h>
-#include <boost/python.hpp>
-#include "numpy_array.h" // FIXME use eg CArray instead
+#include <utexas/python/numpy_array.h>
 
 namespace utexas
 {
-namespace ndmath
+
+//! Multinomial distribution.
+class Multinomial
 {
+    public:
+        typedef NumpyArrayFY<double, 1> Sample;
 
-// --------
-// ROUTINES
-// --------
+    private:
+        typedef NumpyArrayFY<double, 1> Beta;
 
-/*! \brief Calculate the log probability of the multinomial distribution.
- */
-template<typename BetaArray, typename CountsArray>
-double
-multinomial_log_probability(
-    const BetaArray& log_beta_D,
-    const CountsArray& counts_D)
-{
-    // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename BetaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+    public:
+        //! Construct.
+        Multinomial
+        (
+            Beta beta //!< the distribution parameter vector.
+        )
+        :
+            _beta(beta)
+        {
+            // FIXME L1 normalization should be optional
+            _beta     /= numpy.sum(beta)
+            _log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
+        }
 
-    // mise en place
-    size_t D = log_beta_D.template d<0>();
+    public:
+        //! Get a norm-1 sample from this distribution.
+        Sample variate() const
+        {
+            return this->variate(1);
+        }
 
-    BOOST_ASSERT(counts_D.template d<0>() == D);
+        //! Get a sample from this distribution.
+        Sample
+        variate
+        (
+            size_t N //!< the L1 norm of the count vectors drawn.
+        )
+        const
+        {
+            return scipy.random.multinomial(N, self.__beta)
+        }
 
-    // calculate
-    unsigned long n = 0;
+        //! Get the nonzero dimension of a norm-1 sample.
+        size_t indicator() const
+        {
+            // FIXME.
+        }
 
-    for(size_t d = D; d--;)
-    {
-        n += counts_D(d);
-    }
+        //! Return the log likelihood of \p counts under this distribution.
+        double
+        log_likelihood
+        (
+            const Sample& sample //!< the sample to consider.
+        )
+        {
+            // sanity
+            size_t D = _beta.template d<0>();
 
-    double lp = ln_gamma(n + 1);
+            UTEXAS_ASSERT(sample.template d<0>() == D);
 
-    for(size_t d = D; d--;)
-    {
-        lp -= ln_gamma(counts_D(d) + 1);
-        lp += log_beta_D(d) * counts_D(d);
-    }
+            // calculate
+            unsigned long n = 0;
+            double        l = 0.0;
 
-    return lp;
-}
+            for(size_t d = D; d--;)
+            {
+                n += sample(d);
+                l -= ln_gamma(sample(d) + 1);
+                l += _log_beta(d) * sample(d);
+            }
 
-/*! \brief Calculate the log probability of the multinomial distribution.
- *
- *  In a hurry, duplicating code above. FIXME.
- */
-template<typename BetaArray, typename CountsArray>
-double
-multinomial_log_probability_mkd(
-    const BetaArray& log_beta_MKD,
-    const CountsArray& counts_MD,
-    size_t m,
-    size_t k)
-{
-    // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename BetaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+            return l + ln_gamma(n + 1);
+        }
 
-    // mise en place
-    size_t M = log_beta_MKD.template d<0>();
-    size_t K = log_beta_MKD.template d<1>();
-    size_t D = log_beta_MKD.template d<2>();
+        //! Get the multinomial parameter vector.
+        const Beta& get_beta() const
+        {
+            return _beta;
+        }
 
-    BOOST_ASSERT(counts_MD.template d<0>() == M);
-    BOOST_ASSERT(counts_MD.template d<1>() == D);
+        //!  Get the log of the multinomial parameter vector.
+        const Beta& get_log_beta() const
+        {
+            return _log_beta;
+        }
 
-    // calculate
-    unsigned long n = 0;
+        // FIXME probably want an assignment operator or two, at least
 
-    for(size_t d = D; d--;)
-    {
-        n += counts_MD(m, d);
-    }
+    private:
+        Beta _beta;
+        Beta _log_beta;
+};
 
-    double lp = ln_gamma(n + 1);
-
-    for(size_t d = D; d--;)
-    {
-        lp -= ln_gamma(counts_MD(m, d) + 1);
-        lp += log_beta_MKD(m, k, d) * counts_MD(m, d);
-    }
-
-    return lp;
-}
-
-/*! \brief Calculate the log probability of the multinomial distribution.
- *
- *  In a hurry, duplicating code above. FIXME.
- */
-template<typename BetaArray, typename CountsArray>
-double
-multinomial_log_probability_mkd2(
-    const BetaArray& log_beta_MKD,
-    const CountsArray& counts_D,
-    size_t m,
-    size_t k)
-{
-    // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename BetaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
-
-    // mise en place
-    size_t M = log_beta_MKD.template d<0>();
-    size_t K = log_beta_MKD.template d<1>();
-    size_t D = log_beta_MKD.template d<2>();
-
-    BOOST_ASSERT(counts_D.template d<0>() == D);
-
-    // calculate
-    unsigned long n = 0;
-
-    for(size_t d = D; d--;)
-    {
-        n += counts_D(d);
-    }
-
-    double lp = ln_gamma(n + 1);
-
-    for(size_t d = D; d--;)
-    {
-        lp -= ln_gamma(counts_D(d) + 1);
-        lp += log_beta_MKD(m, k, d) * counts_D(d);
-    }
-
-    return lp;
-}
-
-}
 }
 
 #endif

@@ -195,7 +195,7 @@ class FixedIndicatorMixtureEstimator(object):
         else:
             self.pi_K = pi_K
 
-    def estimate(self, samples, verbose = False):
+    def estimate(self, samples):
         """
         Use EM to estimate DCM mixture parameters.
         """
@@ -220,7 +220,7 @@ class FixedIndicatorMixtureEstimator(object):
 
         return FiniteMixture(self.pi_K, components_MK)
 
-class ExpectationMaximizationMixtureEstimator(object):
+class EM_MixtureEstimator(Estimator):
     """
     Estimate the parameters of a finite [linked] mixture distribution using EM.
     """
@@ -245,7 +245,7 @@ class ExpectationMaximizationMixtureEstimator(object):
         # other parameters
         self.__iterations = 12 # FIXME
 
-    def estimate(self, samples, verbose = False):
+    def estimate(self, samples):
         """
         Use EM to estimate DCM mixture parameters.
         """
@@ -264,7 +264,7 @@ class ExpectationMaximizationMixtureEstimator(object):
         for m in xrange(M):
             assert samples[m].shape[0] == N
 
-        pi_K = numpy.random.random(K)
+        pi_K  = numpy.random.random(K)
         pi_K /= numpy.sum(pi_K)
 
         # generate random initial component parameterizations

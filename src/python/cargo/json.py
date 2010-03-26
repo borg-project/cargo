@@ -29,3 +29,17 @@ def follows(value, relative = ""):
         with open(path) as file:
             return follows(json.load(file), dirname(path))
 
+def jsonify(value):
+    """
+    Do "the right thing" to make a value JSON-serializable.
+
+    If it fails, return the value unchanged.
+    """
+
+    try:
+        coerce = value.__json__
+    except AttributeError:
+        return value
+    else:
+        return coerce()
+

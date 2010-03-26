@@ -1,6 +1,6 @@
 # the sloppiest Makefile ever
 
-LDFLAGS = -lpthread -lboost_python `gsl-config --libs` $(EXTRA_LDFLAGS)
+LDFLAGS = -lpthread -lboost_python-gcc42-mt `gsl-config --libs` $(EXTRA_LDFLAGS)
 # MTFLAGS = -msse2 -DDSFMT_MEXP=521 -DHAVE_SSE2 --param max-inline-insns-single=1800 --param inline-unit-growth=500 --param large-function-growth=9
 # CXXFLAGS = -O3 $(MTFLAGS) -DBOOST_UBLAS_NDEBUG -DNDEBUG -I/usr/include/python2.5 -fPIC
 BASEFLAGS = -g -O3 $(MTFLAGS) $(PREFIX_INCLUDE_FLAG) `python2.6-config --includes` -fPIC -Wall -Wextra -Wconversion `gsl-config --cflags`

@@ -196,13 +196,14 @@ multinomial_model_predict(
     BOOST_ASSERT(out_MD.template d<1>() == D);
 
     // calculate the posterior responsibilities
-    for(size_t k = K; k--;)
+    for(action a)
     {
-        for(size_t m = M; m--;)
-        {
-            double ll = multinomial_log_probability_mkd(mix_MKD, counts_MD, m, k);
+        mix_KD   = FIXME(a);
+        counts_D = FIXME(a);
 
-            pi_K(k) *= exp(ll);
+        for(size_t k = K; k--;)
+        {
+            pi_K(k) *= exp(multinomial_log_probability(mix_KD.slice(k), counts_D));
         }
     }
 
@@ -218,29 +219,18 @@ multinomial_model_predict(
         pi_K(k) /= pi_K_sum;
     }
 
-    // calculate outcome probabilities
-    NumpyArrayFY<unsigned long, 1> outcome_D(D);
-
-    for(size_t d = D; d--;)
+    // calculate the outcome probabilities
+    for(action a)
     {
-        // set up the hypothetical outcome vector
-        for(size_t d_ = D; d_--;)
-        {
-            outcome_D(d_) = 0;
-        }
+        D_a = FIXME;
 
-        outcome_D(d) = 1;
-
-        // calculate its likelihood
-        for(size_t m = M; m--;)
+        for(size_t d = D_a; d--;)
         {
             out_MD(m, d) = 0.0;
 
             for(size_t k = K; k--;)
             {
-                double ll = multinomial_log_probability_mkd2(mix_MKD, outcome_D, m, k);
-
-                out_MD(m, d) += pi_K(k) * exp(ll);
+                out_MD(m, d) += pi_K(k) * exp(mix_MKD(m, k, d));
             }
         }
     }
