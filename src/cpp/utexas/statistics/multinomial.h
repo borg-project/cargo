@@ -7,6 +7,7 @@
 #define _UTEXAS_STATISTICS_MULTINOMIAL_H_
 
 #include <utexas/python/numpy_array.h>
+#include <gsl/gsl_rng.h>
 
 namespace utexas
 {
@@ -27,11 +28,21 @@ class Multinomial
             Beta beta //!< the distribution parameter vector.
         )
         :
-            _beta(beta)
+            _beta(beta),
+            // FIXME should use some other rng instance, needs to use a different seed, etc etc.
+            _r(gsl_rng_alloc(gsl_rng_default))
         {
             // FIXME L1 normalization should be optional
-            _beta     /= numpy.sum(beta)
-            _log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
+//             _beta     /= numpy.sum(beta)
+//             _log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
+        }
+
+        // FIXME we want a move constructor?
+
+        //! Destruct.
+        ~Multinomial()
+        {
+            gsl_rng_free(_r);
         }
 
     public:
@@ -41,7 +52,8 @@ class Multinomial
             return this->variate(1);
         }
 
-        //! Get a sample from this distribution.
+        /*! \brief Get a sample from this distribution.
+         */
         Sample
         variate
         (
@@ -49,7 +61,20 @@ class Multinomial
         )
         const
         {
-            return scipy.random.multinomial(N, self.__beta)
+            size_t K = _beta.template d<0>();
+            Sample s(K);
+
+            // FIXME s needs to be contiguous (C-style), as does p, etc etc.
+            // FIXME gsl error handling?
+
+            gsl_ran_multinomial(
+                _r,
+                K,
+                N,
+                const double p[],
+                unsigned int n[]);
+
+            // FIXME could just pull out the gsl code, right? (although it's potentially GPL)
         }
 
         //! Get the nonzero dimension of a norm-1 sample.
@@ -101,6 +126,7 @@ class Multinomial
     private:
         Beta _beta;
         Beta _log_beta;
+        gsl_rng* r = gsl_rng_alloc(gsl_rng_default);
 };
 
 }

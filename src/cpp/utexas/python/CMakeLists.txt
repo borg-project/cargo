@@ -49,5 +49,6 @@ install(
     TARGETS py_coroutines
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib)
+    ARCHIVE DESTINATION lib
+    )
 
