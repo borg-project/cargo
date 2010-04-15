@@ -1,5 +1,0 @@
-EXTRA_CFLAGS = -I/projects/nn/bsilvert/prefix/merged/lib/python2.6/site-packages/numpy/core/include -I/projects/nn/bsilvert/prefix/merged/include/boost-1_37
-EXTRA_LDFLAGS = -L/projects/nn/bsilvert/prefix/merged/lib
-
-include Makefile
-

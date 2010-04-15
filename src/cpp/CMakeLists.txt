@@ -1,6 +1,4 @@
 include_directories(.)
 
-add_subdirectory(
-    utexas
-    )
+add_subdirectory(utexas)
 

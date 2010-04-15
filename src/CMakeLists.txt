@@ -59,7 +59,5 @@ set(CMAKE_BUILD_TYPE
     )
 
 # generate the project makefiles
-add_subdirectory(
-    cpp
-    )
+add_subdirectory(cpp)
 

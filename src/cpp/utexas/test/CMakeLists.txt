@@ -10,7 +10,5 @@ target_link_libraries(
     )
 
 # child suites
-add_subdirectory(
-    statistics
-    )
+add_subdirectory(statistics)
 

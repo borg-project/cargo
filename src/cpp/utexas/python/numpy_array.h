@@ -1,20 +1,19 @@
-/*! \file numpy_array.h
+/*! \file utexas/python/numpy_array.h
  *  \brief NumpyArrayFF et al.
  *  \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
-#ifndef _UTEXAS_NUMPY_ARRAY_H_
-#define _UTEXAS_NUMPY_ARRAY_H_
+#ifndef _UTEXAS_PYTHON_NUMPY_ARRAY_H_
+#define _UTEXAS_PYTHON_NUMPY_ARRAY_H_
 
 #include <boost/array.hpp>
 #include <boost/assert.hpp>
 #include <boost/python.hpp>
 #include <boost/type_traits.hpp>
-#include "numpy.h"
+#include <utexas/array_packing.h>
+#include <utexas/python/numpy.h>
 
 namespace utexas
-{
-namespace ndmath
 {
 
 //PyArrayObject* array_cast(PyObject* o, int type_num);
@@ -28,13 +27,39 @@ namespace ndmath
 //template<> void assert_array_type<double>(PyArrayObject* a);
 //template<> void assert_array_type<long>(PyArrayObject* a);
 
+namespace details
+{
+
+//! Is the array packed as specified?
+template<unsigned int P>
+bool numpy_array_fy_packed(PyObject* array)
+{
+    static_assert(P != P, "unsupported array packing");
+
+    return false;
+}
+
+template<>
+bool numpy_array_fy_packed<ARRAY_PACKED_C>(PyObject* array)
+{
+    return PyArray_ISCONTIGUOUS(array);
+}
+
+template<>
+bool numpy_array_fy_packed<ARRAY_PACKED_FORTRAN>(PyObject* array)
+{
+    return PyArray_ISFORTRAN(array);
+}
+
+}
+
 /*! \brief A multi-dimensional array with numpy storage.
  */
 template<typename E, size_t ND>
 class NumpyArrayFY
 {
     public:
-        typedef E ElementType;
+        typedef E Element;
 
     public:
         /*! \brief Wrap a nested Python sequence with an n-d array interface.
@@ -95,6 +120,7 @@ class NumpyArrayFY
         }
 
     public:
+        //! Get the length of a particular dimension.
         template<size_t D>
         size_t d() const
         {
@@ -103,6 +129,20 @@ class NumpyArrayFY
             return PyArray_DIM(_wrapped.get(), D);
         }
 
+        //! Get the number of dimensions.
+        size_t nd() const
+        {
+            return ND;
+        }
+
+        //! Is the array packed in the specified order?
+        template<unsigned int P>
+        bool packed() const
+        {
+            return details::numpy_array_fy_packed<P>(_wrapped.get());
+        }
+
+        //! Get access to an array element.
         E& operator ()(size_t i0)
         {
             // FIXME this will cause explicit class instantiation to fail; find a better solution
@@ -151,6 +191,7 @@ class NumpyArrayFY
             return *static_cast<E*>(PyArray_GETPTR3(_wrapped.get(), i0, i1, i2));
         }
 
+        //! Get a handle on the wrapped numpy array.
         const boost::python::handle<PyObject>& get_wrapped() const
         {
             return _wrapped;
@@ -190,7 +231,6 @@ class NumpyArrayFY
 //typedef aiter<double> aiter_d;
 //typedef aiter<long> aiter_l;
 
-}
 }
 
 #endif

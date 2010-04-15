@@ -4,6 +4,10 @@ find_package(
     unit_test_framework
     )
 
+include_directories(
+    ${UT_STATISTICS_INCLUDE_DIRS}
+    )
+
 add_library(
     ut_statistics_tests SHARED
     multinomial.cc
@@ -11,6 +15,7 @@ add_library(
 
 target_link_libraries(
     ut_statistics_tests
+    ut_statistics
     ${Boost_LIBRARIES}
     )
 

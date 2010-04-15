@@ -1,7 +1,7 @@
 set(
     UT_STATISTICS_INCLUDE_DIRS
-    ""
-    CACHE STRING "Header directories for utexas/statistics." FORCE
+    ${UT_PYTHON_INCLUDE_DIRS}
+    CACHE INTERNAL "Header search paths for utexas/statistics."
     )
 
 include_directories(
@@ -11,7 +11,7 @@ include_directories(
 set(
     UT_STATISTICS_LIBRARY_DIRS
     ""
-    CACHE STRING "Library directories for utexas/statistics." FORCE
+    CACHE INTERNAL "Library search paths for utexas/statistics."
     )
 
 link_directories(
@@ -20,18 +20,14 @@ link_directories(
 
 add_library(
     ut_statistics SHARED
-    family.h
     multinomial.h
+    multinomial.cc
     )
 
 target_link_libraries(
     ut_statistics
-    )
-
-install(
-    TARGETS ut_statistics
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+    ut_python
+    gsl
+    gslcblas
     )
 
