@@ -128,3 +128,13 @@ class MultinomialEstimator(Estimator):
 
         return Multinomial(mean)
 
+    def random_estimate(self, D):
+        """
+        Return a randomly-initialized distribution.
+        """
+
+        beta  = numpy.random.random(D)
+        beta /= numpy.sum(beta)
+
+        return Multinomial(beta)
+

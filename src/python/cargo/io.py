@@ -14,15 +14,52 @@ import threading
 import mimetypes
 import subprocess
 
+from os           import rename
 from os.path      import (
     join,
+    exists,
     expanduser,
     expandvars,
     )
 from bz2          import BZ2File
 from gzip         import GzipFile
+from uuid         import (
+    uuid4,
+    uuid5,
+    )
+from shutil       import copy2
 from fnmatch      import fnmatch
+from tempfile     import gettempdir
 from cargo.errors import Raised
+
+def cache_file(path, cache_dir = None, namespace = uuid4()):
+    """
+    Safely cache a file in some location.
+
+    This function computes a path-unique name. If a file with that name already
+    exists in the specified directory, which defaults to the local tmpdir, a
+    path to that file is returned. If no such file exists, the source file is
+    atomically copied, given that unique name, and a path to the copy is
+    returned.
+    """
+
+    # FIXME cleanup when used outside condor
+
+    if cache_dir == None:
+        cache_dir = gettempdir()
+
+    cached_name = "cached.%s" % uuid5(namespace, path)
+    cached_path = join(cache_dir, cached_name)
+
+    if exists(cached_path):
+        return cached_path
+    else:
+        partial_path = "%s.partial" % cached_path
+
+        copy2(path, partial_path)
+        rename(partial_path, cached_path)
+
+        return cached_path
 
 def expandpath(path, relative = ""):
     """
@@ -124,6 +161,8 @@ def write_from_file(tf, ff, chunk_size = 2**16):
     """
     Write the contents of file object C{ff} to file object C{tf}.
     """
+
+    # FIXME just use shutil.copyfileobj
 
     while True:
         chunk = ff.read(chunk_size)

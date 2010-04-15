@@ -15,40 +15,41 @@ import os
 import logging
 import numpy
 
-from time import sleep
-from uuid import (
+from time                     import sleep
+from uuid                     import (
     UUID,
     uuid4,
     )
-from socket import getfqdn
-from sqlalchemy import (
+from socket                   import getfqdn
+from contextlib               import closing
+from sqlalchemy               import (
     Integer,
     select,
     bindparam,
     outerjoin,
     literal_column,
     )
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc           import OperationalError
 from sqlalchemy.sql.functions import (
     count,
     random,
     )
-from cargo.log import get_logger
-from cargo.sql.alchemy import SQL_Engines
-from cargo.flags import (
+from cargo.log                import get_logger
+from cargo.sql.alchemy        import SQL_Engines
+from cargo.flags              import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.sugar import run_once
-from cargo.labor.storage import (
+from cargo.sugar              import run_once
+from cargo.labor.storage      import (
     JobRecord,
     LaborSession,
     WorkerRecord,
     CondorWorkerRecord,
     labor_connect,
     )
-from cargo.errors import Raised
+from cargo.errors             import Raised
 
 log          = get_logger(__name__, level = None)
 script_flags = \
@@ -222,12 +223,12 @@ def main_loop():
             try:
                 LaborSession.configure(bind = labor_connect())
 
-                session = LaborSession()
-                worker  = session.merge(worker)
+                with closing(LaborSession()) as session:
+                    worker = session.merge(worker)
 
-                session.commit()
+                    session.commit()
 
-                labor_loop(session, worker)
+                    labor_loop(session, worker)
 
                 break
             except OperationalError, error:

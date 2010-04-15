@@ -167,10 +167,10 @@ class FiniteMixture(object):
 
 class FixedIndicatorMixtureEstimator(object):
     """
-    Estimate the parameters of a finite [linked] mixture distribution.
+    Estimate the parameters of a finite [linked] mixture distribution 
     """
 
-    def __init__(self, estimators, pi_K = None):
+    def __init__(self, estimators):
         """
         Initialize.
 
@@ -187,20 +187,10 @@ class FixedIndicatorMixtureEstimator(object):
         else:
             raise ArgumentError("estimator list must be one- or two-dimensional")
 
-        (_, K) = estimators_MK.shape
-
-        # fixed pi
-        if pi_K is None:
-            self.pi_K = numpy.ones(K) / K
-        else:
-            self.pi_K = pi_K
-
     def estimate(self, samples):
         """
-        Use EM to estimate DCM mixture parameters.
+        Use EM to estimate mixture parameters.
         """
-
-        # FIXME support more than one sample
 
         # mise en place
         (M, K) = self.__estimators_MK.shape
@@ -208,17 +198,23 @@ class FixedIndicatorMixtureEstimator(object):
 
         assert len(samples) == M
 
+        N = samples[0].shape[0]
+
         for m in xrange(M):
-            assert samples[m].shape[0] == K
+            assert samples[m].shape[0] == N
+
+        pi_K  = numpy.ones(K)
+        pi_K /= numpy.sum(pi_K)
 
         # generate random initial component parameterizations
         components_MK = numpy.empty((M, K), numpy.object)
 
-        for m in xrange(M):
-            for k in xrange(K):
-                components_MK[m, k] = self.__estimators_MK[m, k].estimate(numpy.array([samples[m][k]]))
+        for k in xrange(K):
+            for m in xrange(M):
+                components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m][k:k + 1])
 
-        return FiniteMixture(self.pi_K, components_MK)
+        # done
+        return FiniteMixture(pi_K, components_MK)
 
 class EM_MixtureEstimator(Estimator):
     """
@@ -242,16 +238,14 @@ class EM_MixtureEstimator(Estimator):
         else:
             raise ArgumentError("estimator list must be one- or two-dimensional")
 
-        # other parameters
-        self.__iterations = 12 # FIXME
+        # other members
+        self.__max_i       = 16
+        self.__convergence = 1e-8
 
     def estimate(self, samples):
         """
-        Use EM to estimate DCM mixture parameters.
+        Use EM to estimate mixture parameters.
         """
-
-        # FIXME could initialize more intelligently
-        # FIXME need a non-lame termination criterion
 
         # mise en place
         (M, K) = self.__estimators_MK.shape
@@ -264,29 +258,30 @@ class EM_MixtureEstimator(Estimator):
         for m in xrange(M):
             assert samples[m].shape[0] == N
 
-        pi_K  = numpy.random.random(K)
+        pi_K  = numpy.ones(K)
         pi_K /= numpy.sum(pi_K)
 
         # generate random initial component parameterizations
         components_MK = numpy.empty((M, K), numpy.object)
 
-        for m in xrange(M):
-            for k in xrange(K):
-                weights = numpy.random.random(N)
+        for k in xrange(K):
+            n = numpy.random.randint(N)
 
-#                log.debug("%i.%i (initializing)", m, k)
+            for m in xrange(M):
+                components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m][n:n + 1])
 
-                components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m], weights = weights)
+        # run EM until convergence
+        previous_r_NK = None
 
-#        log.debug("done initializing")
+        for i in xrange(self.__max_i):
+#             for k in xrange(K):
+#                 log.info("% 2s: %s (%.2f)", k, " ".join("%.2f" % c.beta[0] for c in components_MK[:, k]), pi_K[k])
 
-        # take some number of EM steps
-        for i in xrange(self.__iterations):
             # evaluate the responsibilities
             r_NK = numpy.empty((N, K))
 
-            for n in xrange(N):
-                for k in xrange(K):
+            for k in xrange(K):
+                for n in xrange(N):
                     r = pi_K[k]
 
                     for m in xrange(M):
@@ -302,22 +297,72 @@ class EM_MixtureEstimator(Estimator):
             r_NK /= numpy.sum(r_NK, 1)[:, newaxis]
 
             # find the maximum-likelihood estimates of components
-            for m in xrange(M):
-                for k in xrange(K):
-#                    log.debug("%i.%i (iteration %i)", m, k, i)
-
+            for k in xrange(K):
+                for m in xrange(M):
                     components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m], weights = r_NK[:, k])
 
             # find the maximum-likelihood pis
             pi_K = numpy.sum(r_NK, 0) / N
 
             # tracing
-            com = numpy.sum((numpy.arange(K) + 1) * pi_K)
+            log.debug(
+                "pi [%s] (com %.2f)",
+                " ".join("%.2f" % p for p in pi_K),
+                numpy.sum((numpy.arange(K) + 1) * pi_K),
+                )
 
-            log.info("EM iteration %i of %i: pi com = %f", i + 1, self.__iterations, com)
+            # termination?
+            if previous_r_NK is not None:
+                difference = numpy.sum(numpy.abs(r_NK - previous_r_NK))
+
+                if difference < self.__convergence:
+                    log.detail("difference in responsibilities is %e; converged", difference)
+
+                    break
+                else:
+                    log.detail("difference in responsibilities is %e; not converged", difference)
+
+            previous_r_NK = r_NK
 
         # done
-        log.info("pi %s (sum %f)", str(pi_K), numpy.sum(pi_K))
-
         return FiniteMixture(pi_K, components_MK)
+
+class RestartedEstimator(object):
+    """
+    Make multiple estimates, and return the best.
+    """
+
+    def __init__(self, estimator, nrestarts = 2):
+        """
+        Initialize.
+        """
+
+        self._estimator = estimator
+        self._nrestarts = nrestarts
+
+    def estimate(self, samples):
+        """
+        Use EM to estimate mixture parameters.
+        """
+
+        # FIXME our choice of structure for samples is stupid
+        sane_samples = zip(*samples)
+
+        best_ll       = None
+        best_estimate = None
+
+        for i in xrange(self._nrestarts):
+            estimate = self._estimator.estimate(samples)
+            ll       = estimate.total_log_likelihood(sane_samples)
+
+            if best_ll is None:
+                log.info("l-l of estimate is %e", ll)
+            else:
+                log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
+
+            if best_ll is None or ll > best_ll:
+                best_ll       = ll
+                best_estimate = estimate
+
+        return best_estimate
 

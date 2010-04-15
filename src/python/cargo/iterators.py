@@ -72,6 +72,13 @@ def draw(p, normalize = True, random = numpy.random):
 
     return i
 
+def grab(sequence, random = numpy.random):
+    """
+    Return a randomly-selected element from the sequence.
+    """
+
+    return sequence[random.randint(len(sequence))]
+
 def iflatten(v):
     """
     Yield elements from an iterable, recursing into all inner iterables.

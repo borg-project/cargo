@@ -9,28 +9,29 @@ Support for SQLAlchemy. As usual, we reduce boilerplate by eliminating flexibili
 import json
 import datetime
 import pytz
+import sqlalchemy.dialects.sqlite
 import sqlalchemy.dialects.postgresql
 
-from uuid import UUID
-from datetime import timedelta
-from contextlib import contextmanager
-from sqlalchemy import (
+from uuid                                import UUID
+from datetime                            import timedelta
+from contextlib                          import contextmanager
+from sqlalchemy                          import (
     Column,
-    Binary,
     String,
     Integer,
     Boolean,
     DateTime,
     Interval,
     ForeignKey,
+    LargeBinary,
     text,
     create_engine,
     )
-from sqlalchemy.orm import (
+from sqlalchemy.orm                      import (
     sessionmaker,
     )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.types import (
+from sqlalchemy.ext.declarative          import declarative_base
+from sqlalchemy.types                    import (
     TypeEngine,
     TypeDecorator,
     )
@@ -38,13 +39,13 @@ from sqlalchemy.dialects.postgresql.base import (
     PGUuid,
     PGArray,
     )
-from cargo.flags import (
+from cargo.flags                         import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.errors import Raised
-from cargo.temporal import TimeDelta
+from cargo.errors                        import Raised
+from cargo.temporal                      import TimeDelta
 
 def column(name, type = None):
     """
@@ -123,8 +124,12 @@ class SQL_UUID(TypeDecorator):
 
         if isinstance(dialect, sqlalchemy.dialects.postgresql.base.dialect):
             return PGUuid()
+        elif isinstance(dialect, sqlalchemy.dialects.sqlite.base.dialect):
+            # using string here for convenience; suboptimal
+            return String(length = 32)
         else:
-            return Binary(length = 16)
+            # FIXME "small binary" type?
+            return LargeBinary(length = 16)
 
     def process_bind_param(self, value, dialect = None):
         """
@@ -133,6 +138,8 @@ class SQL_UUID(TypeDecorator):
 
         if value and isinstance(value, UUID):
             if isinstance(dialect, sqlalchemy.dialects.postgresql.base.dialect):
+                return value.hex
+            elif isinstance(dialect, sqlalchemy.dialects.sqlite.base.dialect):
                 return value.hex
             else:
                 return value.bytes
@@ -148,6 +155,8 @@ class SQL_UUID(TypeDecorator):
 
         if value:
             if isinstance(dialect, sqlalchemy.dialects.postgresql.base.dialect):
+                return UUID(hex = value)
+            elif isinstance(dialect, sqlalchemy.dialects.sqlite.base.dialect):
                 return UUID(hex = value)
             else:
                 return UUID(bytes = value)

@@ -183,6 +183,13 @@ class WallachRecurrenceEstimator(Estimator):
 
             return DirichletCompoundMultinomial(alpha)
 
+    def random_estimate(self, D):
+        """
+        Return a random DCM.
+        """
+
+        return DirichletCompoundMultinomial(numpy.random.random(D))
+
 # select the "best" estimator
 DCM_Estimator = WallachRecurrenceEstimator
 
