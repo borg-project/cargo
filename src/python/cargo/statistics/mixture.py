@@ -239,7 +239,7 @@ class ExpectationMaximizationMixtureEstimator(object):
             raise ArgumentError("estimator list must be one- or two-dimensional")
 
         # other members
-        self.__max_i       = 32
+        self.__max_i       = 16
         self.__convergence = 1e-8
 
     def estimate(self, samples, verbose = False):
@@ -305,7 +305,7 @@ class ExpectationMaximizationMixtureEstimator(object):
             pi_K = numpy.sum(r_NK, 0) / N
 
             # tracing
-            log.detail(
+            log.debug(
                 "pi [%s] (com %.2f)",
                 " ".join("%.2f" % p for p in pi_K),
                 numpy.sum((numpy.arange(K) + 1) * pi_K),
@@ -316,14 +316,53 @@ class ExpectationMaximizationMixtureEstimator(object):
                 difference = numpy.sum(numpy.abs(r_NK - previous_r_NK))
 
                 if difference < self.__convergence:
-                    log.info("difference in responsibilities is %e; converged", difference)
+                    log.detail("difference in responsibilities is %e; converged", difference)
 
                     break
                 else:
-                    log.info("difference in responsibilities is %e; not converged", difference)
+                    log.detail("difference in responsibilities is %e; not converged", difference)
 
             previous_r_NK = r_NK
 
         # done
         return FiniteMixture(pi_K, components_MK)
+
+class RestartedEstimator(object):
+    """
+    Make multiple estimates, and return the best.
+    """
+
+    def __init__(self, estimator, nrestarts = 2):
+        """
+        Initialize.
+        """
+
+        self._estimator = estimator
+        self._nrestarts = nrestarts
+
+    def estimate(self, samples):
+        """
+        Use EM to estimate mixture parameters.
+        """
+
+        # FIXME our choice of structure for samples is stupid
+        sane_samples = zip(*samples)
+
+        best_ll       = None
+        best_estimate = None
+
+        for i in xrange(self._nrestarts):
+            estimate = self._estimator.estimate(samples)
+            ll       = estimate.total_log_likelihood(sane_samples)
+
+            if best_ll is None:
+                log.info("l-l of estimate is %e", ll)
+            else:
+                log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
+
+            if best_ll is None or ll > best_ll:
+                best_ll       = ll
+                best_estimate = estimate
+
+        return best_estimate
 

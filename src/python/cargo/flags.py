@@ -33,6 +33,8 @@ from itertools import (
 
 _flag_sets = []
 
+# FIXME what we really want is unobtrusive overriding of keyword argument defaults
+
 class FlagSetValues(object):
     """
     Container for flag set values.
