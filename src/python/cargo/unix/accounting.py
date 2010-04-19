@@ -139,7 +139,7 @@ def run_cpu_limited(
     """
     Spawn a subprocess whose process tree is granted limited CPU (user) time.
 
-    @param environments Override specific existing environment variables.
+    @param environment Override specific existing environment variables.
 
     The subprocess must not expect input. This method is best suited to
     processes which may run for a reasonable amount of time (eg, at least

@@ -8,8 +8,8 @@ Finite mixture distributions.
 
 import numpy
 
-from numpy import newaxis
-from cargo.log import get_logger
+from numpy                      import newaxis
+from cargo.log                  import get_logger
 from cargo.statistics.functions import add_log
 
 log = get_logger(__name__)
@@ -26,6 +26,7 @@ class FiniteMixture(object):
 
         # basic members
         self.__pi_K = numpy.asarray(pi)
+        self._random = random
 
         # components array
         components_MK = numpy.asarray(components)
@@ -51,13 +52,13 @@ class FiniteMixture(object):
             for k in xrange(K - 1):
                 assert self.__components_MK[m, k].shape == self.__shapes[m]
 
-    def random_variate(self, *args, **kwargs):
+    def random_variate(self, *args, random = numpy.random, **kwargs):
         """
         Make multiple draws from this mixture distribution.
         """
 
-        (M, K) = self.__components_MK.shape
-        ((k,),) = numpy.nonzero(numpy.random.multinomial(1, self.__pi_K))
+        (M, K)  = self.__components_MK.shape
+        ((k,),) = numpy.nonzero(random.multinomial(1, self.__pi_K))
 
         return [self.__components_MK[m, k].random_variate(*args, **kwargs) for m in xrange(M)]
 
@@ -242,7 +243,7 @@ class EM_MixtureEstimator(Estimator):
         self.__max_i       = 16
         self.__convergence = 1e-8
 
-    def estimate(self, samples):
+    def estimate(self, samples, random = numpy.random):
         """
         Use EM to estimate mixture parameters.
         """
@@ -265,7 +266,7 @@ class EM_MixtureEstimator(Estimator):
         components_MK = numpy.empty((M, K), numpy.object)
 
         for k in xrange(K):
-            n = numpy.random.randint(N)
+            n = random.randint(N)
 
             for m in xrange(M):
                 components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m][n:n + 1])

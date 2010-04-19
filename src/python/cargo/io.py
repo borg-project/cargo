@@ -14,7 +14,10 @@ import threading
 import mimetypes
 import subprocess
 
-from os           import rename
+from os           import (
+    fsync,
+    rename,
+    )
 from os.path      import (
     join,
     exists,
@@ -27,9 +30,20 @@ from uuid         import (
     uuid4,
     uuid5,
     )
-from shutil       import copy2
+from shutil       import (
+    copy2,
+    rmtree,
+    )
 from fnmatch      import fnmatch
-from tempfile     import gettempdir
+from tempfile     import (
+    mkdtemp,
+    gettempdir,
+    )
+from subprocess   import (
+    Popen,
+    check_call,
+    )
+from contextlib   import contextmanager
 from cargo.errors import Raised
 
 def cache_file(path, cache_dir = None, namespace = uuid4()):
@@ -89,14 +103,14 @@ def bq(arguments, cwd = None):
     Spawn a process and return its output.
     """
 
-    p = subprocess.Popen(arguments, cwd = cwd, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+    p      = Popen(arguments, cwd = cwd, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
     output = p.communicate()[0]
 
     return (output, p.returncode)
 
-def openz(path, mode = 'r'):
+def guess_encoding(path):
     """
-    Open a file, transparently [de]compressing it if a known compression extension is present.
+    Guess a file's (compression) encoding.
 
     Uses the system MIME type database to detect the presence and type of
     compression encoding, if any. This method is not perfect, but should
@@ -109,6 +123,15 @@ def openz(path, mode = 'r'):
 
     (mime_type, encoding) = mimetypes.guess_type(path)
 
+    return encoding
+
+def openz(path, mode = "r"):
+    """
+    Open a file, transparently [de]compressing it if a known compression extension is present.
+    """
+
+    encoding = guess_encoding(path)
+
     if encoding == "bzip2":
         return BZ2File(path, mode)
     elif encoding == "gzip":
@@ -119,6 +142,41 @@ def openz(path, mode = 'r'):
         return open(path, mode)
     else:
         raise RuntimeError("unsupported file encoding")
+
+def decompress(ipath, opath, encoding = None):
+    """
+    Attempt to decompress the compressed file, writing to an output path.
+    """
+
+    if encoding is None:
+        encoding = guess_encoding(ipath)
+
+    with open(opath, "w") as ofile:
+        if encoding == "bzip2":
+            check_call(["bunzip2", "-c", ipath], stdout = ofile)
+        elif encoding == "gzip":
+            check_call(["gunzip", "-c", ipath], stdout = ofile)
+        elif encoding == "xz":
+            check_call(["unxz", "-c", ipath], stdout = ofile)
+        else:
+            raise RuntimeError("uncompressed, or unsupported compression encoding")
+
+        ofile.flush()
+        fsync(ofile.fileno())
+
+def decompress_if(ipath, opath):
+    """
+    Attempt to decompress the file, if compressed; return path used.
+    """
+
+    encoding = guess_encoding(ipath)
+
+    if encoding is None:
+        return ipath
+    else:
+        decompress(ipath, opath, encoding)
+
+        return opath
 
 def hash_file(path, algorithm_name = None):
     """
@@ -227,4 +285,21 @@ def escape_for_latex(text):
             text,
             ("%", r"\%"),
             ("_", r"\_"))
+
+
+@contextmanager
+def mkdtemp_scoped(*args, **kwargs):
+    """
+    Create a temporary directory, with support for cleanup.
+    """
+
+    path = None
+
+    try:
+        path = mkdtemp(*args, **kwargs)
+
+        yield path
+    finally:
+        if path is not None:
+            rmtree(path, ignore_errors = True)
 
