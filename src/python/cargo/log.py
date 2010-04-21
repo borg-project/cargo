@@ -35,9 +35,6 @@ class DefaultLogger(logging.getLoggerClass()):
         Initialize.
         """
 
-        if name == "__main__":
-            name = "main"
-
         Logger.__init__(self, name, level)
 
     def detail(self, message, *args, **kwargs):
@@ -54,13 +51,21 @@ class DefaultLogger(logging.getLoggerClass()):
 
         return self.log(logging.NOTE, message, *args, **kwargs)
 
-# use our logger class by default
+# global customization (unfortunate, but whatever)
 logging.setLoggerClass(DefaultLogger)
+logging.DETAIL = 15
+logging.NOTE   = 25
+
+logging.addLevelName(logging.DETAIL, "DETAIL")
+logging.addLevelName(logging.NOTE, "NOTE")
 
 def get_logger(name, level = logging.WARNING):
     """
     Get or create a logger.
     """
+
+    if type(level) is str:
+        level = logging._levelNames[level]
 
     logger = logging.getLogger(name)
 
@@ -125,10 +130,10 @@ class TTY_VerboseFormatter(Formatter):
     """
 
     _DATE_FORMAT = "%y%m%d%H%M%S"
-    _TIME_COLOR = "\x1b[34m"
-    _NAME_COLOR = "\x1b[35m"
+    _TIME_COLOR  = "\x1b[34m"
+    _NAME_COLOR  = "\x1b[35m"
     _LEVEL_COLOR = "\x1b[33m"
-    _COLOR_END = "\x1b[00m"
+    _COLOR_END   = "\x1b[00m"
 
     def __init__(self, stream = None):
         """
@@ -270,22 +275,14 @@ def enable_disk(prefix = None, level = logging.NOTSET):
     return handler
 
 # enable logging by default
-def defaults():
+def enable_default_logging(add_handlers = True):
     # by default, be moderately verbose
     logging.root.setLevel(logging.NOTSET) # FIXME should use flag
 
-    # add a few more levels
-    logging.DETAIL = 15
-    logging.NOTE = 25
-
-    logging.addLevelName(logging.DETAIL, "DETAIL")
-    logging.addLevelName(logging.NOTE, "NOTE")
-
     # default setup (FIXME which is silly: should enable the disk log via flag or environment)
-    if sys.stdout.isatty():
-        enable_console()
-    else:
-        enable_disk()
-
-defaults()
+    if add_handlers:
+        if sys.stdout.isatty():
+            enable_console()
+        else:
+            enable_disk()
 

@@ -150,9 +150,11 @@ class MinkaFixedPointEstimator(Estimator):
 
 class WallachRecurrenceEstimator(Estimator):
     """
-    Estimate the parameters of a DCM distribution using Wallach's digamma recurrence iteration.
+    Estimate the parameters of a DCM distribution using Wallach's digamma
+    recurrence iteration.
 
-    Extended to allow sample weighting for expectation maximization in mixture models.
+    Extended to allow sample weighting for expectation maximization in mixture
+    models.
     """
 
     def estimate(self, counts, weights = None, threshold = 1e-5, cutoff = 1e3):

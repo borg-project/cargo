@@ -120,6 +120,8 @@ CPU_LimitedRun = \
     namedtuple(
         "CPU_LimitedRun",
         [
+            "started",
+            "limit",
             "out_chunks",
             "err_chunks",
             "usage_elapsed",
@@ -149,10 +151,10 @@ def run_cpu_limited(
     We run the process and read its output. Every time we receive a chunk of
     data, or every C{resolution} seconds, we estimate the total CPU time used
     by the session---and store that information with the chunk of output, if
-    any. After at least C{limit} CPU seconds have been used by the spawned
+    any. After at least C{limit} of CPU time has been used by the spawned
     session, or after the session leader terminates, whichever is first, the
-    session is (sig)killed, the session leader waited on, and any data remaining in
-    the pipe is read.
+    session is (sig)killed, the session leader waited on, and any data
+    remaining in the pipe is read.
 
     Note that the use of SIGKILL means that child processes *cannot* perform
     their own cleanup.
@@ -168,16 +170,19 @@ def run_cpu_limited(
     and will always be at least the specified limit.
     """
 
-    log.debug("running %s for %s", arguments, limit)
+    log.detail("running %s for %s", arguments, limit)
 
     # sanity
     if not arguments:
         raise ArgumentError()
 
     # start the run
+    from cargo.temporal import utc_now
+
     popened   = None
     fd_chunks = {}
     exit_pid  = None
+    started   = utc_now()
 
     try:
         # start running the child process
@@ -211,7 +216,7 @@ def run_cpu_limited(
             accountant.audit()
 
             if chunk is not None:
-                log.detail(
+                log.debug(
                     "got %i bytes at %s (user time) on fd %i; chunk follows:\n%s",
                     len(chunk),
                     accountant.total,
@@ -261,6 +266,8 @@ def run_cpu_limited(
         # done
         return \
             CPU_LimitedRun(
+                started,
+                limit,
                 fd_chunks[popened.stdout.fileno()],
                 fd_chunks[popened.stderr.fileno()],
                 TimeDelta(seconds = usage.ru_utime),
