@@ -11,16 +11,6 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import os
-import logging
-import numpy
-
-from time                     import sleep
-from uuid                     import (
-    UUID,
-    uuid4,
-    )
-from socket                   import getfqdn
 from contextlib               import closing
 from sqlalchemy               import (
     Integer,
@@ -51,27 +41,13 @@ from cargo.labor.storage      import (
     )
 from cargo.errors             import Raised
 
-log          = get_logger(__name__, level = None)
+log          = get_logger(__name__)
 script_flags = \
     Flags(
         "Worker Configuration",
         Flag(
-            "--poll-mu",
-            type    = float,
-            default = -1,
-            metavar = "SECONDS",
-            help    = "poll with mean SECONDS [%default]",
-            ),
-        Flag(
-            "--poll-sigma",
-            type    = float,
-            default = 32.0,
-            metavar = "SECONDS",
-            help    = "poll with standard deviation SECONDS [%default]",
-            ),
-        Flag(
             "--worker-uuid",
-            default = str(uuid4()),
+            default = None,
             metavar = "UUID",
             help    = "this worker is UUID [%default]",
             ),
@@ -106,7 +82,19 @@ def get_worker():
     Create and return a record for this worker.
     """
 
-    uuid = UUID(script_flags.given.worker_uuid)
+    # assign ourselves a uuid
+    from uuid import (
+        UUID,
+        uuid4,
+        )
+
+    if script_flags.given.worker_uuid is None:
+        uuid = uuid4()
+    else:
+        uuid = UUID(script_flags.given.worker_uuid)
+
+    # grab the worker
+    import os
 
     try:
         cluster = os.environ["CONDOR_CLUSTER"]
@@ -121,14 +109,19 @@ def get_worker():
                 process = process,
                 )
 
+    # update our host
+    from socket import getfqdn
+
     worker.fqdn = getfqdn()
 
     return worker
 
-def find_work(session, worker):
+def acquire_work(session, worker):
     """
     Find, acquire, and return a unit of work.
     """
+
+    from uuid import UUID
 
     # some SQL
     if script_flags.given.job_set_uuid:
@@ -163,12 +156,10 @@ def find_work(session, worker):
             )
 
     # grab a unit of work
-    session.connection().execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
-    session.connection().execute(statement)
+    session.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
+    session.execute(statement)
     session.expire(worker)
     session.commit()
-
-    return worker.job
 
 def labor_loop(session, worker):
     """
@@ -176,34 +167,24 @@ def labor_loop(session, worker):
     """
 
     while True:
-        job_record = find_work(session, worker)
+        acquire_work(session, worker)
 
-        if job_record is None:
-            if script_flags.given.poll_mu >= 0:
-                sleep_for = \
-                    max(
-                        0.0,
-                        numpy.random.normal(
-                            script_flags.given.poll_mu,
-                            script_flags.given.poll_sigma,
-                            ),
-                        )
+        if worker.job is None:
+            log.note("no work available; terminating")
 
-                log.note("no work available; sleeping for %.2f s", sleep_for)
-
-                sleep(sleep_for)
-
-                log.note("woke up")
-            else:
-                log.note("no work available; terminating")
-
-                break
+            break
         else:
-            log.note("working on job %s", job_record.uuid)
+            # do the work
+            log.note("working on job %s", worker.job.uuid)
 
-            job_record.work.run_with_fixture()
+            work = worker.job.work
 
-            job_record.completed = True
+            session.commit()
+
+            work.run_with_fixture()
+
+            # mark it as done
+            worker.job.completed = True
             worker.job           = None
 
             session.commit()
@@ -214,6 +195,8 @@ def main_loop():
     """
     Labor, reconnecting to the database when necessary.
     """
+
+    from time import sleep
 
     WAIT_TO_RECONNECT = 32
     worker            = get_worker()
@@ -232,14 +215,15 @@ def main_loop():
 
                 break
             except OperationalError, error:
+                # FIXME "exception" log level?
                 log.warning("operational error in database layer:\n%s", error)
 
             sleep(WAIT_TO_RECONNECT)
     finally:
         try:
-            session.rollback()
-            session.delete(worker)
-            session.commit()
+            with closing(LaborSession()) as session:
+                session.delete(worker)
+                session.commit()
         except:
             Raised().print_ignored()
 
@@ -251,7 +235,12 @@ def main(positional):
 
     # logging setup
     if script_flags.given.work_chattily:
-        get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
+        from cargo.log import enable_default_logging
+
+        enable_default_logging()
+
+        get_logger("cargo.labor.worker", level = "DEBUG")
+        get_logger("sqlalchemy.engine", level = "DEBUG")
 
     # worker body
     with SQL_Engines.default:

@@ -6,9 +6,9 @@ Store and retrieve labor records.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from uuid import uuid4
-from contextlib import closing
-from sqlalchemy import (
+from uuid                       import uuid4
+from contextlib                 import closing
+from sqlalchemy                 import (
     Column,
     String,
     Boolean,
@@ -16,23 +16,23 @@ from sqlalchemy import (
     PickleType,
     ForeignKey,
     )
-from sqlalchemy.orm import (
-    relation,
+from sqlalchemy.orm             import (
     sessionmaker,
+    relationship,
     )
 from sqlalchemy.ext.declarative import declarative_base
-from cargo.log import get_logger
-from cargo.sql.alchemy import (
+from cargo.log                  import get_logger
+from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_Engines,
     )
-from cargo.flags import (
+from cargo.flags                import (
     Flag,
     Flags,
     )
-from cargo.labor.jobs import Jobs
+from cargo.labor.jobs           import Jobs
 
-log          = get_logger(__name__, level = None)
+log          = get_logger(__name__)
 LaborBase    = declarative_base()
 LaborSession = sessionmaker()
 module_flags = \
@@ -71,9 +71,9 @@ class JobRecord(LaborBase):
     uuid         = Column(SQL_UUID, primary_key = True, default = uuid4)
     job_set_uuid = Column(SQL_UUID, ForeignKey("job_sets.uuid"))
     completed    = Column(Boolean)
-    work         = Column(PickleType)
+    work         = Column(PickleType(mutable = False))
 
-    job_set = relation(JobRecordSet)
+    job_set = relationship(JobRecordSet)
 
 class WorkerRecord(LaborBase):
     """
@@ -87,7 +87,7 @@ class WorkerRecord(LaborBase):
     fqdn     = Column(String)
     job_uuid = Column(SQL_UUID, ForeignKey("jobs.uuid"))
 
-    job = relation(JobRecord)
+    job = relationship(JobRecord)
 
     __mapper_args__ = {"polymorphic_on": type}
 

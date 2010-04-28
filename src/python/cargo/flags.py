@@ -412,15 +412,25 @@ def get_configured_extra():
     Read environment-configured extra flags, if any.
     """
 
-    path = getenv("CARGO_FLAGS_EXTRA_FILE")
+    from cargo.iterators import iflatten_ex
 
-    if path:
+    # FIXME doesn't handle colons in file paths
+    paths_string = getenv("CARGO_FLAGS_EXTRA_FILE")
+
+    if paths_string is None:
+        paths = []
+    else:
+        paths  = paths_string.split(":")
+
+    configured = []
+
+    for path in paths:
         with open(path) as file:
             loaded = json.load(file)
 
-        configured = sum((l for (m, l) in loaded.items() if m in sys.modules), [])
-    else:
-        configured = []
+        relevant = (l for (m, l) in loaded.items() if m in sys.modules)
+
+        configured.extend(iflatten_ex(relevant, (str,)))
 
     return map(expandvars, map(expanduser, configured))
 
@@ -430,7 +440,7 @@ def parse_given(
     enable      = set(),
     disable     = set(),
     npositional = None,
-    usage       = None,
+    usage       = "usage: %prog [options]",
     ):
     """
     Parse the given flags.

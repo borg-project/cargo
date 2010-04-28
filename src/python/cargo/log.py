@@ -6,13 +6,9 @@ Application-wide logging configuration.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import os.path
 import sys
-import curses
 import logging
-import datetime
 
-from itertools   import count
 from logging     import (
     Filter,
     Logger,
@@ -20,6 +16,7 @@ from logging     import (
     FileHandler,
     StreamHandler,
     )
+from cargo.sugar import run_once
 from cargo.flags import (
     Flag,
     Flags,
@@ -36,6 +33,8 @@ class DefaultLogger(logging.getLoggerClass()):
         """
 
         Logger.__init__(self, name, level)
+
+        self.is_squeaky_clean = True
 
     def detail(self, message, *args, **kwargs):
         """
@@ -59,17 +58,33 @@ logging.NOTE   = 25
 logging.addLevelName(logging.DETAIL, "DETAIL")
 logging.addLevelName(logging.NOTE, "NOTE")
 
-def get_logger(name, level = logging.WARNING):
+def level_to_number(level):
+    """
+    Convert a level description to a level number, if necessary.
+    """
+
+    if type(level) is str:
+        return logging._levelNames[level]
+    else:
+        return level
+
+def get_logger(name, level = None, default_level = logging.WARNING):
     """
     Get or create a logger.
     """
 
-    if type(level) is str:
-        level = logging._levelNames[level]
-
     logger = logging.getLogger(name)
 
-    logger.setLevel(level)
+    # set the default level, if the logger is new
+    if logger.is_squeaky_clean:
+        if default_level is not None:
+            logger.setLevel(level_to_number(default_level))
+
+    # unconditionally set the logger level, if requested
+    if level is not None:
+        logger.setLevel(level_to_number(level))
+
+        logger.is_squeaky_clean = False
 
     return logger
 
@@ -145,6 +160,8 @@ class TTY_VerboseFormatter(Formatter):
         """
 
         # select and construct format string
+        import curses
+
         format = None
 
         if stream and hasattr(stream, "isatty") and stream.isatty():
@@ -230,6 +247,8 @@ def enable_console(level = logging.NOTSET, verbose = True):
     Enable typical logging to the console.
     """
 
+    import datetime
+
     handler = StreamHandler(sys.stdout)
 
     if verbose:
@@ -250,6 +269,11 @@ def enable_disk(prefix = None, level = logging.NOTSET):
     """
     Enable typical logging to disk.
     """
+
+    import os.path
+    import datetime
+
+    from itertools import count
 
     # generate an unused log file path
     if prefix is None:
@@ -275,6 +299,7 @@ def enable_disk(prefix = None, level = logging.NOTSET):
     return handler
 
 # enable logging by default
+@run_once
 def enable_default_logging(add_handlers = True):
     # by default, be moderately verbose
     logging.root.setLevel(logging.NOTSET) # FIXME should use flag

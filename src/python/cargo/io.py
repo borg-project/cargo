@@ -98,15 +98,47 @@ def files_under(path, pattern = "*"):
             if any(fnmatch(filename, p) for p in pattern):
                 yield os.path.join(dirpath, filename)
 
-def bq(arguments, cwd = None):
+def check_call_capturing(arguments, input = None):
     """
     Spawn a process and return its output.
     """
 
-    p      = Popen(arguments, cwd = cwd, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
-    output = p.communicate()[0]
+    popened = None
 
-    return (output, p.returncode)
+    try:
+        # launch the subprocess
+        import subprocess
+
+        from subprocess import Popen
+
+        popened = \
+            Popen(
+                arguments,
+                stdin  = subprocess.PIPE,
+                stdout = subprocess.PIPE,
+                stderr = subprocess.PIPE,
+                )
+
+        # wait for its natural death
+        (stdout, stderr) = popened.communicate(input)
+    except:
+        raised = Raised()
+
+        if popened is not None and popened.poll() is None:
+            try:
+                popened.kill()
+                popened.wait()
+            except:
+                Raised().print_ignored()
+
+        raised.re_raise()
+    else:
+        if popened.returncode == 0:
+            return (stdout, stderr)
+        else:
+            from subprocess import CalledProcessError
+
+            raise CalledProcessError(popened.returncode, arguments)
 
 def guess_encoding(path):
     """
@@ -142,6 +174,24 @@ def openz(path, mode = "r"):
         return open(path, mode)
     else:
         raise RuntimeError("unsupported file encoding")
+
+def xzed(bytes):
+    """
+    Return XZ-compressed bytes.
+    """
+
+    (stdout, _) = check_call_capturing(["xz"], bytes)
+
+    return stdout
+
+def unxzed(bytes):
+    """
+    Return XZ-decompressed bytes.
+    """
+
+    (stdout, _) = check_call_capturing(["unxz"], bytes)
+
+    return stdout
 
 def decompress(ipath, opath, encoding = None):
     """
@@ -215,66 +265,6 @@ def hash_yielded_bytes(iterator, algorithm_name = None):
 
     return (algorithm_name, algorithm.digest())
 
-def write_from_file(tf, ff, chunk_size = 2**16):
-    """
-    Write the contents of file object C{ff} to file object C{tf}.
-    """
-
-    # FIXME just use shutil.copyfileobj
-
-    while True:
-        chunk = ff.read(chunk_size)
-
-        if chunk:
-            tf.write(chunk)
-        else:
-            return
-
-def write_file_atomically(path, data):
-    """
-    Write a temporary file, fsync, rename, and clean up.
-    """
-
-    # FIXME untested, unfinished, unused
-
-    # grab the existing mode bits, if any
-    try:
-        stat_info = os.stat(path)
-    except OSError, error:
-        if error.errno != errno.ENOENT:
-            raise
-        else:
-            stat_info = None
-
-    # generate a unique temporary path
-    (path_dir, path_base) = os.path.split(path)
-    temp_path = os.path.join(path_dir, ".%s~%i" % (path_base, uuid4()))
-
-    # write data to the temporary
-    temp_fd = None
-
-    try:
-        temp_fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat_info.st_mode)
-        written = 0
-
-        while written < len(data):
-            written += os.write(temp_fd, data[written:])
-
-        os.fdatasync(temp_fd)
-        temp_fd_ = temp_fd
-        temp_fd = None
-        os.close(temp_fd_)
-        os.rename(temp_path, path)
-        os.unlink(temp_path)
-    except:
-        try:
-            if temp_fd != None:
-                os.close(temp_fd)
-
-            os.unlink(temp_path)
-        except:
-            Raised().print_ignored()
-
 def escape_for_latex(text):
     """
     Escape a text string for use in a LaTeX document.
@@ -285,7 +275,6 @@ def escape_for_latex(text):
             text,
             ("%", r"\%"),
             ("_", r"\_"))
-
 
 @contextmanager
 def mkdtemp_scoped(*args, **kwargs):
