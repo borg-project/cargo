@@ -75,6 +75,8 @@ def get_logger(name, level = None, default_level = logging.WARNING):
 
     logger = logging.getLogger(name)
 
+    # FIXME the defaults mechanism still isn't quite right
+
     # set the default level, if the logger is new
     if logger.is_squeaky_clean:
         if default_level is not None:
