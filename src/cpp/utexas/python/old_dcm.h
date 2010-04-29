@@ -3,9 +3,8 @@
  *  \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
-#ifdef DOES_NOT_COMPILE
-#ifndef _UTEXAS_DCM_H_
-#define _UTEXAS_DCM_H_
+#ifndef _UTEXAS_OLD_DCM_H_
+#define _UTEXAS_OLD_DCM_H_
 
 #include <map>
 #include <vector>
@@ -15,8 +14,8 @@
 #include <boost/foreach.hpp>
 #include <boost/scoped_array.hpp>
 #include <boost/numeric/conversion/bounds.hpp>
-#include <utexas/python/numpy_array.h> // FIXME use eg CArray instead
 #include <utexas/statistics/core_math.h>
+#include "numpy_array.h" // FIXME use eg CArray instead
 
 
 namespace utexas
@@ -126,9 +125,9 @@ estimate_dcm_minka_fixed(
     unsigned int cutoff)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned int>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::ElementType, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::Element, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned int>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::Element, double>::value));
 
     // mise en place
     size_t N = counts_ND.template d<0>();
@@ -197,8 +196,8 @@ pre_estimate_dcm_wallach_recurrence(
     const WeightsArray& weights_N)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::ElementType, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned long>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::Element, double>::value));
 
     // mise en place
     size_t N = counts_ND.template d<0>();
@@ -275,9 +274,9 @@ estimate_dcm_wallach_recurrence(
     unsigned int cutoff)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::ElementType, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::Element, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned long>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename WeightsArray::Element, double>::value));
 
     // mise en place
     size_t N = counts_ND.template d<0>();
@@ -412,8 +411,8 @@ dcm_log_probability(
     const CountsArray& counts_D)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::Element, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned long>::value));
 
     // mise en place
     size_t D = alpha_D.template d<0>();
@@ -453,8 +452,8 @@ dcm_log_probability_mkd(
     size_t k)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::Element, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned long>::value));
 
     // mise en place
     size_t M = alpha_MKD.template d<0>();
@@ -496,8 +495,8 @@ dcm_log_probability_mkd2(
     size_t k)
 {
     // sanity
-    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::ElementType, double>::value));
-    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::ElementType, unsigned long>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename AlphaArray::Element, double>::value));
+    BOOST_STATIC_ASSERT((boost::is_same<typename CountsArray::Element, unsigned long>::value));
 
     // mise en place
     size_t D = alpha_MKD.template d<2>();
@@ -525,6 +524,5 @@ dcm_log_probability_mkd2(
 }
 }
 
-#endif
 #endif
 

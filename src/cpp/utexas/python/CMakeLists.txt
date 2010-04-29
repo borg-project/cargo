@@ -37,7 +37,7 @@ include_directories(
 # set up the actual build targets
 add_library(
     ut_python SHARED
-#    _statistics.cc
+    _statistics.cc
     numpy.h
     numpy.cc
     numpy_array.h
@@ -46,8 +46,11 @@ add_library(
     numpy_symbol.cc
     )
 
+# FIXME no idea what the statistics-python dependency graph should look like
 target_link_libraries(
     ut_python
+	gsl
+	gslcblas
     ${Boost_LIBRARIES}
     ${PYTHON_LIBRARIES}
     )

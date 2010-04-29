@@ -5,10 +5,10 @@
 
 #include <boost/python.hpp>
 #include <numpy/arrayobject.h>
-#include "dcm.h"
-#include "multinomial.h"
-#include "numpy_array.h"
-#include "portfolio.h"
+#include <utexas/python/numpy_array.h>
+#include <utexas/python/old_multinomial.h>
+#include <utexas/python/old_dcm.h>
+#include <utexas/statistics/portfolio.h>
 
 using namespace std;
 using namespace boost;

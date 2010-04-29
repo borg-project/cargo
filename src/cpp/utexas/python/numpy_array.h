@@ -40,16 +40,10 @@ bool numpy_array_fy_packed(PyObject* array)
 }
 
 template<>
-bool numpy_array_fy_packed<ARRAY_PACKED_C>(PyObject* array)
-{
-    return PyArray_ISCONTIGUOUS(array);
-}
+bool numpy_array_fy_packed<ARRAY_PACKED_C>(PyObject* array);
 
 template<>
-bool numpy_array_fy_packed<ARRAY_PACKED_FORTRAN>(PyObject* array)
-{
-    return PyArray_ISFORTRAN(array);
-}
+bool numpy_array_fy_packed<ARRAY_PACKED_FORTRAN>(PyObject* array);
 
 }
 
