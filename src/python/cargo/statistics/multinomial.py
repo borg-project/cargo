@@ -14,13 +14,14 @@ from scipy.special.basic import gammaln
 from cargo.log import get_logger
 from cargo.statistics._statistics import multinomial_log_probability
 from cargo.statistics.distribution import (
-    Family,
+#     Family,
     Estimator,
     )
 
 log = get_logger(__name__)
 
-class Multinomial(Family):
+# class Multinomial(Family):
+class Multinomial(object):
     """
     The multinomial distribution.
     """
@@ -102,7 +103,8 @@ class Multinomial(Family):
     log_beta = property(__get_log_beta)
     mean     = beta
 
-class MultinomialEstimator(Estimator):
+# class MultinomialEstimator(Estimator):
+class MultinomialEstimator(object):
     """
     Estimate the parameters of a multinomial distribution.
 
