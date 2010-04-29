@@ -17,13 +17,14 @@ from cargo.statistics._statistics import (
     estimate_dcm_wallach_recurrence,
     )
 from cargo.statistics.distribution import (
-    Family,
+#     Family,
     Estimator,
     )
 
 log = get_logger(__name__)
 
-class DirichletCompoundMultinomial(Family):
+# class DirichletCompoundMultinomial(Family):
+class DirichletCompoundMultinomial(object):
     """
     The Dirichlet Compound Multinomial (DCM) distribution.
     """
@@ -174,14 +175,20 @@ class WallachRecurrenceEstimator(Estimator):
         counts = numpy.asarray(counts, dtype = numpy.uint32)
 
         # FIXME hackishly handle the zero-counts case
-        counts = counts[numpy.sum(counts, 1) > 0]
+        nonzero = numpy.sum(counts, 1) > 0
 
-        if counts.size == 0:
+        if counts[nonzero].size == 0:
             # no counts; be uninformative
             return DirichletCompoundMultinomial(numpy.ones(counts.shape[1]) * 1e6)
         else:
             # counts are available; estimate
-            alpha = estimate_dcm_wallach_recurrence(counts, weights, threshold, int(cutoff))
+            alpha = \
+                estimate_dcm_wallach_recurrence(
+                    counts[nonzero],
+                    weights[nonzero],
+                    threshold,
+                    int(cutoff),
+                    )
 
             return DirichletCompoundMultinomial(alpha)
 
