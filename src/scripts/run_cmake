@@ -5,6 +5,9 @@ set -e
 set -o pipefail
 set -x
 
+# if the build directory already exists, do nothing
+[ -d build ] && exit 0
+
 # create the relevant directories
 mkdir build
 pushd build
