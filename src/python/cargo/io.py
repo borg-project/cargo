@@ -32,11 +32,9 @@ from uuid         import (
     )
 from shutil       import (
     copy2,
-    rmtree,
     )
 from fnmatch      import fnmatch
 from tempfile     import (
-    mkdtemp,
     gettempdir,
     )
 from subprocess   import (
@@ -281,6 +279,9 @@ def mkdtemp_scoped(*args, **kwargs):
     """
     Create a temporary directory, with support for cleanup.
     """
+
+    from shutil   import rmtree
+    from tempfile import mkdtemp
 
     path = None
 

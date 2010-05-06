@@ -12,7 +12,7 @@ from nose.tools import (
 @timed(4)
 def test_unxz():
     """
-    Test cargo.io.unxz().
+    Test decompression via unxz().
     """
 
     from cargo.io import unxzed
@@ -24,7 +24,7 @@ def test_unxz():
 @timed(4)
 def test_xz():
     """
-    Test cargo.io.xz().
+    Test compression via xz().
     """
 
     from cargo.io import (

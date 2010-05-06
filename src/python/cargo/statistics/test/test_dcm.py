@@ -9,11 +9,11 @@ Tests of the DCM distribution implementation.
 import numpy
 import scipy
 
-from itertools import count
-from numpy import newaxis
-from scipy.special.basic import psi
-from utexas.alog import DefaultLogger
-from utexas.statistics.dcm import (
+from itertools                      import count
+from numpy                          import newaxis
+from scipy.special.basic            import psi
+from cargo.log                      import get_logger
+from cargo.statistics.dcm           import (
     MinkaFixedPointEstimator,
     WallachRecurrenceEstimator,
     DirichletCompoundMultinomial,
@@ -23,7 +23,7 @@ from utexas.statistics.distribution import (
     Estimator,
     )
 
-log = DefaultLogger("utexas.statistics.test.test_dcm")
+log = get_logger("utexas.statistics.test.test_dcm")
 
 class VerifiedDCM(Family):
     """

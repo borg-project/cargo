@@ -39,6 +39,7 @@ from sqlalchemy.dialects.postgresql.base import (
     PGUuid,
     PGArray,
     )
+from nose.tools                          import make_decorator
 from cargo.flags                         import (
     Flag,
     Flags,
@@ -58,6 +59,39 @@ def column(name, type = None):
         typemap = {name: type}
 
     return text(name, typemap = typemap)
+
+@contextmanager
+def disposing(engine):
+    """
+    Context manager for engine disposal.
+    """
+
+    yield engine
+
+    engine.dispose()
+
+def with_sqlite_temporary(callable):
+    """
+    Provide a safely-disposed, disk-backed SQLite engine to a nose test.
+    """
+
+    from os.path            import join
+    from sqlalchemy         import create_engine
+    from cargo.io           import mkdtemp_scoped
+    from cargo.sql.alchemy  import disposing
+
+    def wrapped():
+        """
+        The new callable.
+        """
+
+        with mkdtemp_scoped() as directory:
+            url = "sqlite:///%s" % join(directory, "testing.sqlite")
+
+            with disposing(create_engine(url, echo = False)) as engine:
+                return callable(engine)
+
+    return make_decorator(callable)(wrapped)
 
 class SQL_Engines(object):
     """
@@ -136,17 +170,23 @@ class SQL_UUID(TypeDecorator):
         Return SQL data from a Python instance.
         """
 
-        if value and isinstance(value, UUID):
-            if isinstance(dialect, sqlalchemy.dialects.postgresql.base.dialect):
-                return value.hex
-            elif isinstance(dialect, sqlalchemy.dialects.sqlite.base.dialect):
-                return value.hex
-            else:
-                return value.bytes
-        elif value and not isinstance(value, UUID):
-            raise ValueError("value %s is not a uuid.UUID" % value)
-        else:
+        # convert the value into a uuid
+        if value is None:
             return None
+        elif isinstance(value, UUID):
+            uuid_value = value
+        elif isinstance(value, str):
+            uuid_value = UUID(value)
+        else:
+            raise TypeError("value of incompatible type %s" % type(value))
+
+        # convert the uuid into something database-compatible
+        if isinstance(dialect, sqlalchemy.dialects.postgresql.base.dialect):
+            return uuid_value.hex
+        elif isinstance(dialect, sqlalchemy.dialects.sqlite.base.dialect):
+            return uuid_value.hex
+        else:
+            return uuid_value.bytes
 
     def process_result_value(self, value, dialect = None):
         """
@@ -193,15 +233,15 @@ class UTC_DateTime(TypeDecorator):
         Return SQL data from a Python instance.
         """
 
-        if value and isinstance(value, datetime.datetime):
+        if isinstance(value, datetime.datetime):
             if value.tzinfo is self.zone:
                 return value
             else:
                 raise ValueError("value %s is not explicitly zoned %s" % (value, self.zone.zone))
-        elif value and not isinstance(value, datetime.datetime):
-            raise ValueError("value %s is not a datetime instance" % value)
-        else:
+        elif value is None:
             return None
+        else:
+            raise TypeError("value of incompatible type %s" % type(value))
 
     def process_result_value(self, value, dialect = None):
         """
@@ -233,13 +273,14 @@ class SQL_JSON(TypeDecorator):
 
     impl = String
 
-    def __init__(self):
+    def __init__(self, mutable = True):
         """
         Initialize.
         """
 
-        # base
         TypeDecorator.__init__(self)
+
+        self._mutable = mutable
 
     def process_bind_param(self, value, dialect = None):
         """
@@ -266,7 +307,7 @@ class SQL_JSON(TypeDecorator):
         Are instances mutable?
         """
 
-        return True
+        return self._mutable
 
 class SQL_TimeDelta(TypeDecorator):
     """
@@ -288,15 +329,21 @@ class SQL_TimeDelta(TypeDecorator):
         Return SQL data from a Python instance.
         """
 
-        if value is None:
-            return None
-        else:
+        if isinstance(value, timedelta):
             return \
                 timedelta(
-                    days = value.days,
-                    seconds = value.seconds,
+                    days         = value.days,
+                    seconds      = value.seconds,
                     microseconds = value.microseconds,
                     )
+        elif isinstance(value, float):
+            return timedelta(seconds = value)
+        elif isinstance(value, int):
+            return timedelta(seconds = value)
+        elif value is None:
+            return None
+        else:
+            raise TypeError("value of incompatible type %s" % type(value))
 
     def process_result_value(self, value, dialect = None):
         """
@@ -308,8 +355,8 @@ class SQL_TimeDelta(TypeDecorator):
         else:
             return \
                 TimeDelta(
-                    days = value.days,
-                    seconds = value.seconds,
+                    days         = value.days,
+                    seconds      = value.seconds,
                     microseconds = value.microseconds,
                     )
 
@@ -327,7 +374,7 @@ class SQL_List(TypeDecorator):
 
     impl = TypeEngine
 
-    def __init__(self, item_type):
+    def __init__(self, item_type, mutable = True):
         """
         Initialize.
         """
@@ -337,6 +384,7 @@ class SQL_List(TypeDecorator):
 
         # members
         self.item_type = item_type
+        self._mutable = mutable
 
     def load_dialect_impl(self, dialect):
         """
@@ -367,5 +415,5 @@ class SQL_List(TypeDecorator):
         Are instances mutable?
         """
 
-        return True
+        return self._mutable
 
