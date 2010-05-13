@@ -27,6 +27,35 @@ def run_once(callable):
 
     return wrapper
 
+class Curried(object):
+    """
+    A simple pickleable partially-applied callable.
+    """
+
+    def __init__(self, callable, **kwargs):
+        """
+        Initialize.
+        """
+
+        self.callable = callable
+        self.kwargs   = kwargs
+
+    def __call__(self, **kwargs):
+        """
+        Call the callable.
+        """
+
+        self.kwargs.update(kwargs)
+
+        return self.callable(**self.kwargs)
+
+def curry(callable, **kwargs):
+    """
+    Very simple pickleable partial function application.
+    """
+
+    return Curried(callable, **kwargs)
+
 class ABC(object):
     """
     Base class for abstract base classes.

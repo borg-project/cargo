@@ -27,10 +27,6 @@ from sqlalchemy                          import (
     text,
     create_engine,
     )
-from sqlalchemy.orm                      import (
-    sessionmaker,
-    )
-from sqlalchemy.ext.declarative          import declarative_base
 from sqlalchemy.types                    import (
     TypeEngine,
     TypeDecorator,
@@ -59,6 +55,36 @@ def column(name, type = None):
         typemap = {name: type}
 
     return text(name, typemap = typemap)
+
+def make_session(*args, **kwargs):
+    """
+    Return a maker of context-managing sessions.
+    """
+
+    from sqlalchemy.orm import sessionmaker
+
+    Session = sessionmaker(*args, **kwargs)
+
+    class ManagingSession(Session):
+        """
+        A context-managing session.
+        """
+
+        def __enter__(self):
+            """
+            Enter a closing context.
+            """
+
+            return self
+
+        def __exit__(self, *args):
+            """
+            Close the session.
+            """
+
+            self.close()
+
+    return ManagingSession
 
 @contextmanager
 def disposing(engine):
