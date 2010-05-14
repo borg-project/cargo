@@ -1,8 +1,4 @@
 """
-cargo/iterators.py
-
-General support iterators.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -12,6 +8,16 @@ from contextlib import (
     nested,
     closing,
     )
+
+def chunk(sequence, size):
+    """
+    Yield a sequence of chunks from sequence.
+    """
+
+    from itertools import groupby
+
+    for (_, pairs) in groupby(enumerate(sequence), lambda (i, _): i / size):
+        yield (v for (_, v) in pairs)
 
 def shuffled(sequence, random = numpy.random):
     """
