@@ -89,7 +89,7 @@ def files_under(path, pattern = "*"):
     """
 
     if isinstance(pattern, str):
-        pattern = (str,)
+        pattern = [str]
 
     for (dirpath, dirnames, filenames) in os.walk(path):
         for filename in filenames:

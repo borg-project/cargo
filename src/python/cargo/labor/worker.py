@@ -156,7 +156,9 @@ def acquire_work(session, worker):
             )
 
     # grab a unit of work
-    session.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
+    if session.connection().engine.name == "postgresql":
+        session.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
+
     session.execute(statement)
     session.expire(worker)
     session.commit()
@@ -217,6 +219,8 @@ def main_loop():
             except OperationalError, error:
                 # FIXME "exception" log level?
                 log.warning("operational error in database layer:\n%s", error)
+
+            log.note("sleeping %.2fs until reconnection attempt", WAIT_TO_RECONNECT)
 
             sleep(WAIT_TO_RECONNECT)
     finally:

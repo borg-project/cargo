@@ -49,6 +49,11 @@ module_flags = \
             action  = "store_true",
             help    = "outsource labor to workers",
             ),
+        Flag(
+            "--create-labor-schema",
+            action  = "store_true",
+            help    = "create the labor data schema [%default]",
+            ),
         )
 
 class JobRecordSet(LaborBase):
@@ -184,7 +189,8 @@ def labor_connect(engines = SQL_Engines.default, flags = module_flags.given):
     flags  = module_flags.merged(flags)
     engine = engines.get(flags.labor_database)
 
-    LaborBase.metadata.create_all(engine)
+    if flags.create_labor_schema:
+        LaborBase.metadata.create_all(engine)
 
     return engine
 
