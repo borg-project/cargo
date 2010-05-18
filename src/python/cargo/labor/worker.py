@@ -155,10 +155,12 @@ def acquire_work(session, worker):
                     ),
             )
 
-    # grab a unit of work
-    if session.connection().engine.name == "postgresql":
-        session.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % WorkerRecord.__tablename__)
+    # prevent two workers from grabbing the same unit
+    from cargo.sql.alchemy import lock_table
 
+    lock_table(session.connection().engine, WorkerRecord.__tablename__)
+
+    # grab a unit of work
     session.execute(statement)
     session.expire(worker)
     session.commit()
@@ -244,7 +246,7 @@ def main(positional):
         enable_default_logging()
 
         get_logger("cargo.labor.worker", level = "DEBUG")
-        get_logger("sqlalchemy.engine", level = "DEBUG")
+        get_logger("sqlalchemy.engine",  level = "DEBUG")
 
     # worker body
     with SQL_Engines.default:

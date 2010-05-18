@@ -8,7 +8,7 @@ Support for SQLAlchemy. As usual, we reduce boilerplate by eliminating flexibili
 
 import json
 import datetime
-import pytz
+import sqlalchemy
 import sqlalchemy.dialects.sqlite
 import sqlalchemy.dialects.postgresql
 
@@ -35,7 +35,6 @@ from sqlalchemy.dialects.postgresql.base import (
     PGUuid,
     PGArray,
     )
-from nose.tools                          import make_decorator
 from cargo.flags                         import (
     Flag,
     Flags,
@@ -43,6 +42,8 @@ from cargo.flags                         import (
     )
 from cargo.errors                        import Raised
 from cargo.temporal                      import TimeDelta
+
+assert sqlalchemy.__version__ >= "0.6.0"
 
 def column(name, type = None):
     """
@@ -86,6 +87,17 @@ def make_session(*args, **kwargs):
 
     return ManagingSession
 
+def lock_table(engine, table_name, mode = "exclusive"):
+    """
+    If possible, lock the specified table in exclusive mode.
+    """
+
+    if engine.name == "postgresql":
+        if mode == "exclusive":
+            engine.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % table_name)
+        else:
+            raise ValueError("unrecognized lock mode \"%s\"" % mode)
+
 @contextmanager
 def disposing(engine):
     """
@@ -95,29 +107,6 @@ def disposing(engine):
     yield engine
 
     engine.dispose()
-
-def with_sqlite_temporary(callable):
-    """
-    Provide a safely-disposed, disk-backed SQLite engine to a nose test.
-    """
-
-    from os.path            import join
-    from sqlalchemy         import create_engine
-    from cargo.io           import mkdtemp_scoped
-    from cargo.sql.alchemy  import disposing
-
-    def wrapped():
-        """
-        The new callable.
-        """
-
-        with mkdtemp_scoped() as directory:
-            url = "sqlite:///%s" % join(directory, "testing.sqlite")
-
-            with disposing(create_engine(url, echo = False)) as engine:
-                return callable(engine)
-
-    return make_decorator(callable)(wrapped)
 
 class SQL_Engines(object):
     """
@@ -248,10 +237,10 @@ class UTC_DateTime(TypeDecorator):
         Initialize.
         """
 
-        # members
+        import pytz
+
         self.zone = pytz.utc
 
-        # base
         TypeDecorator.__init__(self, timezone = self.zone)
 
     def process_bind_param(self, value, dialect = None):
