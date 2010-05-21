@@ -12,29 +12,18 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 import os
-import sys
-import cPickle as pickle
 import datetime
 import cargo.labor.storage
 
-from uuid import uuid4
-from subprocess import check_call
-from collections import namedtuple
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.engine.url import URL
-from cargo.log import get_logger
-from cargo.flags import (
+from collections           import namedtuple
+from cargo.log             import get_logger
+from cargo.flags           import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.labor.jobs import CallableJob
-from cargo.labor.storage import (
-    outsource,
-    labor_connect,
-    )
 
-log          = get_logger(__name__, level = None)
+log          = get_logger(__name__, level = "NOTE")
 module_flags = \
     Flags(
         "Worker Configuration",
@@ -215,6 +204,8 @@ class CondorSubmission(object):
             submit.write_blank(2)
 
         # write the general condor section
+        import sys
+
         submit.write_header("condor configuration")
         submit.write_blank()
         submit.write_pairs_dict({
@@ -231,7 +222,7 @@ class CondorSubmission(object):
             Error        = "condor.err",
             Output       = "condor.out",
             Input        = "/dev/null",
-            Executable   = "/lusr/bin/python",
+            Executable   = sys.executable,
             )
         submit.write_blank()
         submit.write_environment(
@@ -274,6 +265,8 @@ class CondorSubmission(object):
         """
 
         # populate per-worker directories
+        from uuid import uuid4
+
         uuid     = uuid4()
         job_path = os.path.join(self.flags.condor_home, str(uuid))
         process  = CondorWorkerProcess(uuid, job_path, database)
@@ -307,6 +300,8 @@ class CondorSubmission(object):
         Submit the job to condor.
         """
 
+        from subprocess import check_call
+
         check_call([
             "/usr/bin/env",
             "condor_submit",
@@ -317,6 +312,8 @@ def pfork(callable, matching, *args, **kwargs):
     """
     Immediately fork a callable to a condor process.
     """
+
+    from cargo.labor.jobs import CallableJob
 
     pfork_job(CallableJob(callable, *args, **kwargs), matching)
 
@@ -332,9 +329,16 @@ def pfork_job(job, matching):
     submission.prepare()
 
     # store the job
+    from cargo.sql.alchemy     import make_session
+    from cargo.labor.storage   import (
+        outsource,
+        labor_connect,
+        )
+    from sqlalchemy.engine.url import URL
+
     url     = URL("sqlite", database = os.path.join(process.working, "labor.sqlite"))
     engine  = labor_connect(flags = {"labor_database": url})
-    Session = sessionmaker(bind = engine)
+    Session = make_session(bind = engine)
 
     outsource([job], Session = Session)
 

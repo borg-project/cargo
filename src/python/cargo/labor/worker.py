@@ -1,8 +1,4 @@
 """
-cargo/labor/worker.py
-
-Host individual condor jobs.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -39,7 +35,6 @@ from cargo.labor.storage      import (
     CondorWorkerRecord,
     labor_connect,
     )
-from cargo.errors             import Raised
 
 log          = get_logger(__name__)
 script_flags = \
@@ -158,7 +153,7 @@ def acquire_work(session, worker):
     # prevent two workers from grabbing the same unit
     from cargo.sql.alchemy import lock_table
 
-    lock_table(session.connection().engine, WorkerRecord.__tablename__)
+    lock_table(session.connection().engine, WorkerRecord.__tablename__, "exclusive")
 
     # grab a unit of work
     session.execute(statement)
@@ -200,7 +195,8 @@ def main_loop():
     Labor, reconnecting to the database when necessary.
     """
 
-    from time import sleep
+    from time         import sleep
+    from cargo.errors import Raised
 
     WAIT_TO_RECONNECT = 32
     worker            = get_worker()

@@ -32,7 +32,7 @@ from cargo.flags                import (
     )
 from cargo.labor.jobs           import Jobs
 
-log          = get_logger(__name__)
+log          = get_logger(__name__, level = "NOTE")
 LaborBase    = declarative_base()
 LaborSession = sessionmaker()
 module_flags = \
@@ -169,7 +169,7 @@ def outsource(jobs, name = None, Session = LaborSession):
             ninserted += CHUNK_SIZE
             ninserted  = min(ninserted, len(jobs))
 
-            log.note(
+            log.detail(
                 "inserted %i jobs so far (%i%%)",
                 ninserted,
                 ninserted * 100.0 / njobs,

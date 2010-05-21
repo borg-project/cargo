@@ -87,16 +87,34 @@ def make_session(*args, **kwargs):
 
     return ManagingSession
 
-def lock_table(engine, table_name, mode = "exclusive"):
+def lock_table(engine, table_name, mode = "ACCESS EXCLUSIVE"):
     """
     If possible, lock the specified table in exclusive mode.
     """
 
-    if engine.name == "postgresql":
-        if mode == "exclusive":
-            engine.execute("LOCK TABLE %s IN EXCLUSIVE MODE" % table_name)
-        else:
+    mode = mode.upper()
+
+    try:
+        dialect_name = engine.name
+    except AttributeError:
+        dialect_name = engine.connection().engine.name
+
+    if dialect_name == "postgresql":
+        modes = [
+            "ACCESS SHARE",
+            "ROW SHARE",
+            "ROW EXCLUSIVE",
+            "SHARE UPDATE EXCLUSIVE",
+            "SHARE",
+            "SHARE ROW EXCLUSIVE",
+            "EXCLUSIVE",
+            "ACCESS EXCLUSIVE",
+            ]
+
+        if mode not in modes:
             raise ValueError("unrecognized lock mode \"%s\"" % mode)
+
+        engine.execute("LOCK TABLE %s IN %s MODE" % (table_name, mode))
 
 @contextmanager
 def disposing(engine):

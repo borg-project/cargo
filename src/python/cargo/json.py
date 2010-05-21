@@ -1,8 +1,4 @@
 """
-cargo/json.py
-
-General JSON routines.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -13,6 +9,16 @@ import types
 
 from os.path  import dirname
 from cargo.io import expandpath
+
+def load_json(path):
+    """
+    Load a JSON file from the specified path.
+    """
+
+    import json
+
+    with open(path) as file:
+        return json.load(file)
 
 def follows(value, relative = ""):
     """
