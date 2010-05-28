@@ -1,8 +1,4 @@
 """
-cargo/unix/proc.py
-
-Extract information from the /proc filesystem.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -17,8 +13,6 @@ class ProcFileParseError(RuntimeError):
     A file in /proc could not be parsed.
     """
 
-    pass
-
 class ProcessStat(object):
     """
     Information about a specific process.
@@ -29,58 +23,56 @@ class ProcessStat(object):
     """
 
     __ticks_per_second = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
-    __entry_re = re.compile("\\d+")
-    __stat_re = \
-        re.compile(
-            # signedness decisions were made by examining the kernel source, and in some
-            # cases (eg pid) don't make much sense---but who are we in userland to judge?
-            " ".join([
-                "(?P<pid>-?\\d+)",      # process pid
-                "(?P<name>\\(.+\\))",   # executable name
-                "(?P<state>[RSDZTWX])", # process state
-                "(?P<ppid>-?\\d+)",     # parent's pid
-                "(?P<pgid>-?\\d+)",     # process group id
-                "(?P<sid>-?\\d+)",      # session id
-                "(?P<tty>-?\\d+)",      # tty number
-                "(?P<ttyg>-?\\d+)",     # group id of the process which owns the associated tty
-                "(?P<flags>\\d+)",      # kernel flags word (kernel-version-dependent)
-                "(?P<min>\\d+)",        # minor faults count
-                "(?P<cmin>\\d+)",       # waited-for-children minor faults count
-                "(?P<maj>\\d+)",        # major faults count
-                "(?P<cmaj>\\d+)",       # waited-for-children major faults count
-                "(?P<utime>\\d+)",      # user mode jiffies count
-                "(?P<stime>\\d+)",      # kernel mode jiffies count
-                "(?P<cutime>-?\\d+)",   # waited-for-children user mode jiffies count
-                "(?P<cstime>-?\\d+)",   # waited-for-children kernel mode jiffies count
-                "(?P<priority>-?\\d+)", # real-time priority or raw nice value
-                "(?P<nice>-?\\d+)",     # signed nice value in [-19, 19]
-                "(?P<nthreads>-?\\d+)", # number of threads in the process (replaced removed field)
-                "0",                    # removed-field placeholder
-                "(?P<start>\\d+)",      # process start time in jiffies
-                "(?P<vsize>\\d+)",      # bytes of process virtual memory
-                "(?P<rss>-?\\d+)",      # resident set size minus three
-                "(?P<rlim>\\d+)",       # rss limit in bytes
-                "(?P<pbot>\\d+)",       # program text bottom address
-                "(?P<ptop>\\d+)",       # program text top address
-                "(?P<stack>\\d+)",      # stack start address
-                "(?P<esp>\\d+)",        # stack pointer address
-                "(?P<eip>\\d+)",        # instruction pointer address
-                "(?P<pending>\\d+)",    # pending signals bitmap
-                "(?P<blocked>\\d+)",    # blocked signals bitmap
-                "(?P<ignored>\\d+)",    # ignored signals bitmap
-                "(?P<caught>\\d+)",     # caught signals bitmap
-                "(?P<wchan>\\d+)",      # process wait channel
-                "\\d+",                 # zero (in the past, pages swapped)
-                "\\d+",                 # zero (in the past, childrens' pages swapped)
-                "(?P<dsig>-?\\d+)",     # death signal to parent
-                "(?P<cpu>-?\\d+)",      # last CPU of execution
-                "(?P<rtprio>\\d+)",     # real-time scheduling priority
-                "(?P<policy>\\d+)",     # scheduling policy
-                "(?P<blkio>\\d+)",      # clock ticks of block I/O delays
-                "(?P<gtime>\\d+)",      # process guest time in clock ticks
-                "(?P<cgtime>\\d+)",     # waited-for-children's guest time in clock ticks
-                ]),
-            )
+    __entry_re         = re.compile("\\d+")
+    __stat_re_strings  = [
+        # signedness decisions were made by examining the kernel source, and in some
+        # cases (eg pid) don't make much sense---but who are we in userland to judge?
+        "(?P<pid>-?\\d+)",      # process pid
+        "(?P<name>\\(.+\\))",   # executable name
+        "(?P<state>[RSDZTWX])", # process state
+        "(?P<ppid>-?\\d+)",     # parent's pid
+        "(?P<pgid>-?\\d+)",     # process group id
+        "(?P<sid>-?\\d+)",      # session id
+        "(?P<tty>-?\\d+)",      # tty number
+        "(?P<ttyg>-?\\d+)",     # group id of the process which owns the associated tty
+        "(?P<flags>\\d+)",      # kernel flags word (kernel-version-dependent)
+        "(?P<min>\\d+)",        # minor faults count
+        "(?P<cmin>\\d+)",       # waited-for-children minor faults count
+        "(?P<maj>\\d+)",        # major faults count
+        "(?P<cmaj>\\d+)",       # waited-for-children major faults count
+        "(?P<utime>\\d+)",      # user mode jiffies count
+        "(?P<stime>\\d+)",      # kernel mode jiffies count
+        "(?P<cutime>-?\\d+)",   # waited-for-children user mode jiffies count
+        "(?P<cstime>-?\\d+)",   # waited-for-children kernel mode jiffies count
+        "(?P<priority>-?\\d+)", # real-time priority or raw nice value
+        "(?P<nice>-?\\d+)",     # signed nice value in [-19, 19]
+        "(?P<nthreads>-?\\d+)", # number of threads in the process (replaced removed field)
+        "0",                    # removed-field placeholder
+        "(?P<start>\\d+)",      # process start time in jiffies
+        "(?P<vsize>\\d+)",      # bytes of process virtual memory
+        "(?P<rss>-?\\d+)",      # resident set size minus three
+        "(?P<rlim>\\d+)",       # rss limit in bytes
+        "(?P<pbot>\\d+)",       # program text bottom address
+        "(?P<ptop>\\d+)",       # program text top address
+        "(?P<stack>\\d+)",      # stack start address
+        "(?P<esp>\\d+)",        # stack pointer address
+        "(?P<eip>\\d+)",        # instruction pointer address
+        "(?P<pending>\\d+)",    # pending signals bitmap
+        "(?P<blocked>\\d+)",    # blocked signals bitmap
+        "(?P<ignored>\\d+)",    # ignored signals bitmap
+        "(?P<caught>\\d+)",     # caught signals bitmap
+        "(?P<wchan>\\d+)",      # process wait channel
+        "\\d+",                 # zero (in the past, pages swapped)
+        "\\d+",                 # zero (in the past, childrens' pages swapped)
+        "(?P<dsig>-?\\d+)",     # death signal to parent
+        "(?P<cpu>-?\\d+)",      # last CPU of execution
+        "(?P<rtprio>\\d+)",     # real-time scheduling priority
+        "(?P<policy>\\d+)",     # scheduling policy
+        "(?P<blkio>\\d+)",      # clock ticks of block I/O delays
+        "(?P<gtime>\\d+)",      # process guest time in clock ticks
+        "(?P<cgtime>\\d+)",     # waited-for-children's guest time in clock ticks
+        ]
+    __stat_res = [re.compile(s) for s in __stat_re_strings]
 
     def __init__(self, pid):
         """
@@ -88,15 +80,17 @@ class ProcessStat(object):
         """
 
         # read and parse the file
+        from itertools import izip
+
         with open("/proc/%i/stat" % pid) as file:
             stat = file.read()
 
-        m = ProcessStat.__stat_re.match(stat)
+        self.__d = {}
 
-        if m:
-            self.__d = m.groupdict()
-        else:
-            raise ProcFileParseError("file contents: %s" % stat)
+        for (e, s) in izip(ProcessStat.__stat_res, stat.split()):
+            m = e.match(s)
+
+            self.__d.update(m.groupdict())
 
     @staticmethod
     def all():
