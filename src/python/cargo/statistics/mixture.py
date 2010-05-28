@@ -1,8 +1,4 @@
 """
-cargo/statistics/mixture.py
-
-Finite mixture distributions.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -100,12 +96,18 @@ class FiniteMixture(object):
             ctotal = self.__pi_K[k]
 
             for m in xrange(M):
-                ctotal += self.__components_MK[m, k].log_likelihood(samples[m])
+                sample_l_l = self.__components_MK[m, k].log_likelihood(samples[m])
+
+                if sample_l_l > 0.0:
+                    log.warning("positive l-l for %s", samples[m])
+
+                ctotal += sample_l_l
 
                 if not numpy.isfinite(ctotal):
-                    log.debug("ctotal %s; component (%i) %s", ctotal, m, self.__components_MK[m, k].log_beta)
-                    log.debug("and beta is... %s", self.__components_MK[m, k].beta)
-                    log.debug("samples[m] is %s", samples[m])
+#                     log.debug("ctotal %s; component (%i) %s", ctotal, m, self.__components_K[m, k].log_beta)
+#                     log.debug("and beta is... %s", self.__components_MK[m, k].beta)
+                    log.warning("nonfinite ctotal %s", ctotal)
+                    log.warning("samples[m] is %s", samples[m])
 
 #             total += self.__pi_K[k] * numpy.exp(ctotal)
             if total is None:

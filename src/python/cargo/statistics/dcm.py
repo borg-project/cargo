@@ -23,6 +23,31 @@ from cargo.statistics.distribution import (
 
 log = get_logger(__name__)
 
+def smooth_dcm_mixture(mixture):
+    """
+    Apply a smoothing term to the DCM mixture components.
+    """
+
+    # find the smallest non-zero dimension
+    smallest = numpy.inf
+    epsilon  = 1e-6
+
+    for components in mixture.components:
+        for component in components:
+            for v in component.alpha:
+                if v < smallest and v > epsilon:
+                    smallest = v
+
+    if numpy.isinf(smallest):
+        smallest = epsilon
+
+    log.debug("smallest nonzero value is %f", smallest)
+
+    for m in xrange(mixture.ndomains):
+        for k in xrange(mixture.ncomponents):
+            alpha                    = mixture.components[m, k].alpha
+            mixture.components[m, k] = DirichletCompoundMultinomial(alpha + smallest * 1e-2)
+
 # class DirichletCompoundMultinomial(Family):
 class DirichletCompoundMultinomial(object):
     """

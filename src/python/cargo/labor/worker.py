@@ -7,7 +7,6 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-from contextlib               import closing
 from sqlalchemy               import (
     Integer,
     select,
@@ -27,7 +26,6 @@ from cargo.flags              import (
     Flags,
     with_flags_parsed,
     )
-from cargo.sugar              import run_once
 from cargo.labor.storage      import (
     JobRecord,
     LaborSession,
@@ -150,6 +148,8 @@ def acquire_work(session, worker):
                     ),
             )
 
+    session.commit()
+
     # prevent two workers from grabbing the same unit
     from cargo.sql.alchemy import lock_table
 
@@ -206,7 +206,7 @@ def main_loop():
             try:
                 LaborSession.configure(bind = labor_connect())
 
-                with closing(LaborSession()) as session:
+                with LaborSession() as session:
                     worker = session.merge(worker)
 
                     session.commit()
@@ -223,7 +223,8 @@ def main_loop():
             sleep(WAIT_TO_RECONNECT)
     finally:
         try:
-            with closing(LaborSession()) as session:
+            with LaborSession() as session:
+                session.rollback()
                 session.delete(worker)
                 session.commit()
         except:

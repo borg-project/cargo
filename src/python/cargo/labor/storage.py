@@ -7,7 +7,6 @@ Store and retrieve labor records.
 """
 
 from uuid                       import uuid4
-from contextlib                 import closing
 from sqlalchemy                 import (
     Column,
     String,
@@ -16,15 +15,13 @@ from sqlalchemy                 import (
     PickleType,
     ForeignKey,
     )
-from sqlalchemy.orm             import (
-    sessionmaker,
-    relationship,
-    )
+from sqlalchemy.orm             import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_Engines,
+    make_session,
     )
 from cargo.flags                import (
     Flag,
@@ -34,7 +31,7 @@ from cargo.labor.jobs           import Jobs
 
 log          = get_logger(__name__, level = "NOTE")
 LaborBase    = declarative_base()
-LaborSession = sessionmaker()
+LaborSession = make_session()
 module_flags = \
     Flags(
         "Labor Storage Configuration",
@@ -119,7 +116,7 @@ def outsource_or_run(jobs, name = None, flags = module_flags.given):
     """
 
     jobs    = list(jobs)
-    Session = sessionmaker()
+    Session = make_session()
 
     if flags.outsource_jobs:
         Session.configure(bind = labor_connect(flags = flags))
@@ -137,9 +134,8 @@ def outsource(jobs, name = None, Session = LaborSession):
 
     CHUNK_SIZE = 8192
     njobs      = len(jobs)
-    session    = Session()
 
-    with closing(session):
+    with Session() as session:
         # create the job set
         job_set = JobRecordSet(name = name)
 
@@ -169,7 +165,7 @@ def outsource(jobs, name = None, Session = LaborSession):
             ninserted += CHUNK_SIZE
             ninserted  = min(ninserted, len(jobs))
 
-            log.detail(
+            log.note(
                 "inserted %i jobs so far (%i%%)",
                 ninserted,
                 ninserted * 100.0 / njobs,

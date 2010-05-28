@@ -20,6 +20,21 @@ from cargo.statistics.distribution import (
 
 log = get_logger(__name__)
 
+def smooth_multinomial_mixture(mixture):
+    """
+    Apply a smoothing term to the multinomial mixture components.
+    """
+
+    log.info("heuristically smoothing a multinomial mixture")
+
+    epsilon = 1e-3
+
+    for m in xrange(mixture.ndomains):
+        for k in xrange(mixture.ncomponents):
+            beta                      = mixture.components[m, k].beta + epsilon
+            beta                     /= numpy.sum(beta)
+            mixture.components[m, k]  = Multinomial(beta)
+
 # class Multinomial(Family):
 class Multinomial(object):
     """

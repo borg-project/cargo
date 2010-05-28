@@ -6,7 +6,30 @@ from nose.tools        import (
     assert_equal,
     assert_raises,
     )
-from cargo.sql.alchemy import with_sqlite_temporary
+
+def with_sqlite_temporary(callable):
+    """
+    Provide a safely-disposed, disk-backed SQLite engine to a nose test.
+    """
+
+    from os.path           import join
+    from nose.tools        import make_decorator
+    from sqlalchemy        import create_engine
+    from cargo.io          import mkdtemp_scoped
+    from cargo.sql.alchemy import disposing
+
+    def wrapped():
+        """
+        The new callable.
+        """
+
+        with mkdtemp_scoped() as directory:
+            url = "sqlite:///%s" % join(directory, "testing.sqlite")
+
+            with disposing(create_engine(url, echo = False)) as engine:
+                return callable(engine)
+
+    return make_decorator(callable)(wrapped)
 
 @with_sqlite_temporary
 def test_sql_timedelta_type(engine):
@@ -116,6 +139,7 @@ def test_sql_uuid_type(engine):
             UUID_Row(id = 0, uuid = None),
             UUID_Row(id = 1, uuid = some_uuid),
             UUID_Row(id = 2, uuid = some_uuid.hex),
+            UUID_Row(id = 3, uuid = unicode(some_uuid.hex, encoding = "UTF-8")),
             ])
         session.commit()
 
@@ -126,6 +150,7 @@ def test_sql_uuid_type(engine):
         assert_equal(query[0].uuid, None)
         assert_equal(query[1].uuid, some_uuid)
         assert_equal(query[2].uuid, some_uuid)
+        assert_equal(query[3].uuid, some_uuid)
 
     # try to insert some invalid data
     with closing(Session()) as session:
