@@ -1,8 +1,4 @@
 """
-cargo/io.py
-
-Operations associated with the filesystem.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -24,8 +20,6 @@ from os.path      import (
     expanduser,
     expandvars,
     )
-from bz2          import BZ2File
-from gzip         import GzipFile
 from uuid         import (
     uuid4,
     uuid5,
@@ -163,8 +157,12 @@ def openz(path, mode = "r"):
     encoding = guess_encoding(path)
 
     if encoding == "bzip2":
+        from bz2 import BZ2File
+
         return BZ2File(path, mode)
     elif encoding == "gzip":
+        from gzip import GzipFile
+
         return GzipFile(path, mode)
     elif encoding == "xz":
         raise NotImplementedError()
