@@ -18,7 +18,7 @@ from cargo.statistics.dcm           import (
     WallachRecurrenceEstimator,
     DirichletCompoundMultinomial,
     )
-from utexas.statistics.distribution import (
+from cargo.statistics.distribution  import (
     Family,
     Estimator,
     )

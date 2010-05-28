@@ -208,7 +208,7 @@ class SQL_UUID(TypeDecorator):
             return None
         elif isinstance(value, UUID):
             uuid_value = value
-        elif isinstance(value, str):
+        elif isinstance(value, (str, unicode)):
             uuid_value = UUID(value)
         else:
             raise TypeError("value of incompatible type %s" % type(value))
