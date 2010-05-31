@@ -85,12 +85,17 @@ class ProcessStat(object):
         with open("/proc/%i/stat" % pid) as file:
             stat = file.read()
 
-        self.__d = {}
+        strings  = stat.split()
+        self.__d = {
+            "pid"   : strings[0],
+            "sid"   : strings[5],
+            "utime" : strings[13],
+            }
 
-        for (e, s) in izip(ProcessStat.__stat_res, stat.split()):
-            m = e.match(s)
+#         for i in fields:
+#             m = ProcessStat.__stat_res[i].match(strings[i])
 
-            self.__d.update(m.groupdict())
+#             self.__d.update(m.groupdict())
 
     @staticmethod
     def all():
