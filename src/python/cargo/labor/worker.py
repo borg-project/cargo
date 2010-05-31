@@ -7,31 +7,11 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-from sqlalchemy               import (
-    Integer,
-    select,
-    bindparam,
-    outerjoin,
-    literal_column,
-    )
-from sqlalchemy.exc           import OperationalError
-from sqlalchemy.sql.functions import (
-    count,
-    random,
-    )
-from cargo.log                import get_logger
-from cargo.sql.alchemy        import SQL_Engines
-from cargo.flags              import (
+from cargo.log           import get_logger
+from cargo.flags         import (
     Flag,
     Flags,
     with_flags_parsed,
-    )
-from cargo.labor.storage      import (
-    JobRecord,
-    LaborSession,
-    WorkerRecord,
-    CondorWorkerRecord,
-    labor_connect,
     )
 
 log          = get_logger(__name__)
@@ -89,6 +69,11 @@ def get_worker():
     # grab the worker
     import os
 
+    from cargo.labor.storage import (
+        WorkerRecord,
+        CondorWorkerRecord,
+        )
+
     try:
         cluster = os.environ["CONDOR_CLUSTER"]
         process = os.environ["CONDOR_PROCESS"]
@@ -117,6 +102,18 @@ def acquire_work(session, worker):
     from uuid import UUID
 
     # some SQL
+    from sqlalchemy               import (
+        Integer,
+        select,
+        outerjoin,
+        literal_column,
+        )
+    from sqlalchemy.sql.functions import count
+    from cargo.labor.storage      import (
+        JobRecord,
+        WorkerRecord,
+        )
+
     if script_flags.given.job_set_uuid:
         job_filter =                                                            \
             (JobRecord.completed == False)                                      \
@@ -141,10 +138,10 @@ def acquire_work(session, worker):
                         job_filter,
                         from_obj = (JobRecord.__table__.outerjoin(WorkerRecord.job),),
                         group_by = JobRecord.uuid,
-                        order_by = ("hired", random()),
-                        limit    = 1,
+                        order_by = ("hired", JobRecord.uuid),
                         )                                                              \
-                        .alias("uuid_by_hired")
+                        .alias("uuid_by_hired"),
+                    limit    = 1,
                     ),
             )
 
@@ -195,13 +192,17 @@ def main_loop():
     Labor, reconnecting to the database when necessary.
     """
 
-    from time         import sleep
-    from cargo.errors import Raised
+    from time                import sleep
+    from cargo.errors        import Raised
+    from cargo.labor.storage import LaborSession
 
     WAIT_TO_RECONNECT = 32
     worker            = get_worker()
 
     try:
+        from sqlalchemy.exc      import OperationalError
+        from cargo.labor.storage import labor_connect
+
         while True:
             try:
                 LaborSession.configure(bind = labor_connect())
@@ -246,6 +247,8 @@ def main(positional):
         get_logger("sqlalchemy.engine",  level = "DEBUG")
 
     # worker body
+    from cargo.sql.alchemy import SQL_Engines
+
     with SQL_Engines.default:
         main_loop()
 

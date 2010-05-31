@@ -1,8 +1,4 @@
 """
-cargo/labor/condor.py
-
-Spawn condor workers.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 

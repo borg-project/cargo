@@ -1,8 +1,4 @@
 """
-cargo/labor/storage.py
-
-Store and retrieve labor records.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
