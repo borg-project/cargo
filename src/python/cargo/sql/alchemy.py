@@ -1,8 +1,4 @@
 """
-cargo/sql/alchemy.py
-
-Support for SQLAlchemy. As usual, we reduce boilerplate by eliminating flexibility.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 

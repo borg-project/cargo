@@ -7,6 +7,8 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
+import cargo.labor.storage
+
 from cargo.log           import get_logger
 from cargo.flags         import (
     Flag,
@@ -43,14 +45,7 @@ script_flags = \
             ),
         )
 
-class NoWorkError(Exception):
-    """
-    No work is available.
-    """
-
-    pass
-
-def get_worker():
+def get_worker(session):
     """
     Create and return a record for this worker.
     """
@@ -67,14 +62,14 @@ def get_worker():
         uuid = UUID(script_flags.given.worker_uuid)
 
     # grab the worker
-    import os
-
     from cargo.labor.storage import (
         WorkerRecord,
         CondorWorkerRecord,
         )
 
     try:
+        import os
+
         cluster = os.environ["CONDOR_CLUSTER"]
         process = os.environ["CONDOR_PROCESS"]
     except KeyError:
@@ -92,7 +87,7 @@ def get_worker():
 
     worker.fqdn = getfqdn()
 
-    return worker
+    return session.merge(worker)
 
 def acquire_work(session, worker):
     """
@@ -138,7 +133,7 @@ def acquire_work(session, worker):
                         job_filter,
                         from_obj = (JobRecord.__table__.outerjoin(WorkerRecord.job),),
                         group_by = JobRecord.uuid,
-                        order_by = ("hired", JobRecord.uuid),
+                        order_by = JobRecord.uuid,
                         )                                                              \
                         .alias("uuid_by_hired"),
                     limit    = 1,
@@ -154,82 +149,59 @@ def acquire_work(session, worker):
 
     # grab a unit of work
     session.execute(statement)
-    session.expire(worker)
     session.commit()
-
-def labor_loop(session, worker):
-    """
-    Labor until death.
-    """
-
-    while True:
-        acquire_work(session, worker)
-
-        if worker.job is None:
-            log.note("no work available; terminating")
-
-            break
-        else:
-            # do the work
-            log.note("working on job %s", worker.job.uuid)
-
-            work = worker.job.work
-
-            session.commit()
-
-            work.run_with_fixture()
-
-            # mark it as done
-            worker.job.completed = True
-            worker.job           = None
-
-            session.commit()
-
-            log.note("finished job")
+    session.expire(worker)
 
 def main_loop():
     """
     Labor, reconnecting to the database when necessary.
     """
 
-    from time                import sleep
     from cargo.errors        import Raised
     from cargo.labor.storage import LaborSession
+    from cargo.labor.storage import labor_connect
 
-    WAIT_TO_RECONNECT = 32
-    worker            = get_worker()
+    LaborSession.configure(bind = labor_connect())
 
-    try:
-        from sqlalchemy.exc      import OperationalError
-        from cargo.labor.storage import labor_connect
+    with LaborSession() as session:
+        try:
+            worker = get_worker(session)
 
-        while True:
-            try:
-                LaborSession.configure(bind = labor_connect())
+            while True:
+                acquire_work(session, worker)
 
-                with LaborSession() as session:
-                    worker = session.merge(worker)
+                if worker.job is None:
+                    log.note("no work available; terminating")
+
+                    break
+                else:
+                    # do the work
+                    log.note("working on job %s", worker.job.uuid)
+
+                    work = worker.job.work
 
                     session.commit()
 
-                    labor_loop(session, worker)
+                    work.run_with_fixture()
 
-                break
-            except OperationalError, error:
-                # FIXME "exception" log level?
-                log.warning("operational error in database layer:\n%s", error)
+                    # mark it as done
+                    log.note("finished job")
 
-            log.note("sleeping %.2fs until reconnection attempt", WAIT_TO_RECONNECT)
+                    worker.job.completed = True
+                    worker.job           = None
 
-            sleep(WAIT_TO_RECONNECT)
-    finally:
-        try:
-            with LaborSession() as session:
+                    session.commit()
+        except KeyboardError:
+            raised = Raised()
+
+            try:
                 session.rollback()
                 session.delete(worker)
                 session.commit()
-        except:
-            Raised().print_ignored()
+            except:
+                Raised().print_ignored()
+
+            raised.re_raise()
 
 @with_flags_parsed()
 def main(positional):
