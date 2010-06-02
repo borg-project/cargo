@@ -145,7 +145,7 @@ def acquire_work(session, worker):
     # prevent two workers from grabbing the same unit
     from cargo.sql.alchemy import lock_table
 
-    lock_table(session.connection().engine, WorkerRecord.__tablename__, "exclusive")
+    lock_table(session.connection(), WorkerRecord.__tablename__, "exclusive")
 
     # grab a unit of work
     session.execute(statement)
@@ -191,7 +191,7 @@ def main_loop():
                     worker.job           = None
 
                     session.commit()
-        except KeyboardError:
+        except KeyboardInterrupt:
             raised = Raised()
 
             try:
@@ -215,6 +215,7 @@ def main(positional):
 
         enable_default_logging()
 
+        get_logger("cargo.sql.alchemy",  level = "DEBUG")
         get_logger("cargo.labor.worker", level = "DEBUG")
         get_logger("sqlalchemy.engine",  level = "DEBUG")
 

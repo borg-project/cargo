@@ -9,7 +9,8 @@ def test_get_random_random():
 
     import numpy.random
 
-    from nose.tools import assert_true
+    from nose.tools   import assert_true
+    from cargo.random import get_random_random
 
     random = get_random_random(numpy.random)
 

@@ -31,6 +31,7 @@ from sqlalchemy.dialects.postgresql.base import (
     PGUuid,
     PGArray,
     )
+from cargo.log                           import get_logger
 from cargo.flags                         import (
     Flag,
     Flags,
@@ -38,6 +39,8 @@ from cargo.flags                         import (
     )
 from cargo.errors                        import Raised
 from cargo.temporal                      import TimeDelta
+
+log = get_logger(__name__)
 
 assert sqlalchemy.__version__ >= "0.6.0"
 
@@ -83,19 +86,14 @@ def make_session(*args, **kwargs):
 
     return ManagingSession
 
-def lock_table(engine, table_name, mode = "ACCESS EXCLUSIVE"):
+def lock_table(connection, table_name, mode = "ACCESS EXCLUSIVE"):
     """
     If possible, lock the specified table in exclusive mode.
     """
 
     mode = mode.upper()
 
-    try:
-        dialect_name = engine.name
-    except AttributeError:
-        dialect_name = engine.connection().engine.name
-
-    if dialect_name == "postgresql":
+    if connection.engine.name == "postgresql":
         modes = [
             "ACCESS SHARE",
             "ROW SHARE",
@@ -110,7 +108,7 @@ def lock_table(engine, table_name, mode = "ACCESS EXCLUSIVE"):
         if mode not in modes:
             raise ValueError("unrecognized lock mode \"%s\"" % mode)
 
-        engine.execute("LOCK TABLE %s IN %s MODE" % (table_name, mode))
+        connection.execute("LOCK TABLE %s IN %s MODE" % (table_name, mode))
 
 @contextmanager
 def disposing(engine):
@@ -161,6 +159,8 @@ class SQL_Engines(object):
             return self.engines[database]
         except KeyError:
             engine = self.engines[database] = create_engine(database)
+
+            log.info("establishing a new connection to %s", database)
 
             return engine
 

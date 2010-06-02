@@ -128,7 +128,7 @@ def outsource(jobs, name = None, Session = LaborSession):
     Appropriately outsource a set of jobs.
     """
 
-    CHUNK_SIZE = 8192
+    CHUNK_SIZE = 4096
     njobs      = len(jobs)
 
     with Session() as session:
@@ -150,19 +150,20 @@ def outsource(jobs, name = None, Session = LaborSession):
                 JobRecord.__table__.insert(),
                 [
                     {
-                        "job_set_uuid": job_set.uuid,
-                        "completed":    False,
-                        "work":         job,
-                        }                             \
+                        "uuid"         : uuid4(),
+                        "job_set_uuid" : job_set.uuid,
+                        "completed"    : False,
+                        "work"         : job,
+                        }
                     for job in chunk
-                    ]
+                    ],
                 )
 
             ninserted += CHUNK_SIZE
             ninserted  = min(ninserted, len(jobs))
 
             log.note(
-                "inserted %i jobs so far (%i%%)",
+                "inserted %i jobs so far (%.1f%%)",
                 ninserted,
                 ninserted * 100.0 / njobs,
                 )

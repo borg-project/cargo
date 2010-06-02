@@ -18,14 +18,11 @@ from cargo.statistics.dcm           import (
     WallachRecurrenceEstimator,
     DirichletCompoundMultinomial,
     )
-from cargo.statistics.distribution  import (
-    Family,
-    Estimator,
-    )
+from cargo.statistics.distribution  import Estimator
 
 log = get_logger("utexas.statistics.test.test_dcm")
 
-class VerifiedDCM(Family):
+class VerifiedDCM(object):
     """
     Reasonably-tested but slow implementation of the DCM distribution.
     """
