@@ -1,6 +1,4 @@
-/*! \file   utexas/statistics/multinomial.h
- *  \brief  Multinomial.
- *  \author Bryan Silverthorn <bcs@cargo-cult.org>
+/*! \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
 #ifndef _UTEXAS_STATISTICS_MULTINOMIAL_H_
@@ -35,9 +33,8 @@ class Multinomial
         )
         :
             _beta(beta),
-            _log_beta(beta.template d<0>()),
+            _log_beta(beta.template d<0>())
             // FIXME should use some other rng instance, needs to use a different seed, etc etc.
-            _r(gsl_rng_alloc(gsl_rng_default))
         {
             UT_ASSERT(beta.nd() == 1);
             UT_ASSERT(beta.template packed<ARRAY_PACKED_C>());
@@ -53,7 +50,6 @@ class Multinomial
         //! Destruct.
         ~Multinomial()
         {
-            gsl_rng_free(_r);
         }
 
     public:
@@ -73,7 +69,7 @@ class Multinomial
         const
         {
             size_t K = _beta.template d<0>();
-            Sample s(K);
+            Sample s   (K);
 
             // FIXME s needs to be contiguous (C-style), as does p, etc etc.
             // FIXME gsl error handling?
@@ -96,7 +92,7 @@ class Multinomial
             return 0;
         }
 
-        //! Return the log likelihood of \p counts under this distribution.
+        //! Return the log likelihood of \p sample under this distribution.
         double
         log_likelihood
         (
@@ -142,7 +138,6 @@ class Multinomial
     private:
         Beta     _beta;
         Beta     _log_beta;
-        gsl_rng* _r;
 };
 
 }

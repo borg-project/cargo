@@ -1,6 +1,4 @@
-/*! \file   vector_distribution.h
- *  \brief  VectorDistribution.
- *  \author Bryan Silverthorn <bcs@cargo-cult.org>
+/*! \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
 #ifndef _UTEXAS_CARGO_STATISTICS_VECTOR_DISTRIBUTION_H_
@@ -56,7 +54,7 @@ class VectorDistribution
             return s;
         }
 
-        //!  Return the log likelihood of C{counts} under this distribution.
+        //! Return the log likelihood of C{counts} under this distribution.
         double
         log_likelihood
         (

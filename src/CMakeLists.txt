@@ -1,3 +1,5 @@
+project(cargo)
+
 cmake_minimum_required(VERSION 2.8)
 
 # interaction with pkg-config
@@ -18,45 +20,9 @@ find_package(Boost ${BOOST_MIN_VERSION} REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
 
-# add a "Development" build type
-set(CMAKE_C_FLAGS_DEVELOPMENT
-    "-Wall -Werror -pthread -ggdb"
-    CACHE STRING
-    "Flags used by the C compiler during development builds."
-    FORCE
-    )
-set(CMAKE_CXX_FLAGS_DEVELOPMENT
-    "${CMAKE_C_FLAGS_DEVELOPMENT} --std=c++0x"
-    CACHE STRING
-    "Flags used by the C++ compiler during development builds."
-    FORCE
-    )
-set(CMAKE_EXE_LINKER_FLAGS_DEVELOPMENT
-    "-Wl,--warn-unresolved-symbols,--warn-once"
-    CACHE STRING
-    "Flags used for linking binaries during development builds."
-    FORCE
-    )
-set(CMAKE_SHARED_LINKER_FLAGS_DEVELOPMENT
-    "-Wl,--warn-unresolved-symbols,--warn-once"
-    CACHE STRING
-    "Flags used by the shared libraries linker during development builds."
-    FORCE
-    )
-mark_as_advanced(
-    CMAKE_CXX_FLAGS_DEVELOPMENT
-    CMAKE_C_FLAGS_DEVELOPMENT
-    CMAKE_EXE_LINKER_FLAGS_DEVELOPMENT
-    CMAKE_SHARED_LINKER_FLAGS_DEVELOPMENT
-    )
-
-# set the default build type
-set(CMAKE_BUILD_TYPE
-    ${CMAKE_BUILD_TYPE}
-    CACHE STRING
-    "Choose the type of build; options are: None Development Debug Release RelWithDebInfo MinSizeRel."
-    FORCE
-    )
+# required compiler flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -pthread -ggdb")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -pthread -ggdb --std=c++0x")
 
 # generate the project makefiles
 add_subdirectory(cpp)

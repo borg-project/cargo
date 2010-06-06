@@ -15,7 +15,7 @@
 #include <boost/foreach.hpp>
 #include <boost/scoped_array.hpp>
 #include <boost/numeric/conversion/bounds.hpp>
-#include <utexas/python/numpy_array.h> // FIXME use eg CArray instead
+#include <utexas/python/numpy_array.h>
 #include <utexas/statistics/core_math.h>
 
 

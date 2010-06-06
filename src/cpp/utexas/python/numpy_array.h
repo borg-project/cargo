@@ -1,6 +1,4 @@
-/*! \file utexas/python/numpy_array.h
- *  \brief NumpyArrayFF et al.
- *  \author Bryan Silverthorn <bcs@cargo-cult.org>
+/*! \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
 #ifndef _UTEXAS_PYTHON_NUMPY_ARRAY_H_

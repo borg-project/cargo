@@ -4,7 +4,7 @@ include(FindPythonInterp)
 
 # locate numpy
 execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/echo_numpy_path.py"
+    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/echo_numpy_path.py"
     OUTPUT_VARIABLE NUMPY_FOUND_PATH
     ERROR_VARIABLE NUMPY_FOUND_PATH
     RESULT_VARIABLE ECHO_NUMPY_PATH_FAILED
@@ -38,12 +38,10 @@ include_directories(
 add_library(
     ut_python SHARED
     _statistics.cc
-    numpy.h
     numpy.cc
-    numpy_array.h
     numpy_array.cc
-    numpy_symbol.h
     numpy_symbol.cc
+    randomness.cc
     )
 
 # FIXME no idea what the statistics-python dependency graph should look like
@@ -54,4 +52,15 @@ target_link_libraries(
     ${Boost_LIBRARIES}
     ${PYTHON_LIBRARIES}
     )
+
+install(TARGETS ut_python DESTINATION lib)
+install(
+	FILES
+    numpy.h
+    randomness.h
+    numpy_array.h
+    numpy_symbol.h
+    get_shared_ptr.h
+	DESTINATION include/utexas/python
+	)
 

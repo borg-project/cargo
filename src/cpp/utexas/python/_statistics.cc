@@ -1,13 +1,13 @@
-/*! \file _statistics.cc
- *  \brief Compiled implementation of core statistics code.
- *  \author Bryan Silverthorn <bcs@cargo-cult.org>
+/*! \author Bryan Silverthorn <bcs@cargo-cult.org>
  */
 
+#include <utexas/python/get_shared_ptr.h>
 #include <boost/python.hpp>
 #include <numpy/arrayobject.h>
 #include <utexas/python/numpy_array.h>
 #include <utexas/python/old_multinomial.h>
 #include <utexas/python/old_dcm.h>
+#include <utexas/python/randomness.h>
 #include <utexas/statistics/portfolio.h>
 
 using namespace std;
@@ -164,5 +164,15 @@ BOOST_PYTHON_MODULE(_statistics)
     def("dcm_post_pi_K", &dcm_post_pi_K_py);
     def("dcm_model_predict", &dcm_model_predict_py);
     def("multinomial_model_predict", &multinomial_model_predict_py);
+
+    // bind Randomness
+    using utexas::Randomness;
+    using utexas::do_something_random;
+
+    register_ptr_to_python<std::shared_ptr<Randomness>>();
+
+    class_<Randomness, noncopyable>("Randomness", no_init);
+
+    def("do_something_random", &do_something_random);
 }
  

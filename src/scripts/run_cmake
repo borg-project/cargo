@@ -14,25 +14,16 @@ pushd build
 
 mkdir debug
 mkdir release
-mkdir development
 
 # create the debug build tree
 pushd debug
-cmake -DCMAKE_BUILD_TYPE=Debug ../../src $@
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=../../stage ../../src $@
 popd
 
 # create the release build tree
 pushd release
-cmake -DCMAKE_BUILD_TYPE=Release ../../src $@
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../../stage ../../src $@
 popd
-
-# create the development build tree
-pushd development
-cmake -DCMAKE_BUILD_TYPE=Development ../../src $@
-popd
-
-# the "active" symlink
-ln -s development active
 
 # done
 popd
