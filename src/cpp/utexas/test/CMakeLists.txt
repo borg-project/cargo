@@ -6,9 +6,9 @@ add_executable(
 
 target_link_libraries(
     ut_test
-    ut_statistics_tests
+#    ut_statistics_tests
     )
 
 # child suites
-add_subdirectory(statistics)
+#add_subdirectory(statistics)
 
