@@ -137,23 +137,23 @@ def assert_good_estimator(estimator, counts, weights):
 
 def test_minka_fp_simple():
     """
-    Simple tests of the Minka fixed-point estimator.
+    Test the Minka fixed-point estimator.
     """
 
     estimator = MinkaFixedPointEstimator()
 
-    assert_good_estimator(estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
-    assert_good_estimator(estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
-    assert_good_estimator(estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
+    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
+    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
+    yield (assert_good_estimator, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
 
 def test_wallach_recurrence_simple():
     """
-    Simple tests of the Wallach digamma recurrence estimator.
+    Test the Wallach digamma-recurrence estimator.
     """
 
     estimator = WallachRecurrenceEstimator()
 
-    assert_good_estimator(estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
-    assert_good_estimator(estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
-    assert_good_estimator(estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
+    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
+    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
+    yield (assert_good_estimator, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
 

@@ -242,7 +242,7 @@ class EM_MixtureEstimator(object):
             raise ArgumentError("estimator list must be one- or two-dimensional")
 
         # other members
-        self.__max_i       = 16
+        self.__max_i       = 32
         self.__convergence = 1e-8
 
     def estimate(self, samples, random = numpy.random):
