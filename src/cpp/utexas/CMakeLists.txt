@@ -9,5 +9,5 @@ install(
 # topologically (by their dependency relations).
 add_subdirectory(python)
 add_subdirectory(statistics)
-add_subdirectory(test)
+#add_subdirectory(test)
 
