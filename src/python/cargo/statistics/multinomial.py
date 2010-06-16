@@ -1,18 +1,13 @@
 """
-utexas/statistics/multinomial.py
-
-The multinomial distribution.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 import numpy
 import scipy
 
-from numpy import newaxis
-from scipy.special.basic import gammaln
-from cargo.log import get_logger
-from cargo.statistics._statistics import multinomial_log_probability
+from numpy                         import newaxis
+from cargo.log                     import get_logger
+from cargo.statistics._multinomial import multinomial_log_probability
 from cargo.statistics.distribution import (
 #     Family,
     Estimator,
@@ -79,14 +74,6 @@ class Multinomial(object):
     def log_likelihood(self, counts):
         """
         Return the log likelihood of C{counts} under this distribution.
-
-        >>> m = Multinomial([0.5, 0.5])
-        >>> lp = m.log_likelihood(numpy.array([1, 0], dtype = numpy.uint))
-        >>> numpy.exp(lp)
-        0.5
-        >>> lp = m.log_likelihood(numpy.array([0, 2], dtype = numpy.uint))
-        >>> numpy.exp(lp)
-        0.25
         """
 
         return multinomial_log_probability(self.__log_beta, counts)

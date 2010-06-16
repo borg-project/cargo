@@ -3,8 +3,10 @@
 #
 
 add_cython_module(cargo_statistics_dcm _dcm)
+add_cython_module(cargo_statistics_multinomial _multinomial)
 
 target_link_libraries(cargo_statistics_dcm ${GSL_LIBRARIES})
+target_link_libraries(cargo_statistics_multinomial ${GSL_LIBRARIES})
 
 #
 # install
@@ -13,6 +15,7 @@ target_link_libraries(cargo_statistics_dcm ${GSL_LIBRARIES})
 install(
     TARGETS
         cargo_statistics_dcm
+        cargo_statistics_multinomial
     DESTINATION cargo/statistics
     )
 install(
