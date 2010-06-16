@@ -26,4 +26,5 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -pthread -ggdb --std=c++0x
 
 # generate the project makefiles
 add_subdirectory(cpp)
+add_subdirectory(python)
 
