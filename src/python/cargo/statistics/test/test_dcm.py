@@ -151,11 +151,11 @@ def assert_good_estimator(estimator, counts, weights):
 
     # set up estimators
     threshold = 1e-6
-    cutoff = 1e4
-    verified = VerifiedMFP()
+    cutoff    = 1e4
+    verified  = VerifiedMFP()
 
     # generate estimates
-    verified_dcm = verified.estimate(counts, weights = weights, threshold = threshold, cutoff = cutoff)
+    verified_dcm  = verified.estimate(counts, weights = weights, threshold = threshold, cutoff = cutoff)
     estimated_dcm = estimator.estimate(counts, weights = weights, threshold = threshold, cutoff = cutoff)
 
     # compare estimates

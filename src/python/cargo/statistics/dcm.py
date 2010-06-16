@@ -10,8 +10,6 @@ from cargo.log                     import get_logger
 from cargo.statistics._dcm         import (
     dcm_log_probability,
     estimate_dcm_minka_fixed,
-    )
-from cargo.statistics._statistics  import (
     estimate_dcm_wallach_recurrence,
     )
 from cargo.statistics.distribution import (

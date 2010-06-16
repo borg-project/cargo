@@ -5,11 +5,18 @@
 import  numpy
 cimport numpy
 
+cdef extern from "float.h":
+    double DBL_MIN
+
 cdef extern from "math.h":
     double fabs(double)
+    int isfinite(double)
 
 cdef extern from "stdlib.h":
     ctypedef unsigned long size_t
+
+    void* malloc(size_t size)
+    void  free  (void* ptr)
 
 cdef extern from "gsl/gsl_errno.h":
     int GSL_SUCCESS
@@ -175,6 +182,188 @@ def estimate_dcm_minka_fixed(
         for d in xrange(D):
             if alpha_D[d] < 1e-16:
                 alpha_D[d] = 1e-16
+
+    return alpha_D
+
+cdef struct NormCount:
+    unsigned int first
+    double       second
+
+cdef class PreWallachRecurrence:
+    """
+    Precomputed values used by the Wallach recurrence estimator.
+    """
+
+    cdef NormCount*  c_dot
+    cdef size_t      c_dot_size
+    cdef NormCount** c_k
+    cdef size_t*     c_k_sizes
+
+    def __cinit__(self):
+        """
+        Construct.
+        """
+
+    def __dealloc__(self):
+        """
+        Destruct.
+        """
+
+        # FIXME don't leak memory
+
+def get_first(pair):
+    return pair[0]
+
+def pre_estimate_dcm_wallach_recurrence(
+    numpy.ndarray[unsigned int, ndim = 2] counts_ND,
+    numpy.ndarray[double, ndim = 1]       weights_N,
+    ):
+    """
+    Precomputation for the Wallach DCM estimator.
+    """
+
+    # mise en place
+    cdef size_t N = counts_ND.shape[0]
+    cdef size_t D = counts_ND.shape[1]
+
+    # precompute the unweighted norms
+    c_dot_map = {}
+    c_k_maps  = [{} for _ in xrange(D)]
+
+    cdef double        previous
+    cdef unsigned int  l1_norm
+    cdef unsigned long count
+
+    for n in xrange(N):
+        l1_norm = 0
+
+        for d in xrange(D):
+            count    = counts_ND[n, d]
+            l1_norm += count
+
+            if count > 0:
+                previous           = c_k_maps[d].get(count, 0)
+                c_k_maps[d][count] = previous + weights_N[n]
+
+        if l1_norm > 0:
+            previous           = c_dot_map.get(l1_norm, 0)
+            c_dot_map[l1_norm] = previous + weights_N[n]
+
+    # arrange them for estimation
+    cdef PreWallachRecurrence pre = PreWallachRecurrence()
+
+    pre.c_dot_size  = len(c_dot_map)
+    pre.c_dot       = <NormCount*>malloc(len(c_dot_map) * sizeof(NormCount))
+    c_dot_map_items = sorted(c_dot_map.iteritems(), key = get_first, reverse = True)
+
+    for (i, (first, second)) in enumerate(c_dot_map_items):
+        pre.c_dot[i].first  = first
+        pre.c_dot[i].second = second
+
+    pre.c_k       = <NormCount**>malloc(D * sizeof(NormCount*))
+    pre.c_k_sizes = <size_t*>malloc(D * sizeof(size_t))
+
+    for d in xrange(D):
+        pre.c_k_sizes[d] = len(c_k_maps[d])
+        pre.c_k[d]       = <NormCount*>malloc(len(c_k_maps[d]) * sizeof(NormCount))
+
+        c_k_maps_d = sorted(c_k_maps[d].iteritems(), key = get_first, reverse = True)
+
+        for (i, (first, second)) in enumerate(c_k_maps_d):
+            pre.c_k[d][i].first  = first
+            pre.c_k[d][i].second = second
+
+    return pre
+
+def estimate_dcm_wallach_recurrence(
+    numpy.ndarray[unsigned int, ndim = 2] counts_ND,
+    numpy.ndarray[double, ndim = 1]       weights_N,
+    double threshold,
+    unsigned int cutoff,
+    ):
+    """
+    Estimate the maximum likelihood DCM distribution.
+
+    Uses the fixed-point estimator of Hanna Wallach that exploits digamma recurrence.
+    """
+
+    # mise en place
+    cdef size_t N = counts_ND.shape[0]
+    cdef size_t D = counts_ND.shape[1]
+
+    assert weights_N.shape[0] == N
+
+    cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D)
+
+    # precompute the weighted norms
+    cdef PreWallachRecurrence pre = pre_estimate_dcm_wallach_recurrence(counts_ND, weights_N)
+
+    # run the fixed-point iteration to convergence
+    cdef size_t    i
+    cdef size_t    k
+    cdef size_t    d
+    cdef size_t    d_
+    cdef double    ratio
+    cdef double    sum_alpha
+    cdef double    wallach_s
+    cdef double    wallach_s_k
+    cdef double    wallach_d
+    cdef double    wallach_d_k
+    cdef double    difference = threshold
+    cdef NormCount c_k_item
+
+    while cutoff > 0 and difference >= threshold:
+        # countdown
+        cutoff -= 1
+
+        # compute sum_alpha
+        sum_alpha = 0.0
+
+        for d in xrange(D):
+            sum_alpha += alpha_D[d]
+
+        if sum_alpha > 1e6:
+            # FIXME a bit of a hack
+            break
+
+        # compute the denominator; wallach_* are named as in (Wallach 2008)
+        wallach_s = 0.0
+        wallach_d = 0.0
+        k         = 0
+
+        for i from pre.c_dot_size >= i > 0:
+            while k < pre.c_dot[i - 1].first:
+                wallach_d += 1.0 / (k + sum_alpha)
+                k         += 1
+
+            wallach_s += pre.c_dot[i - 1].second * wallach_d
+
+        # compute the numerator and update alpha
+        difference = 0.0
+
+        for d in xrange(D):
+            # compute the numerator
+            wallach_s_k = 0.0
+            wallach_d_k = 0.0
+            k           = 0
+
+            for i from pre.c_k_sizes[d] >= i > 0:
+                c_k_item = pre.c_k[d][i - 1]
+
+                while k < c_k_item.first:
+                    wallach_d_k += 1.0 / (k + alpha_D[d])
+                    k           += 1
+
+                wallach_s_k += c_k_item.second * wallach_d_k
+
+            # update this dimension of alpha
+            ratio = wallach_s_k / wallach_s
+
+            alpha_D[d] *= ratio
+            difference += fabs(ratio - 1.0)
+
+            if alpha_D[d] < DBL_MIN:
+                alpha_D[d] = DBL_MIN
 
     return alpha_D
 
