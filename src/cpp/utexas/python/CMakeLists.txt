@@ -53,14 +53,16 @@ target_link_libraries(
     ${PYTHON_LIBRARIES}
     )
 
-install(TARGETS ut_python DESTINATION lib)
+set_target_properties(ut_python PROPERTIES OUTPUT_NAME _statistics PREFIX "")
+
+install(TARGETS ut_python DESTINATION cargo/statistics)
 install(
-	FILES
+    FILES
     numpy.h
     randomness.h
     numpy_array.h
     numpy_symbol.h
     get_shared_ptr.h
-	DESTINATION include/utexas/python
-	)
+    DESTINATION include/utexas/python
+    )
 

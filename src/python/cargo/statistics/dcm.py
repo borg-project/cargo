@@ -1,19 +1,17 @@
 """
-cargo/statistics/dcm.py
-
-The Dirichlet compound multinomial (DCM) distribution.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 import numpy
 import scipy
 
-from functools import partial
-from cargo.log import get_logger
-from cargo.statistics._statistics import (
+from functools                     import partial
+from cargo.log                     import get_logger
+from cargo.statistics._dcm         import (
     dcm_log_probability,
     estimate_dcm_minka_fixed,
+    )
+from cargo.statistics._statistics  import (
     estimate_dcm_wallach_recurrence,
     )
 from cargo.statistics.distribution import (
@@ -71,7 +69,6 @@ class DirichletCompoundMultinomial(object):
             self.__alpha = alpha
 
         self.sum_alpha = numpy.sum(self.__alpha)
-#         self.log_likelihood = partial(dcm_log_probability, self.__sum_alpha, self.__alpha)
 
         # let's not let us be idiots
         self.__alpha.flags.writeable = False

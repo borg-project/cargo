@@ -1,24 +1,20 @@
 """
-utexas/statistics/test/test_dcm.py
-
-Tests of the DCM distribution implementation.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 import numpy
 import scipy
 
-from itertools                      import count
-from numpy                          import newaxis
-from scipy.special.basic            import psi
-from cargo.log                      import get_logger
-from cargo.statistics.dcm           import (
+from itertools                     import count
+from numpy                         import newaxis
+from scipy.special.basic           import psi
+from cargo.log                     import get_logger
+from cargo.statistics.dcm          import (
     MinkaFixedPointEstimator,
     WallachRecurrenceEstimator,
     DirichletCompoundMultinomial,
     )
-from cargo.statistics.distribution  import Estimator
+from cargo.statistics.distribution import Estimator
 
 log = get_logger("utexas.statistics.test.test_dcm")
 
@@ -63,10 +59,13 @@ class VerifiedDCM(object):
         Return the log likelihood of C{bins} under this distribution.
         """
 
-        psigm = numpy.sum(pochhammer_ln(self.__alpha, bins))
+        from cargo.statistics.functions import ln_poch
+
+        u_lnp = numpy.frompyfunc(ln_poch, 2, 1)
+        psigm = numpy.sum(u_lnp(self.alpha, bins))
         clens = numpy.sum(bins)
-        alsum = numpy.sum(self.__alpha)
-        nsigm = pochhammer_ln(alsum, clens)
+        alsum = numpy.sum(self.alpha)
+        nsigm = u_lnp(alsum, clens)
 
         return numpy.sum(psigm - nsigm)
 
@@ -117,6 +116,33 @@ class VerifiedMFP(Estimator):
 
             if difference < threshold or (cutoff is not None and i >= cutoff):
                 return DirichletCompoundMultinomial(alpha)
+
+def test_dcm_log_likelihood():
+    """
+    Test DCM log-likelihood calculation.
+    """
+
+    # deterministic randomness
+    from numpy.random import RandomState
+
+    random = RandomState(6995749)
+
+    # generate some distributions
+    alphas    = [random.rand(8) * random.rand() * 128.0 for i in xrange(32)]
+    good_dcms = [VerifiedDCM(a) for a in alphas]
+    test_dcms = [DirichletCompoundMultinomial(a) for a in alphas]
+
+    # generate some count vectors
+    test_counts = [random.randint(64, size = 8).astype(numpy.uint) for i in xrange(32)]
+
+    # compare
+    from itertools  import product
+    from nose.tools import assert_equal
+
+    tests = product(zip(good_dcms, test_dcms), test_counts)
+
+    for ((good_dcm, test_dcm), counts) in tests:
+        assert_equal(test_dcm.log_likelihood(counts), good_dcm.log_likelihood(counts))
 
 def assert_good_estimator(estimator, counts, weights):
     """
