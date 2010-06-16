@@ -4,7 +4,7 @@
 
 def test_multinomial_log_probability():
     """
-    Test computation of multinomial log-probability.
+    Test computation of multinomial log probability.
     """
 
     import numpy
