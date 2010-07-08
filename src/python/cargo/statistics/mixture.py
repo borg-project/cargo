@@ -73,7 +73,7 @@ class FiniteMixture(object):
 
         return variates
 
-    def log_likelihood(self, samples):
+    def log_likelihood(self, samples, given = []):
         """
         Return the log likelihood of C{samples} under this distribution.
 

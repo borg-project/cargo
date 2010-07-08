@@ -47,9 +47,12 @@ def cache_file(path, cache_dir = None, namespace = uuid4()):
     path to that file is returned. If no such file exists, the source file is
     atomically copied, given that unique name, and a path to the copy is
     returned.
-    """
 
-    # FIXME cleanup when used outside condor
+    Take care to ensure that multiple processes are not attempting to cache the
+    same file to the same temporary directory!
+
+    The caller is responsible for removing the file when appropriate.
+    """
 
     if cache_dir == None:
         cache_dir = gettempdir()

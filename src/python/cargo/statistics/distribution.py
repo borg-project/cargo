@@ -18,3 +18,37 @@ class Estimator(ABC):
 
         pass
 
+class TupleDistribution(object):
+    """
+    Generate samples from a tuple of independent distributions.
+    """
+
+    def __init__(self, distributions):
+        """
+        Initialize.
+        """
+
+        self._distributions = distributions
+
+    def random_variate(self):
+        """
+        Return a sample from this distribution.
+        """
+
+        return scipy.random.multinomial(N, self.__beta)
+
+    def log_likelihood(self, sample):
+        """
+        Return the log likelihood of C{sample} under this distribution.
+        """
+
+        pass
+
+    @property
+    def distributions(self):
+        """
+        Get this distribution's component distributions.
+        """
+
+        return self._distributions
+
