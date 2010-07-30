@@ -4,6 +4,6 @@ install(
         accounting.py
         proc.py
         sessions.py
-    DESTINATION cargo/unix
+    DESTINATION lib/cargo/unix
     )
 

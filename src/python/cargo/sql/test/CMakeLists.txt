@@ -2,6 +2,6 @@ install(
     FILES
         __init__.py
         test_alchemy.py
-    DESTINATION cargo/sql/test
+    DESTINATION lib/cargo/sql/test
     )
 

@@ -16,7 +16,7 @@ install(
         sugar.py
         temporal.py
         testing.py
-    DESTINATION cargo
+    DESTINATION lib/cargo
     )
 
 #

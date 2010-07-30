@@ -5,6 +5,6 @@ install(
         jobs.py
         storage.py
         worker.py
-    DESTINATION cargo/labor
+    DESTINATION lib/cargo/labor
     )
 

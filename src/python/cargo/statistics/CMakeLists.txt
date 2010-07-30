@@ -19,7 +19,7 @@ install(
         cargo_statistics_dcm
         cargo_statistics_functions
         cargo_statistics_multinomial
-    DESTINATION cargo/statistics
+    DESTINATION lib/cargo/statistics
     )
 install(
     FILES
@@ -29,7 +29,7 @@ install(
         functions.py
         mixture.py
         multinomial.py
-    DESTINATION cargo/statistics
+    DESTINATION lib/cargo/statistics
     )
 
 #

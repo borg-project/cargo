@@ -5,6 +5,6 @@ install(
         test_iterators.py
         test_json.py
         test_random.py
-    DESTINATION cargo/test
+    DESTINATION lib/cargo/test
     )
 

@@ -4,6 +4,6 @@ install(
         test_dcm.py
         test_functions.py
         test_multinomial.py
-    DESTINATION cargo/statistics/test
+    DESTINATION lib/cargo/statistics/test
     )
 
