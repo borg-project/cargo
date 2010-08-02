@@ -36,7 +36,7 @@ class Multinomial(object):
     The multinomial distribution.
     """
 
-    def __init__(self, beta):
+    def __init__(self, beta, norm = 1):
         """
         Instantiate the distribution.
 
@@ -47,17 +47,21 @@ class Multinomial(object):
         self.__beta      = beta = numpy.asarray(beta)
         self.__beta     /= numpy.sum(beta)
         self.__log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
+        self.__norm      = norm
 
         # let's not let us be idiots
         self.__beta.flags.writeable     = False
         self.__log_beta.flags.writeable = False
 
-    def random_variate(self, N):
+    def random_variate(self, N = None):
         """
         Return a sample from this distribution.
 
         @param N: The L1 norm of the count vectors drawn.
         """
+
+        if N is None:
+            N = self.__norm
 
         return scipy.random.multinomial(N, self.__beta)
 

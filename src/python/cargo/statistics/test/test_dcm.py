@@ -16,7 +16,7 @@ from cargo.statistics.dcm          import (
     )
 from cargo.statistics.distribution import Estimator
 
-log = get_logger("utexas.statistics.test.test_dcm")
+log = get_logger(__name__)
 
 class VerifiedDCM(object):
     """

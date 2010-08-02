@@ -41,15 +41,15 @@ class FiniteMixture(object):
         assert self.__pi_K.shape == (K,)
         assert numpy.allclose(numpy.sum(self.__pi_K), 1.0)
 
-        self.__shapes = [self.__components_MK[m, -1].shape for m in xrange(M)]
+#         self.__shapes = [self.__components_MK[m, -1].shape for m in xrange(M)]
 
-        for m in xrange(M):
-            for k in xrange(K - 1):
-                assert self.__components_MK[m, k].shape == self.__shapes[m]
+#         for m in xrange(M):
+#             for k in xrange(K - 1):
+#                 assert self.__components_MK[m, k].shape == self.__shapes[m]
 
     def random_variate(self, *args, **kwargs):
         """
-        Make multiple draws from this mixture distribution.
+        Make a draw from this mixture distribution.
         """
 
         random  = kwargs.get("random", numpy.random)
@@ -73,7 +73,7 @@ class FiniteMixture(object):
 
         return variates
 
-    def log_likelihood(self, samples, given = []):
+    def log_likelihood(self, samples):
         """
         Return the log likelihood of C{samples} under this distribution.
 
@@ -162,11 +162,11 @@ class FiniteMixture(object):
         return self.__shapes
 
     # properties
-    ndomains = property(__get_ndomains)
+    ndomains    = property(__get_ndomains)
     ncomponents = property(__get_ncomponents)
-    pi = property(__get_pi)
-    components = property(__get_components)
-    shapes = property(__get_shapes)
+    pi          = property(__get_pi)
+    components  = property(__get_components)
+    shapes      = property(__get_shapes)
 
 class FixedIndicatorMixtureEstimator(object):
     """
