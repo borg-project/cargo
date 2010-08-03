@@ -76,11 +76,7 @@ class FiniteMixture(object):
     def log_likelihood(self, samples):
         """
         Return the log likelihood of C{samples} under this distribution.
-
-        @param samples: List of samples from each of the domains.
         """
-
-         # FIXME surely we can do better numerically here
 
         # parameters and sanity
         (M, K) = self.__components_MK.shape
@@ -88,12 +84,10 @@ class FiniteMixture(object):
         assert len(samples) == M
 
         # draw the sample(s)
-#         total = 0.0
         total = None
 
         for k in xrange(K):
-#             ctotal = 0.0
-            ctotal = self.__pi_K[k]
+            ctotal = numpy.log(self.__pi_K[k])
 
             for m in xrange(M):
                 sample_l_l = self.__components_MK[m, k].log_likelihood(samples[m])
@@ -104,12 +98,9 @@ class FiniteMixture(object):
                 ctotal += sample_l_l
 
                 if not numpy.isfinite(ctotal):
-#                     log.debug("ctotal %s; component (%i) %s", ctotal, m, self.__components_K[m, k].log_beta)
-#                     log.debug("and beta is... %s", self.__components_MK[m, k].beta)
                     log.warning("nonfinite ctotal %s", ctotal)
                     log.warning("samples[m] is %s", samples[m])
 
-#             total += self.__pi_K[k] * numpy.exp(ctotal)
             if total is None:
                 total = ctotal
             else:
@@ -117,19 +108,15 @@ class FiniteMixture(object):
 
             log.debug("%s ; %s (%i of %i)", ctotal, total, k, K)
 
-#         if total == 0.0:
         if not numpy.isfinite(total):
-            log.warning("sample has zero probability")
+            log.warning("total log likelihood is not finite")
             log.debug("the sample in question: %s", repr(samples))
 
-#         return numpy.log(total)
         return total
 
     def total_log_likelihood(self, samples):
         """
         Return the total log likelihood of many C{samples} lists under this distribution.
-
-        @param samples: List of lists of samples from each of the domains.
         """
 
         return sum(self.log_likelihood(s) for s in samples)
@@ -343,9 +330,9 @@ class RestartedEstimator(object):
         self._estimator = estimator
         self._nrestarts = nrestarts
 
-    def estimate(self, samples):
+    def estimate(self, samples, random = numpy.random):
         """
-        Use EM to estimate mixture parameters.
+        Make multiple estimates, and return the best.
         """
 
         # FIXME our choice of structure for samples is stupid
@@ -355,7 +342,7 @@ class RestartedEstimator(object):
         best_estimate = None
 
         for i in xrange(self._nrestarts):
-            estimate = self._estimator.estimate(samples)
+            estimate = self._estimator.estimate(samples, random = random)
             ll       = estimate.total_log_likelihood(sane_samples)
 
             if best_ll is None:

@@ -28,18 +28,24 @@ def test_finite_mixture():
         Test sampling of a random variate from a finite mixture.
         """
 
-        for i in xrange(1024):
-            sample = mixture.random_variate()
+        from numpy.random import RandomState
 
-            if sample == 1.0:
+        ones   = 0
+        twos   = 0
+        random = RandomState(42)
+
+        for i in xrange(1024):
+            sample = mixture.random_variate(random = random)
+
+            if sample == [1.0]:
                 ones += 1
-            elif sample == 2.0:
+            elif sample == [2.0]:
                 twos += 1
             else:
                 assert_not_equal(sample, sample)
 
-        assert_almost_equal(ones / 1024.0, 0.25)
-        assert_almost_equal(twos / 1024.0, 0.75)
+        assert_almost_equal(ones / 1024.0, 0.25, places = 2)
+        assert_almost_equal(twos / 1024.0, 0.75, places = 2)
 
     yield test_random_variate
 
@@ -51,16 +57,67 @@ def test_finite_mixture():
 
         from math import log
 
-        assert_almost_equal(mixture.log_likelihood(1.0), log(0.25))
-        assert_almost_equal(mixture.log_likelihood(2.0), log(0.75))
-        assert_almost_equal(mixture.log_likelihood(42.0), numpy.finfo(float).min)
+        assert_almost_equal(mixture.log_likelihood([1.0]), log(0.25))
+        assert_almost_equal(mixture.log_likelihood([2.0]), log(0.75))
+        assert_almost_equal(mixture.log_likelihood([42.0]), numpy.finfo(float).min)
 
     yield test_log_likelihood
+
+def assert_mixture_estimator_ok(estimator):
+    """
+    Test estimation of finite mixture distributions.
+    """
+
+    # generate some data
+    from numpy.random                 import RandomState
+    from cargo.statistics.multinomial import Multinomial
+
+    random     = RandomState(42)
+    components = [Multinomial([0.1, 0.9], 8), Multinomial([0.9, 0.1], 8)]
+    samples    = [components[0].random_variate(random = random) for i in xrange(250)]
+    samples   += [components[1].random_variate(random = random) for i in xrange(750)]
+
+    # estimate the distribution from data
+    import numpy
+
+    from nose.tools import assert_almost_equal
+
+    mixture   = estimator.estimate([numpy.array(samples, numpy.uint)], random = random)
+    order     = numpy.argsort(mixture.pi)
+    estimated = mixture.components[0, order]
+
+    assert_almost_equal(mixture.pi[order][0], 0.25, places = 2)
+    assert_almost_equal(mixture.pi[order][1], 0.75, places = 2)
+    assert_almost_equal(estimated[0].beta[0], 0.10, places = 2)
+    assert_almost_equal(estimated[0].beta[1], 0.90, places = 2)
+    assert_almost_equal(estimated[1].beta[0], 0.90, places = 2)
+    assert_almost_equal(estimated[1].beta[1], 0.10, places = 2)
 
 def test_em_mixture_estimator():
     """
     Test EM estimation of finite mixture distributions.
     """
 
-    raise NotImplementedError()
+    from cargo.statistics.mixture     import EM_MixtureEstimator
+    from cargo.statistics.multinomial import MultinomialEstimator
+
+    estimator = EM_MixtureEstimator([MultinomialEstimator()] * 2)
+
+    assert_mixture_estimator_ok(estimator)
+
+def test_restarted_estimator():
+    """
+    Test the restarting wrapper estimator.
+    """
+
+    from cargo.statistics.mixture     import (
+        RestartedEstimator,
+        EM_MixtureEstimator,
+        )
+    from cargo.statistics.multinomial import MultinomialEstimator
+
+    estimator = EM_MixtureEstimator([MultinomialEstimator()] * 2)
+    restarted = RestartedEstimator(estimator, 3)
+
+    assert_mixture_estimator_ok(restarted)
 

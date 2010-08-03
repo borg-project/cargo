@@ -3,15 +3,11 @@
 """
 
 import numpy
-import scipy
 
 from numpy                         import newaxis
 from cargo.log                     import get_logger
 from cargo.statistics._multinomial import multinomial_log_probability
-from cargo.statistics.distribution import (
-#     Family,
-    Estimator,
-    )
+from cargo.statistics.distribution import Estimator
 
 log = get_logger(__name__)
 
@@ -30,7 +26,6 @@ def smooth_multinomial_mixture(mixture):
             beta                     /= numpy.sum(beta)
             mixture.components[m, k]  = Multinomial(beta)
 
-# class Multinomial(Family):
 class Multinomial(object):
     """
     The multinomial distribution.
@@ -53,7 +48,7 @@ class Multinomial(object):
         self.__beta.flags.writeable     = False
         self.__log_beta.flags.writeable = False
 
-    def random_variate(self, N = None):
+    def random_variate(self, N = None, random = numpy.random):
         """
         Return a sample from this distribution.
 
@@ -63,7 +58,7 @@ class Multinomial(object):
         if N is None:
             N = self.__norm
 
-        return scipy.random.multinomial(N, self.__beta)
+        return random.multinomial(N, self.__beta)
 
     def random_variates(self, N, T):
         """

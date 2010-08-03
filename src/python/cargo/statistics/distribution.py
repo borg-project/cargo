@@ -2,6 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import numpy
+
 from abc         import abstractmethod
 from cargo.sugar import ABC
 
@@ -30,19 +32,19 @@ class TupleDistribution(object):
 
         self._distributions = distributions
 
-    def random_variate(self):
+    def random_variate(self, random = numpy.random):
         """
         Return a sample from this distribution.
         """
 
-        return scipy.random.multinomial(N, self.__beta)
+        raise NotImplementedError()
 
     def log_likelihood(self, sample):
         """
         Return the log likelihood of C{sample} under this distribution.
         """
 
-        pass
+        raise NotImplementedError()
 
     @property
     def distributions(self):
@@ -64,7 +66,7 @@ class ConstantDistribution(object):
 
         self._constant = constant
 
-    def random_variate(self):
+    def random_variate(self, random = numpy.random):
         """
         Return the constant.
         """
