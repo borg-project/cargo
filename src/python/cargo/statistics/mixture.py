@@ -89,10 +89,13 @@ class EM_MixtureEstimator(Estimator):
         self._iterations  = 32
         self._convergence = 1e-8
 
-    def estimate(self, samples, random = numpy.random):
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Use EM to estimate mixture parameters.
         """
+
+        if weights is not None:
+            raise NotImplementedError("weighted samples not yet supported")
 
         # generate random initial parameters
         from cargo.random import grab

@@ -146,7 +146,7 @@ class ObjectDiscreteEstimator(Estimator):
         self._domain    = domain
         self._estimator = DiscreteEstimator(len(domain))
 
-    def estimate(self, samples, random = numpy.random):
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """
@@ -158,5 +158,5 @@ class ObjectDiscreteEstimator(Estimator):
                 len(samples),
                 )
 
-        return self._estimator.estimate(indices)
+        return self._estimator.estimate(indices, random, weights)
 
