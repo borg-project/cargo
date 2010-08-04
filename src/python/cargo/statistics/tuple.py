@@ -126,7 +126,7 @@ class TupleEstimator(Estimator):
 
         self._estimators = estimators
 
-    def estimate(self, samples):
+    def estimate(self, samples, random = numpy.random):
         """
         Return the estimated distribution.
         """

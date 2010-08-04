@@ -116,8 +116,6 @@ class MultinomialEstimator(Estimator):
         Initialize.
         """
 
-        pass
-
     def estimate(self, counts, weights = None, verbose = False):
         """
         Return the estimated maximum likelihood distribution.
