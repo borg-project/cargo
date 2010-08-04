@@ -104,8 +104,7 @@ class Multinomial(object):
     log_beta = property(__get_log_beta)
     mean     = beta
 
-# class MultinomialEstimator(Estimator):
-class MultinomialEstimator(object):
+class MultinomialEstimator(Estimator):
     """
     Estimate the parameters of a multinomial distribution.
 

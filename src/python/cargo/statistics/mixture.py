@@ -41,12 +41,6 @@ class FiniteMixture(object):
         assert self.__pi_K.shape == (K,)
         assert numpy.allclose(numpy.sum(self.__pi_K), 1.0)
 
-#         self.__shapes = [self.__components_MK[m, -1].shape for m in xrange(M)]
-
-#         for m in xrange(M):
-#             for k in xrange(K - 1):
-#                 assert self.__components_MK[m, k].shape == self.__shapes[m]
-
     def random_variate(self, *args, **kwargs):
         """
         Make a draw from this mixture distribution.
@@ -335,7 +329,6 @@ class RestartedEstimator(object):
         Make multiple estimates, and return the best.
         """
 
-        # FIXME our choice of structure for samples is stupid
         sane_samples = zip(*samples)
 
         best_ll       = None

@@ -24,8 +24,11 @@ install(
 install(
     FILES
         __init__.py
+		base.py
         dcm.py
-        distribution.py
+		discrete.py
+		constant.py
+		tuple.py
         functions.py
         mixture.py
         multinomial.py

@@ -12,9 +12,9 @@ from cargo.statistics._dcm         import (
     estimate_dcm_minka_fixed,
     estimate_dcm_wallach_recurrence,
     )
-from cargo.statistics.distribution import (
-#     Family,
+from cargo.statistics.base import (
     Estimator,
+    Distribution,
     )
 
 log = get_logger(__name__)
@@ -44,8 +44,7 @@ def smooth_dcm_mixture(mixture):
             alpha                    = mixture.components[m, k].alpha
             mixture.components[m, k] = DirichletCompoundMultinomial(alpha + smallest * 1e-2)
 
-# class DirichletCompoundMultinomial(Family):
-class DirichletCompoundMultinomial(object):
+class DirichletCompoundMultinomial(Distribution):
     """
     The Dirichlet Compound Multinomial (DCM) distribution.
     """
@@ -105,41 +104,31 @@ class DirichletCompoundMultinomial(object):
         Return the log likelihood of C{counts} under this distribution.
         """
 
-        return dcm_log_probability(self.sum_alpha, self.__alpha, counts)
+        return dcm_log_probability(self.sum_alpha, self._alpha, counts)
 
-    def __get_shape(self):
-        """
-        Return the tuple of the dimensionalities of this distribution.
-        """
-
-        return self.__alpha.shape
-
-    def __get_alpha(self):
+    @property
+    def alpha(self):
         """
         Return the Dirichlet parameter vector.
         """
 
-        return self.__alpha
+        return self._alpha
 
-    def __get_mean(self):
+    @property
+    def mean(self):
         """
         Return the mean of the distribution.
         """
 
-        return self.__alpha / numpy.sum(self.__alpha)
+        return self._alpha / numpy.sum(self._alpha)
 
-    def __get_burstiness(self):
+    @property
+    def burstiness(self):
         """
         Return the "burstiness" of the distribution.
         """
 
-        return numpy.sum(self.__alpha)
-
-    # properties
-    shape      = property(__get_shape)
-    alpha      = property(__get_alpha)
-    mean       = property(__get_mean)
-    burstiness = property(__get_burstiness)
+        return numpy.sum(self._alpha)
 
 class MinkaFixedPointEstimator(Estimator):
     """
