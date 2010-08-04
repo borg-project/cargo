@@ -37,9 +37,9 @@ def test_finite_mixture():
         for i in xrange(1024):
             sample = mixture.random_variate(random = random)
 
-            if sample == [1.0]:
+            if sample == 1.0:
                 ones += 1
-            elif sample == [2.0]:
+            elif sample == 2.0:
                 twos += 1
             else:
                 assert_not_equal(sample, sample)
@@ -55,11 +55,9 @@ def test_finite_mixture():
         Test computation of log likelihood in a finite mixture.
         """
 
-        from math import log
-
-        assert_almost_equal(mixture.log_likelihood([1.0]), log(0.25))
-        assert_almost_equal(mixture.log_likelihood([2.0]), log(0.75))
-        assert_almost_equal(mixture.log_likelihood([42.0]), numpy.finfo(float).min)
+        assert_almost_equal(mixture.log_likelihood( 1.0), numpy.log(0.25))
+        assert_almost_equal(mixture.log_likelihood( 2.0), numpy.log(0.75))
+        assert_almost_equal(mixture.log_likelihood(42.0), numpy.finfo(float).min)
 
     yield test_log_likelihood
 
@@ -68,23 +66,26 @@ def assert_mixture_estimator_ok(estimator):
     Test estimation of finite mixture distributions.
     """
 
+    from cargo.log import get_logger
+    get_logger("cargo.statistics.mixture", level = "DEBUG")
+
     # generate some data
     from numpy.random                 import RandomState
     from cargo.statistics.multinomial import Multinomial
 
     random     = RandomState(42)
     components = [Multinomial([0.1, 0.9], 8), Multinomial([0.9, 0.1], 8)]
-    samples    = [components[0].random_variate(random = random) for i in xrange(250)]
-    samples   += [components[1].random_variate(random = random) for i in xrange(750)]
+    samples    = [components[0].random_variate(random) for i in xrange(250)]
+    samples   += [components[1].random_variate(random) for i in xrange(750)]
 
     # estimate the distribution from data
     import numpy
 
     from nose.tools import assert_almost_equal
 
-    mixture   = estimator.estimate([numpy.array(samples, numpy.uint)], random = random)
+    mixture   = estimator.estimate(samples, random = random)
     order     = numpy.argsort(mixture.pi)
-    estimated = mixture.components[0, order]
+    estimated = numpy.asarray(mixture.components)[order]
 
     assert_almost_equal(mixture.pi[order][0], 0.25, places = 2)
     assert_almost_equal(mixture.pi[order][1], 0.75, places = 2)

@@ -4,21 +4,20 @@
 
 import numpy
 
-from numpy                         import newaxis
-from cargo.log                     import get_logger
-from cargo.statistics._multinomial import multinomial_log_probability
-from cargo.statistics.distribution import Estimator
+from cargo.log             import get_logger
+from cargo.statistics.base import (
+    Estimator,
+    Distribution,
+    )
 
 log = get_logger(__name__)
 
-def smooth_multinomial_mixture(mixture):
+def smooth_multinomial_mixture(mixture, epsilon = 1e-3):
     """
     Apply a smoothing term to the multinomial mixture components.
     """
 
     log.info("heuristically smoothing a multinomial mixture")
-
-    epsilon = 1e-3
 
     for m in xrange(mixture.ndomains):
         for k in xrange(mixture.ncomponents):
@@ -26,9 +25,13 @@ def smooth_multinomial_mixture(mixture):
             beta                     /= numpy.sum(beta)
             mixture.components[m, k]  = Multinomial(beta)
 
-class Multinomial(object):
+class Multinomial(Distribution):
     """
     The multinomial distribution.
+
+    Relevant types:
+        - sample: D-shaped uint ndarray
+        - sequence: ND-shaped uint ndarray
     """
 
     def __init__(self, beta, norm = 1):
@@ -39,102 +42,77 @@ class Multinomial(object):
         """
 
         # initialization
-        self.__beta      = beta = numpy.asarray(beta)
-        self.__beta     /= numpy.sum(beta)
-        self.__log_beta  = numpy.nan_to_num(numpy.log(self.__beta))
-        self.__norm      = norm
+        self._beta     = numpy.asarray(beta)
+        self._log_beta = numpy.nan_to_num(numpy.log(self._beta))
+        self._norm     = norm
 
         # let's not let us be idiots
-        self.__beta.flags.writeable     = False
-        self.__log_beta.flags.writeable = False
+        self._beta.flags.writeable     = False
+        self._log_beta.flags.writeable = False
 
-    def random_variate(self, N = None, random = numpy.random):
+    def random_variate(self, random = numpy.random):
         """
         Return a sample from this distribution.
-
-        @param N: The L1 norm of the count vectors drawn.
         """
 
-        if N is None:
-            N = self.__norm
+        return random.multinomial(self._norm, self._beta).astype(numpy.uint)
 
-        return random.multinomial(N, self.__beta)
-
-    def random_variates(self, N, T):
+    def random_variates(self, size, random = numpy.random):
         """
         Return an array of samples from this distribution.
-
-        @param N: The L1 norm of the count vectors drawn.
-        @param T: The number of count vectors to draw.
         """
 
-        return numpy.random.multinomial(N, self.__beta, T)
+        return random.multinomial(self._norm, self._beta, size).astype(numpy.uint)
 
-    def log_likelihood(self, counts):
+    def log_likelihood(self, sample):
         """
-        Return the log likelihood of C{counts} under this distribution.
-        """
-
-        return multinomial_log_probability(self.__log_beta, counts)
-
-    def __get_shape(self):
-        """
-        Return the tuple of the dimensionalities of this distribution.
+        Return the log likelihood of C{sample} under this distribution.
         """
 
-        return self.__beta.shape
+        from cargo.statistics._multinomial import multinomial_log_probability
 
-    def __get_beta(self):
+        return multinomial_log_probability(self._log_beta, sample)
+
+    @property
+    def beta(self):
         """
         Return the multinomial parameter vector.
         """
 
-        return self.__beta
+        return self._beta
 
-    def __get_log_beta(self):
+    @property
+    def log_beta(self):
         """
         Return the multinomial log parameter vector.
         """
 
-        return self.__log_beta
-
-    # properties
-    shape    = property(__get_shape)
-    beta     = property(__get_beta)
-    log_beta = property(__get_log_beta)
-    mean     = beta
+        return self._log_beta
 
 class MultinomialEstimator(Estimator):
     """
     Estimate the parameters of a multinomial distribution.
-
-    Extended to allow sample weighting for expectation maximization in mixture models.
     """
 
-    def __init__(self):
+    def __init__(self, norm = 1):
         """
         Initialize.
         """
 
-    def estimate(self, counts, weights = None, verbose = False):
+        self._norm = norm
+
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated maximum likelihood distribution.
         """
 
-        weights   = numpy.ones(counts.shape[0]) if weights is None else weights
-        weighted  = counts * weights[:, newaxis]
-        mean      = numpy.sum(weighted, 0)
-        mean     /= numpy.sum(mean)
+        from numpy import newaxis
 
-        return Multinomial(mean)
+        if weights is None:
+            weights = numpy.ones(samples.shape[0])
 
-    def random_estimate(self, D):
-        """
-        Return a randomly-initialized distribution.
-        """
+        mean  = numpy.sum(samples * weights[:, newaxis], 0)
+        mean /= numpy.sum(mean)
 
-        beta  = numpy.random.random(D)
-        beta /= numpy.sum(beta)
-
-        return Multinomial(beta)
+        return Multinomial(mean, self._norm)
 

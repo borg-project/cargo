@@ -9,8 +9,8 @@ def test_constant():
 
     import numpy
 
-    from nose.tools                    import assert_equal
-    from cargo.statistics.distribution import Constant
+    from nose.tools                import assert_equal
+    from cargo.statistics.constant import Constant
 
     constant = Constant(42.0)
 

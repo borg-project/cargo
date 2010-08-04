@@ -4,19 +4,21 @@
 
 import numpy
 
-from numpy                      import newaxis
-from cargo.log                  import get_logger
-from cargo.statistics.base      import (
+from cargo.log             import get_logger
+from cargo.statistics.base import (
     Estimator,
     Distribution,
     )
-from cargo.statistics.functions import add_log
 
 log = get_logger(__name__)
 
 class FiniteMixture(Distribution):
     """
-    An arbitrary finite [linked] mixture distribution.
+    An arbitrary finite mixture distribution.
+
+    Relevant types:
+        - sample: arbitrary; sampled from a component
+        - sequence: list
     """
 
     def __init__(self, pi, components):
@@ -45,13 +47,13 @@ class FiniteMixture(Distribution):
         Return the log likelihood of C{sample} under this distribution.
         """
 
-        from itertools import izip
+        from itertools                  import izip
+        from cargo.statistics.functions import add_log
 
         total = numpy.finfo(float).min
 
         for (pi_k, component) in izip(self.pi, self.components):
-            total = add_log(total, numpy.log(pi_k))
-            total = add_log(total, component.log_likelihood(sample))
+            total = add_log(total, numpy.log(pi_k) + component.log_likelihood(sample))
 
         return total
 
@@ -71,152 +73,115 @@ class FiniteMixture(Distribution):
 
         return self._mixer.domain
 
-class EM_MixtureEstimator(object):
+class EM_MixtureEstimator(Estimator):
     """
-    Estimate the parameters of a finite [linked] mixture distribution using EM.
+    Estimate the parameters of a finite mixture distribution using EM.
     """
 
     def __init__(self, estimators):
         """
         Initialize.
 
-        @param estimators: A list of [lists of] estimators of the component distributions.
+        @param estimators: Estimators of the component distributions.
         """
 
-        # estimators
-        estimators_MK = numpy.asarray(estimators)
-
-        if estimators_MK.ndim == 1:
-            self.__estimators_MK = estimators_MK[newaxis, :]
-        elif estimators_MK.ndim == 2:
-            self.__estimators_MK = estimators_MK
-        else:
-            raise ArgumentError("estimator list must be one- or two-dimensional")
-
-        # other members
-        self.__max_i       = 32
-        self.__convergence = 1e-8
+        self._estimators  = estimators
+        self._iterations  = 32
+        self._convergence = 1e-8
 
     def estimate(self, samples, random = numpy.random):
         """
         Use EM to estimate mixture parameters.
         """
 
-        # mise en place
-        (M, K) = self.__estimators_MK.shape
-        float_finfo = numpy.finfo(numpy.float)
+        # generate random initial parameters
+        from cargo.random import grab
 
-        assert len(samples) == M
+        components = [e.estimate(grab(samples, random)) for e in self._estimators]
 
-        N = samples[0].shape[0]
-
-        for m in xrange(M):
-            assert samples[m].shape[0] == N
-
-        pi_K  = numpy.ones(K)
+        pi_K  = random.rand(len(self._estimators))
         pi_K /= numpy.sum(pi_K)
 
-        # generate random initial component parameterizations
-        components_MK = numpy.empty((M, K), numpy.object)
-
-        for k in xrange(K):
-            n = random.randint(N)
-
-            for m in xrange(M):
-                components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m][n:n + 1])
-
         # run EM until convergence
-        previous_r_NK = None
+        from numpy import newaxis
 
-        for i in xrange(self.__max_i):
-#             for k in xrange(K):
-#                 log.info("% 2s: %s (%.2f)", k, " ".join("%.2f" % c.beta[0] for c in components_MK[:, k]), pi_K[k])
+        last_r_NK = None
+        r_NK      = numpy.empty((len(samples), len(components)))
 
+        for i in xrange(self._iterations):
             # evaluate the responsibilities
-            r_NK = numpy.empty((N, K))
-
-            for k in xrange(K):
-                for n in xrange(N):
-                    r = pi_K[k]
-
-                    for m in xrange(M):
-#                        log.debug("%s", str(components_MK[m, k].alpha))
-
-                        r *= numpy.exp(components_MK[m, k].log_likelihood(samples[m][n]))
+            for (k, component) in enumerate(components):
+                for (n, sample) in enumerate(samples):
+                    r  = pi_K[k]
+                    r *= numpy.exp(component.log_likelihood(sample))
 
                     if r == 0.0:
-                        r_NK[n, k] = float_finfo.tiny
+                        r_NK[n, k] = numpy.finfo(numpy.float).tiny
                     else:
                         r_NK[n, k] = r
 
             r_NK /= numpy.sum(r_NK, 1)[:, newaxis]
 
             # find the maximum-likelihood estimates of components
-            for k in xrange(K):
-                for m in xrange(M):
-                    components_MK[m, k] = self.__estimators_MK[m, k].estimate(samples[m], weights = r_NK[:, k])
+            for (k, estimator) in enumerate(self._estimators):
+                components[k] = estimator.estimate(samples, random, r_NK[:, k])
 
             # find the maximum-likelihood pis
-            pi_K = numpy.sum(r_NK, 0) / N
+            pi_K = numpy.sum(r_NK, 0) / len(samples)
 
             # tracing
             log.debug(
                 "pi [%s] (com %.2f)",
                 " ".join("%.2f" % p for p in pi_K),
-                numpy.sum((numpy.arange(K) + 1) * pi_K),
+                numpy.sum((numpy.arange(len(components)) + 1) * pi_K),
                 )
 
             # termination?
-            if previous_r_NK is not None:
-                difference = numpy.sum(numpy.abs(r_NK - previous_r_NK))
+            if last_r_NK is None:
+                last_r_NK = numpy.empty((len(samples), len(components)))
+            else:
+                difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
 
-                if difference < self.__convergence:
-                    log.detail("difference in responsibilities is %e; converged", difference)
+                log.detail("delta_r = %e", difference)
 
+                if difference < self._convergence:
                     break
-                else:
-                    log.detail("difference in responsibilities is %e; not converged", difference)
 
-            previous_r_NK = r_NK
+            (last_r_NK, r_NK) = (r_NK, last_r_NK)
 
         # done
-        return FiniteMixture(pi_K, components_MK)
+        return FiniteMixture(pi_K, components)
 
-class RestartedEstimator(object):
+class RestartedEstimator(Estimator):
     """
     Make multiple estimates, and return the best.
     """
 
-    def __init__(self, estimator, nrestarts = 2):
+    def __init__(self, estimator, restarts = 2):
         """
         Initialize.
         """
 
         self._estimator = estimator
-        self._nrestarts = nrestarts
+        self._restarts  = restarts
 
     def estimate(self, samples, random = numpy.random):
         """
-        Make multiple estimates, and return the best.
+        Make multiple estimates, and return the apparent best.
         """
-
-        sane_samples = zip(*samples)
 
         best_ll       = None
         best_estimate = None
 
-        for i in xrange(self._nrestarts):
-            estimate = self._estimator.estimate(samples, random = random)
-            ll       = estimate.total_log_likelihood(sane_samples)
-
-            if best_ll is None:
-                log.info("l-l of estimate is %e", ll)
-            else:
-                log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
+        for i in xrange(self._restarts):
+            estimated = self._estimator.estimate(samples, random = random)
+            ll        = estimated.total_log_likelihood(samples)
 
             if best_ll is None or ll > best_ll:
                 best_ll       = ll
-                best_estimate = estimate
+                best_estimate = estimated
+
+            log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
 
         return best_estimate
 

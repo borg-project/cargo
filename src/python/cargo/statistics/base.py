@@ -50,7 +50,7 @@ class Estimator(ABC):
     """
 
     @abstractmethod
-    def estimate(self, samples, random = numpy.random):
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """

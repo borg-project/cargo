@@ -5,13 +5,7 @@
 import numpy
 import scipy
 
-from functools                     import partial
-from cargo.log                     import get_logger
-from cargo.statistics._dcm         import (
-    dcm_log_probability,
-    estimate_dcm_minka_fixed,
-    estimate_dcm_wallach_recurrence,
-    )
+from cargo.log             import get_logger
 from cargo.statistics.base import (
     Estimator,
     Distribution,
@@ -19,14 +13,13 @@ from cargo.statistics.base import (
 
 log = get_logger(__name__)
 
-def smooth_dcm_mixture(mixture):
+def smooth_dcm_mixture(mixture, epsilon = 1e-6):
     """
     Apply a smoothing term to the DCM mixture components.
     """
 
     # find the smallest non-zero dimension
     smallest = numpy.inf
-    epsilon  = 1e-6
 
     for components in mixture.components:
         for component in components:
@@ -46,65 +39,55 @@ def smooth_dcm_mixture(mixture):
 
 class DirichletCompoundMultinomial(Distribution):
     """
-    The Dirichlet Compound Multinomial (DCM) distribution.
+    The Dirichlet compound multinomial (DCM) distribution.
+
+    Relevant types:
+        - sample: D-shaped uint ndarray
+        - sequence: ND-shaped uint ndarray
     """
 
-    def __init__(self, alpha, renorm = True):
+    def __init__(self, alpha, norm):
         """
         Instantiate the distribution.
 
         @param alpha: The distribution parameter vector.
-        @param renorm: Ensure that the parameter vector has some minimum L1 norm?
+        @param norm:  The L1 norm of samples from this distribution.
         """
 
         # initialization
-        alpha = numpy.asarray(alpha)
-
-        if renorm and numpy.sum(alpha) < 1e-2:
-            self.__alpha = 1e-2 * (alpha / numpy.sum(alpha))
-        else:
-            self.__alpha = alpha
-
-        self.sum_alpha = numpy.sum(self.__alpha)
+        self._alpha = numpy.asarray(alpha)
+        self._norm  = norm
 
         # let's not let us be idiots
-        self.__alpha.flags.writeable = False
+        self._alpha.flags.writeable = False
 
-    def random_variate(self, N):
+    def random_variate(self, random = numpy.random):
         """
         Return a sample from this distribution.
-
-        @param N: The L1 norm of the count vectors drawn.
         """
 
-        beta = scipy.random.dirichlet(self.__alpha)
+        return random.multinomial(self._norm, random.dirichlet(self._alpha))
 
-        if numpy.sum(beta[:-1]) > 1.0:
-            beta /= numpy.sum(beta)
-
-        return scipy.random.multinomial(N, beta)
-
-    def random_variates(self, N, T):
+    def random_variates(self, size, random = numpy.random):
         """
         Return an array of samples from this distribution.
-
-        @param N: The L1 norm of the count vectors drawn.
-        @param T: The number of count vectors to draw.
         """
 
-        variates = numpy.empty((T,) + self.__alpha.shape)
+        variates = numpy.empty((size, self._alpha.size))
 
-        for t in xrange(T):
-            variates[t] = self.random_variate(N)
+        for i in xrange(size):
+            variates[i] = self.random_variate(random)
 
         return variates
 
-    def log_likelihood(self, counts):
+    def log_likelihood(self, sample):
         """
-        Return the log likelihood of C{counts} under this distribution.
+        Return the log likelihood of C{sample} under this distribution.
         """
 
-        return dcm_log_probability(self.sum_alpha, self._alpha, counts)
+        from cargo.statistics._dcm import dcm_log_probability
+
+        return dcm_log_probability(numpy.sum(self._alpha), self._alpha, sample)
 
     @property
     def alpha(self):
@@ -114,22 +97,6 @@ class DirichletCompoundMultinomial(Distribution):
 
         return self._alpha
 
-    @property
-    def mean(self):
-        """
-        Return the mean of the distribution.
-        """
-
-        return self._alpha / numpy.sum(self._alpha)
-
-    @property
-    def burstiness(self):
-        """
-        Return the "burstiness" of the distribution.
-        """
-
-        return numpy.sum(self._alpha)
-
 class MinkaFixedPointEstimator(Estimator):
     """
     Estimate the parameters of a DCM distribution using Minka's fixed point iteration.
@@ -137,26 +104,32 @@ class MinkaFixedPointEstimator(Estimator):
     Extended to allow sample weighting for expectation maximization in mixture models.
     """
 
-    def estimate(self, counts, weights = None, threshold = 1e-6, cutoff = 1e5):
+    def __init__(self, norm = 1, threshold = 1e-6, cutoff = 1e5):
+        """
+        Initialize.
+        """
+
+        self._norm      = norm
+        self._threshold = threshold
+        self._cutoff    = int(cutoff)
+
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated maximum likelihood distribution.
         """
-
-        # sanity
-        assert cutoff >= 1
 
         # parameters
         if weights is None:
             weights = numpy.ones(counts.shape[0])
         else:
-            weights = numpy.asarray(weights, dtype = numpy.float)
-
-        counts = numpy.asarray(counts, dtype = numpy.uint32)
+            weights = numpy.asarray(weights)
 
         # estimate
-        alpha = estimate_dcm_minka_fixed(counts, weights, threshold, int(cutoff))
+        from cargo.statistics._dcm import estimate_dcm_minka_fixed
 
-        return DirichletCompoundMultinomial(alpha)
+        alpha = estimate_dcm_minka_fixed(samples, weights, self._threshold, self._cutoff)
+
+        return DirichletCompoundMultinomial(alpha, self._norm)
 
 class WallachRecurrenceEstimator(Estimator):
     """
@@ -167,39 +140,38 @@ class WallachRecurrenceEstimator(Estimator):
     models.
     """
 
-    def estimate(self, counts, weights = None, threshold = 1e-5, cutoff = 1e3):
+    def __init__(self, norm = 1, threshold = 1e-5, cutoff = 1e3):
+        """
+        Initialize.
+        """
+
+        self._norm      = norm
+        self._threshold = threshold
+        self._cutoff    = int(cutoff)
+
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated maximum likelihood distribution.
         """
-
-        # sanity
-        assert cutoff >= 1
 
         # parameters
         if weights is None:
             weights = numpy.ones(counts.shape[0])
         else:
-            weights = numpy.asarray(weights, dtype = numpy.float)
+            weights = numpy.asarray(weights)
 
-        counts = numpy.asarray(counts, dtype = numpy.uint32)
+        # counts are available; estimate
+        from cargo.statistics._dcm import estimate_dcm_wallach_recurrence
 
-        # FIXME hackishly handle the zero-counts case
-        nonzero = numpy.sum(counts, 1) > 0
+        alpha = \
+            estimate_dcm_wallach_recurrence(
+                samples,
+                weights,
+                self._threshold,
+                self._cutoff,
+                )
 
-        if counts[nonzero].size == 0:
-            # no counts; be uninformative
-            return DirichletCompoundMultinomial(numpy.ones(counts.shape[1]) * 1e6)
-        else:
-            # counts are available; estimate
-            alpha = \
-                estimate_dcm_wallach_recurrence(
-                    counts[nonzero],
-                    weights[nonzero],
-                    threshold,
-                    int(cutoff),
-                    )
-
-            return DirichletCompoundMultinomial(alpha)
+        return DirichletCompoundMultinomial(alpha, self._norm)
 
 # select the "best" estimator
 DCM_Estimator = WallachRecurrenceEstimator

@@ -5,81 +5,97 @@
 import numpy
 import scipy
 
-from itertools                     import count
-from numpy                         import newaxis
-from scipy.special.basic           import psi
-from cargo.log                     import get_logger
-from cargo.statistics.dcm          import (
-    MinkaFixedPointEstimator,
-    WallachRecurrenceEstimator,
-    DirichletCompoundMultinomial,
-    )
-from cargo.statistics.distribution import Estimator
+from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-class VerifiedDCM(object):
+def test_dcm_random_variate():
     """
-    Reasonably-tested but slow implementation of the DCM distribution.
-    """
-
-    def __init__(self, alpha):
-        """
-        Instantiate the distribution.
-        """
-
-        self.alpha = numpy.asarray(alpha)
-
-    def random_variate(self, N):
-        """
-        Return a sample from this distribution.
-        """
-
-        beta = scipy.random.dirichlet(self.alpha)
-
-        if numpy.sum(beta[:-1]) > 1.0:
-            beta /= numpy.sum(beta)
-
-        return scipy.random.multinomial(N, beta)
-
-    def random_variates(self, N, T):
-        """
-        Return an array of samples from this distribution.
-        """
-
-        variates = numpy.empty((T,) + self.__alpha.shape)
-
-        for t in xrange(T):
-            variates[t] = self.random_variate(N)
-
-        return variates
-
-    def log_likelihood(self, bins):
-        """
-        Return the log likelihood of C{bins} under this distribution.
-        """
-
-        from cargo.statistics.functions import ln_poch
-
-        u_lnp = numpy.frompyfunc(ln_poch, 2, 1)
-        psigm = numpy.sum(u_lnp(self.alpha, bins))
-        clens = numpy.sum(bins)
-        alsum = numpy.sum(self.alpha)
-        nsigm = u_lnp(alsum, clens)
-
-        return numpy.sum(psigm - nsigm)
-
-class VerifiedMFP(Estimator):
-    """
-    Reasonably-tested but slow implementation of the Minka fixed-point estimator.
+    Test operations on the DCM distribution.
     """
 
-    def __alpha_new(self, alpha, counts, weights, total_weight):
+    from numpy.random         import RandomState
+    from cargo.statistics.dcm import DirichletCompoundMultinomial
+
+    random = RandomState(6995749)
+    dcm    = DirichletCompoundMultinomial([0.1, 1.0], 8)
+
+    def assert_samples_ok(samples):
+        """
+        Assert that the sample statistics appear reasonable.
+        """
+
+        from nose.tools import assert_almost_equal
+
+        mean = numpy.sum(samples, 0, float) / len(samples)
+
+        assert_almost_equal(mean[0], 0.724, places = 2)
+        assert_almost_equal(mean[1], 7.275, places = 2)
+
+    yield assert_samples_ok, numpy.array([dcm.random_variate(random) for _ in xrange(65536)])
+    yield assert_samples_ok, dcm.random_variates(65536, random)
+
+def verified_dcm_log_likelihood(alpha, bins):
+    """
+    Return the log likelihood of C{bins} under the DCM.
+    """
+
+    from cargo.statistics.functions import ln_poch
+
+    u_lnp = numpy.frompyfunc(ln_poch, 2, 1)
+    psigm = numpy.sum(u_lnp(alpha, bins))
+    clens = numpy.sum(bins)
+    alsum = numpy.sum(alpha)
+    nsigm = u_lnp(alsum, clens)
+
+    return numpy.sum(psigm - nsigm)
+
+def assert_log_likelihood_ok(alpha, sample, ll):
+    """
+    Assert that the specified log likelihood is correct.
+    """
+
+    from nose.tools import assert_almost_equal
+
+    assert_almost_equal(
+        ll,
+        verified_dcm_log_likelihood(alpha, sample),
+        )
+
+def test_dcm_log_likelihood():
+    """
+    Test log-likelihood computation under the DCM.
+    """
+
+    def test_inner(alpha, sample):
+        """
+        Test log-likelihood computation under the DCM.
+        """
+
+        from cargo.statistics.dcm import DirichletCompoundMultinomial
+
+        sample = numpy.asarray(sample, numpy.uint)
+        dcm    = DirichletCompoundMultinomial(alpha, numpy.sum(sample))
+
+        assert_log_likelihood_ok(alpha, sample, dcm.log_likelihood(sample))
+
+    yield test_inner, [0.1, 1.0], [1, 1]
+    yield test_inner, [0.1, 1.0], [2, 3]
+    yield test_inner, [0.1, 1.0], [8, 0]
+
+def verified_dcm_estimate(counts, weights, threshold, cutoff):
+    """
+    Return an estimated maximum likelihood distribution.
+    """
+
+    def alpha_new(alpha, counts, weights, total_weight):
         """
         Compute the next value in the fixed-point iteration.
         """
 
-        # vectorized
+        from numpy               import newaxis
+        from scipy.special.basic import psi
+
         N = counts.shape[0]
         clens = numpy.sum(counts, 1)
         alsum = numpy.sum(alpha)
@@ -88,98 +104,62 @@ class VerifiedMFP(Estimator):
 
         return alpha * numer / denom
 
-    def estimate(self, counts, weights = None, threshold = None, cutoff = None):
-        """
-        Return the estimated maximum likelihood distribution.
-        """
+    # massage the inputs
+    weights = numpy.asarray(weights, dtype = numpy.float)
+    counts  = numpy.asarray(counts, dtype  = numpy.uint)
+    alpha   = numpy.ones(counts.shape[1])
 
-        # sanity
-        assert cutoff >= 1
+    # set up the iteration and go
+    from itertools import count
 
-        # parameter normalization
-        if weights is None:
-            weights = numpy.ones(counts.shape[1])
-        else:
-            weights = numpy.asarray(weights, dtype = numpy.float)
+    total_weight = numpy.sum(weights)
 
-        counts = numpy.asarray(counts, dtype = numpy.uint)
-        alpha = numpy.ones(counts.shape[1])
+    for i in count(1):
+        old = alpha
+        alpha = alpha_new(old, counts, weights, total_weight)
+        difference = numpy.sum(numpy.abs(old - alpha))
+        alpha[alpha < 1e-16] = 1e-16
 
-        # set up the iteration and go
-        total_weight = numpy.sum(weights)
+        if difference < threshold or (cutoff is not None and i >= cutoff):
+            return alpha
 
-        for i in count(1):
-            old = alpha
-            alpha = self.__alpha_new(old, counts, weights, total_weight)
-            difference = numpy.sum(numpy.abs(old - alpha))
-            alpha[alpha < 1e-16] = 1e-16
-
-            if difference < threshold or (cutoff is not None and i >= cutoff):
-                return DirichletCompoundMultinomial(alpha)
-
-def test_dcm_log_likelihood():
-    """
-    Test DCM log-likelihood calculation.
-    """
-
-    # deterministic randomness
-    from numpy.random import RandomState
-
-    random = RandomState(6995749)
-
-    # generate some distributions
-    alphas    = [random.rand(8) * random.rand() * 128.0 for i in xrange(32)]
-    good_dcms = [VerifiedDCM(a) for a in alphas]
-    test_dcms = [DirichletCompoundMultinomial(a) for a in alphas]
-
-    # generate some count vectors
-    test_counts = [random.randint(64, size = 8).astype(numpy.uint) for i in xrange(32)]
-
-    # compare
-    from itertools  import product
-    from nose.tools import assert_equal
-
-    tests = product(zip(good_dcms, test_dcms), test_counts)
-
-    for ((good_dcm, test_dcm), counts) in tests:
-        assert_equal(test_dcm.log_likelihood(counts), good_dcm.log_likelihood(counts))
-
-def assert_good_estimator(estimator, counts, weights):
+def assert_estimator_ok(estimator, counts, weights):
     """
     Assert that the DCM estimator provides the verified result.
     """
 
-    # set up estimators
-    threshold = 1e-6
-    cutoff    = 1e4
-    verified  = VerifiedMFP()
+    from nose.tools   import assert_true
+    from numpy.random import RandomState
 
-    # generate estimates
-    verified_dcm  = verified.estimate(counts, weights = weights, threshold = threshold, cutoff = cutoff)
-    estimated_dcm = estimator.estimate(counts, weights = weights, threshold = threshold, cutoff = cutoff)
+    counts         = numpy.asarray(counts, numpy.uint)
+    verified_alpha = verified_dcm_estimate(counts, weights, 1e-6, 1e4)
+    estimated_dcm  = estimator.estimate(counts, RandomState(1), weights)
 
-    # compare estimates
-    assert numpy.allclose(verified_dcm.alpha, estimated_dcm.alpha)
+    assert_true(numpy.allclose(estimated_dcm.alpha, verified_alpha))
 
 def test_minka_fp_simple():
     """
     Test the Minka fixed-point estimator.
     """
 
-    estimator = MinkaFixedPointEstimator()
+    from cargo.statistics.dcm import MinkaFixedPointEstimator
 
-    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
-    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
-    yield (assert_good_estimator, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
+    estimator = MinkaFixedPointEstimator(threshold = 1e-6, cutoff = 1e4)
+
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0
+    yield assert_estimator_ok, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5]
 
 def test_wallach_recurrence_simple():
     """
     Test the Wallach digamma-recurrence estimator.
     """
 
-    estimator = WallachRecurrenceEstimator()
+    from cargo.statistics.dcm import WallachRecurrenceEstimator
 
-    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2))
-    yield (assert_good_estimator, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0)
-    yield (assert_good_estimator, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5])
+    estimator = WallachRecurrenceEstimator(threshold = 1e-6, cutoff = 1e4)
+
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0
+    yield assert_estimator_ok, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5]
 

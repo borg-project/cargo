@@ -15,8 +15,8 @@ class Discrete(Distribution):
     The discrete distribution.
 
     Relevant types:
-        - samples: int (outcome index)
-        - sample sequences: N-shaped uint ndarray
+        - sample: int (outcome index)
+        - sequence: N-shaped uint ndarray
     """
 
     def __init__(self, beta):
@@ -66,25 +66,30 @@ class DiscreteEstimator(Estimator):
 
         self._D = D
 
-    def estimate(self, samples, random = numpy.random):
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """
 
+        from itertools import izip
+
+        if weights is None:
+            weights = numpy.ones(len(samples))
+
         counts = numpy.zeros(self._D)
 
-        for k in samples:
-            counts[k] += 1
+        for (k, w) in izip(samples, weights):
+            counts[k] += w
 
-        return Discrete(counts / len(samples))
+        return Discrete(counts / numpy.sum(weights))
 
 class ObjectDiscrete(Distribution):
     """
     The discrete distribution over an arbitrary domain.
 
     Relevant types:
-        - samples: object
-        - sample sequences: list
+        - sample: object
+        - sequence: list
     """
 
     def __init__(self, beta, domain):

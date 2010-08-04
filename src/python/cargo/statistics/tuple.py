@@ -114,6 +114,14 @@ class TupleDistribution(Distribution):
 
         return sum(d.total_log_likelihood(s) for (d, s) in zipped)
 
+    @property
+    def inner(self):
+        """
+        Return the inner distributions.
+        """
+
+        return self._inner
+
 class TupleEstimator(Estimator):
     """
     A maximum-likelihood estimator of tuple distributions.
@@ -126,7 +134,7 @@ class TupleEstimator(Estimator):
 
         self._estimators = estimators
 
-    def estimate(self, samples, random = numpy.random):
+    def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """
@@ -138,5 +146,5 @@ class TupleEstimator(Estimator):
 
         zipped = izip(self._estimators, samples._sequences)
 
-        return TupleDistribution([e.estimate(s) for (e, s) in zipped])
+        return TupleDistribution([e.estimate(s, random, weights) for (e, s) in zipped])
 

@@ -51,3 +51,30 @@ def test_tuple_distribution():
 
     yield test_log_likelihood
 
+def test_tuple_estimator():
+    """
+    Test estimation of the tuple distribution.
+    """
+
+    import numpy
+
+    from nose.tools                import assert_almost_equal
+    from cargo.statistics.tuple    import TupleEstimator
+    from cargo.statistics.discrete import DiscreteEstimator
+
+    estimator = TupleEstimator((DiscreteEstimator(2), DiscreteEstimator(2)))
+    samples   = [(0, 1)] * 2500 + [(1, 0)] * 7500
+    estimated = estimator.estimate(samples)
+
+    assert_almost_equal(estimated.inner[0].beta[0], 0.25)
+    assert_almost_equal(estimated.inner[0].beta[1], 0.75)
+    assert_almost_equal(estimated.inner[1].beta[0], 0.75)
+    assert_almost_equal(estimated.inner[1].beta[1], 0.25)
+
+    estimated = estimator.estimate([(0, 1), (1, 0)], weights = numpy.array([0.25, 0.75]))
+
+    assert_almost_equal(estimated.inner[0].beta[0], 0.25)
+    assert_almost_equal(estimated.inner[0].beta[1], 0.75)
+    assert_almost_equal(estimated.inner[1].beta[0], 0.75)
+    assert_almost_equal(estimated.inner[1].beta[1], 0.25)
+

@@ -23,7 +23,7 @@ def test_multinomial():
         from nose.tools import assert_almost_equal
 
         lp = m.log_likelihood(numpy.array([1, 1], numpy.uint))
-        
+
         assert_almost_equal(numpy.exp(lp), 0.375)
 
         lp = m.log_likelihood(numpy.array([0, 2], numpy.uint))
@@ -33,24 +33,24 @@ def test_multinomial():
     yield test_log_probability
 
     # test sampling
-    def test_random_variate():
+    from numpy.random import RandomState
+
+    def assert_samples_ok(samples):
         """
         Test multinomial random variate generation.
         """
 
-        from nose.tools   import assert_almost_equal
-        from numpy.random import RandomState
+        from nose.tools import assert_almost_equal
 
-        random = RandomState(42)
-        totals = numpy.zeros(2, numpy.uint)
+        totals = numpy.sum(numpy.asarray(samples), 0, float)
 
-        for i in xrange(4096):
-            totals += m.random_variate(random = random)
+        assert_almost_equal(totals[0] / len(samples), 0.25, places = 2)
+        assert_almost_equal(totals[1] / len(samples), 0.75, places = 2)
 
-        assert_almost_equal(totals[0] / 4096.0, 0.25, places = 2)
-        assert_almost_equal(totals[1] / 4096.0, 0.75, places = 2)
+    random = RandomState(42)
 
-    yield test_random_variate
+    yield assert_samples_ok, [m.random_variate(random) for i in xrange(4096)]
+    yield assert_samples_ok, m.random_variates(32768, random)
 
 def test_multinomial_estimator():
     """
