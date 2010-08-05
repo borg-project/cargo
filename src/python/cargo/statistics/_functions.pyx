@@ -10,7 +10,7 @@ cpdef long double add_log(long double x, long double y):
     """
     Return log(x + y) given log(x) and log(y).
 
-    Sacrifices accuracy for sanity.
+    Sacrifices accuracy for (mildly eccentric) sanity.
     """
 
     if x == 0.0:

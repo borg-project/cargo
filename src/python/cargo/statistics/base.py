@@ -67,3 +67,19 @@ class Estimator(ABC):
         Return the estimated distribution.
         """
 
+    @staticmethod
+    def build(request):
+        """
+        Build an estimator as requested.
+        """
+
+        builders = {
+            "tuple"       : TupleEstimator.build,
+            "multinomial" : MultinomialEstimator.build,
+            "dcm"         : DCM_Estimator.build,
+            "mixture"     : EM_MixtureEstimator.build,
+            "restarted"   : RestartedEstimator.build,
+            }
+
+        return builders[request["type"]](request)
+

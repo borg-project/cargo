@@ -182,6 +182,19 @@ class WallachRecurrenceEstimator(Estimator):
 
         return DirichletCompoundMultinomial(alpha, self._norm)
 
+    @staticmethod
+    def build(request):
+        """
+        Build an estimator as requested.
+        """
+
+        return \
+            WallachRecurrenceEstimator(
+                request["norm"],
+                request["threshold"],
+                request["cutoff"],
+                )
+
 # select the "best" estimator
 DCM_Estimator = WallachRecurrenceEstimator
 

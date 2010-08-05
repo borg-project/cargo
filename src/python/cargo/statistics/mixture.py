@@ -97,7 +97,7 @@ class EM_MixtureEstimator(Estimator):
     Estimate the parameters of a finite mixture distribution using EM.
     """
 
-    def __init__(self, estimators):
+    def __init__(self, estimators, iterations = 32, convergence = 1e-8):
         """
         Initialize.
 
@@ -105,8 +105,8 @@ class EM_MixtureEstimator(Estimator):
         """
 
         self._estimators  = estimators
-        self._iterations  = 32
-        self._convergence = 1e-8
+        self._iterations  = iterations
+        self._convergence = convergence
 
     def estimate(self, samples, random = numpy.random, weights = None):
         """
@@ -114,7 +114,7 @@ class EM_MixtureEstimator(Estimator):
         """
 
         if weights is not None:
-            raise NotImplementedError("weighted samples not yet supported")
+            raise NotImplementedError("sample weighting not yet supported")
 
         # generate random initial parameters
         from cargo.random import grab
@@ -174,6 +174,19 @@ class EM_MixtureEstimator(Estimator):
         # done
         return FiniteMixture(pi_K, components)
 
+    @staticmethod
+    def build(request):
+        """
+        Build an estimator as requested.
+        """
+
+        return \
+            EM_MixtureEstimator(
+                map(Estimator.build, request["estimators"]),
+                request["iterations"],
+                request["convergence"],
+                )
+
 class RestartedEstimator(Estimator):
     """
     Make multiple estimates, and return the best.
@@ -206,4 +219,16 @@ class RestartedEstimator(Estimator):
             log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
 
         return best_estimate
+
+    @staticmethod
+    def build(request):
+        """
+        Build an estimator as requested.
+        """
+
+        return \
+            RestartedEstimator(
+                Estimator.build(request["estimator"]),
+                request["restarts"],
+                )
 
