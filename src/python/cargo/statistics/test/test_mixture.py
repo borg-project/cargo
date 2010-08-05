@@ -10,11 +10,11 @@ def test_finite_mixture():
     # build a simple finite mixture
     import numpy
 
-    from cargo.statistics.mixture      import FiniteMixture
-    from cargo.statistics.distribution import ConstantDistribution
+    from cargo.statistics.mixture  import FiniteMixture
+    from cargo.statistics.constant import Constant
 
-    one     = ConstantDistribution(1.0)
-    two     = ConstantDistribution(2.0)
+    one     = Constant(1.0)
+    two     = Constant(2.0)
     mixture = FiniteMixture([0.25, 0.75], [one, two])
 
     # test sampling
@@ -60,6 +60,19 @@ def test_finite_mixture():
         assert_almost_equal(mixture.log_likelihood(42.0), numpy.finfo(float).min)
 
     yield test_log_likelihood
+
+    # test conditional distribution computation
+    def test_given():
+        """
+        Test computation of a posterior finite mixture.
+        """
+
+        conditional = mixture.given([2.0])
+
+        assert_almost_equal(conditional.pi[0], 0.0)
+        assert_almost_equal(conditional.pi[1], 1.0)
+
+    yield test_given
 
 def assert_mixture_estimator_ok(estimator):
     """

@@ -57,6 +57,25 @@ class FiniteMixture(Distribution):
 
         return total
 
+    def given(self, samples):
+        """
+        Return the conditional distribution.
+        """
+
+        # generate the posterior mixture parameters
+        post_pi = numpy.copy(self.pi)
+
+        for k in xrange(post_pi.size):
+            post_pi[k] *= numpy.exp(self.components[k].total_log_likelihood(samples))
+
+        post_pi /= numpy.sum(post_pi)
+
+        # generate the posterior mixture components
+        post_components = [c.given(samples) for c in self.components]
+
+        # done
+        return FiniteMixture(post_pi, post_components)
+
     @property
     def pi(self):
         """

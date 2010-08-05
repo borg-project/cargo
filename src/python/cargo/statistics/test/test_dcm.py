@@ -83,6 +83,25 @@ def test_dcm_log_likelihood():
     yield test_inner, [0.1, 1.0], [2, 3]
     yield test_inner, [0.1, 1.0], [8, 0]
 
+def test_dcm_given():
+    """
+    Test computation of conditional DCM distributions.
+    """
+
+    from nose.tools           import assert_almost_equal
+    from cargo.statistics.dcm import DirichletCompoundMultinomial
+
+    dcm1 = DirichletCompoundMultinomial([1e-1, 1e0], 7)
+    dcm2 = DirichletCompoundMultinomial([1e2, 1e-6], 4)
+
+    conditional1 = dcm1.given([[0, 5], [1, 1]])
+    conditional2 = dcm2.given([[4, 0], [0, 0]])
+
+    assert_almost_equal(conditional1.alpha[0], 1e-1 + 1.0)
+    assert_almost_equal(conditional1.alpha[1], 1e0  + 6.0)
+    assert_almost_equal(conditional2.alpha[0], 1e2  + 4.0)
+    assert_almost_equal(conditional2.alpha[1], 1e-6 + 0.0)
+
 def verified_dcm_estimate(counts, weights, threshold, cutoff):
     """
     Return an estimated maximum likelihood distribution.

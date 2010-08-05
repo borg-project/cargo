@@ -73,6 +73,13 @@ class Multinomial(Distribution):
 
         return multinomial_log_probability(self._log_beta, sample)
 
+    def total_log_likelihood(self, samples):
+        """
+        Return the log likelihood of C{samples} under this distribution.
+        """
+
+        return self.log_likelihood(numpy.sum(samples, 0))
+
     @property
     def beta(self):
         """

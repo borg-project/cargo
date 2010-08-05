@@ -44,6 +44,18 @@ class Distribution(ABC):
 
         return sum(self.log_likelihood(s) for s in samples)
 
+    def given(self, samples):
+        """
+        Return a conditional distribution.
+
+        The meaning of "conditioned" depends on the distribution, but is
+        nontrivial only for hierarchical distributions: it assumes that future
+        samples will be drawn from the same leaf distribution as were past
+        samples.
+        """
+
+        return self
+
 class Estimator(ABC):
     """
     Interface to a maximum-likelihood estimator of distributions.

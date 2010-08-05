@@ -89,6 +89,15 @@ class DirichletCompoundMultinomial(Distribution):
 
         return dcm_log_probability(numpy.sum(self._alpha), self._alpha, sample)
 
+    def given(self, samples):
+        """
+        Return the conditional distribution.
+        """
+
+        samples = numpy.asarray(samples, numpy.uint)
+
+        return DirichletCompoundMultinomial(self._alpha + numpy.sum(samples, 0), self._norm)
+
     @property
     def alpha(self):
         """
