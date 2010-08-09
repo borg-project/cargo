@@ -310,3 +310,24 @@ def mkdtemp_scoped(*args, **kwargs):
         if path is not None:
             rmtree(path, ignore_errors = True)
 
+@contextmanager
+def env_restored(unset = []):
+    """
+    Create a temporary directory, with support for cleanup.
+    """
+
+    # preserve the current environment
+    from os import environ
+
+    old = environ.copy()
+
+    # arbitrarily modify it
+    for name in unset:
+        del environ[name]
+
+    yield
+
+    # then restore the preserved copy
+    environ.clear()
+    environ.update(old)
+
