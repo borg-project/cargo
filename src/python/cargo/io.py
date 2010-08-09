@@ -93,7 +93,7 @@ def files_under(path, pattern = "*"):
             if any(fnmatch(filename, p) for p in pattern):
                 yield os.path.join(dirpath, filename)
 
-def check_call_capturing(arguments, input = None):
+def check_call_capturing(arguments, input = None, preexec_fn = None):
     """
     Spawn a process and return its output.
     """
@@ -109,9 +109,10 @@ def check_call_capturing(arguments, input = None):
         popened = \
             Popen(
                 arguments,
-                stdin  = subprocess.PIPE,
-                stdout = subprocess.PIPE,
-                stderr = subprocess.PIPE,
+                stdin      = subprocess.PIPE,
+                stdout     = subprocess.PIPE,
+                stderr     = subprocess.PIPE,
+                preexec_fn = preexec_fn,
                 )
 
         # wait for its natural death
@@ -133,7 +134,22 @@ def check_call_capturing(arguments, input = None):
         else:
             from subprocess import CalledProcessError
 
-            raise CalledProcessError(popened.returncode, arguments)
+            error = CalledProcessError(popened.returncode, arguments)
+
+            error.stdout = stdout
+            error.stderr = stderr
+
+            raise error
+
+def unset_all(*args):
+    """
+    Unset every specified environment variable.
+    """
+
+    from os import environ
+
+    for name in args:
+        del environ[name]
 
 def guess_encoding(path):
     """
