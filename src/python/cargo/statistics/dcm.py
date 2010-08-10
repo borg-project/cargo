@@ -129,7 +129,7 @@ class MinkaFixedPointEstimator(Estimator):
 
         # parameters
         if weights is None:
-            weights = numpy.ones(counts.shape[0])
+            weights = numpy.ones(samples.shape[0])
         else:
             weights = numpy.asarray(weights)
 
@@ -165,7 +165,7 @@ class WallachRecurrenceEstimator(Estimator):
 
         # parameters
         if weights is None:
-            weights = numpy.ones(counts.shape[0])
+            weights = numpy.ones(samples.shape[0])
         else:
             weights = numpy.asarray(weights)
 

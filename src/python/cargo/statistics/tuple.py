@@ -23,12 +23,12 @@ class TupleSamples(Sequence):
         """
 
         # sanity
-        for i in xrange(len(sequences) - 1):
-            if not isinstance(sequences[i], Sequence):
-                raise TypeError("inner sequence is not a sequence")
+#         for i in xrange(len(sequences) - 1):
+#             if not isinstance(sequences[i], Sequence):
+#                 raise TypeError("inner sequence is not a sequence")
 
-            if len(sequences[i]) != len(sequences[i + 1]):
-                raise ValueError("sample sequence lengths are mismatched")
+#             if len(sequences[i]) != len(sequences[i + 1]):
+#                 raise ValueError("sample sequence lengths are mismatched")
 
         # members
         self._sequences = sequences

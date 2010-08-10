@@ -124,7 +124,11 @@ def verified_dcm_estimate(counts, weights, threshold, cutoff):
         return alpha * numer / denom
 
     # massage the inputs
-    weights = numpy.asarray(weights, dtype = numpy.float)
+    if weights is None:
+        weights = numpy.ones(counts.shape[0])
+    else:
+        weights = numpy.asarray(weights, dtype = numpy.float)
+
     counts  = numpy.asarray(counts, dtype  = numpy.uint)
     alpha   = numpy.ones(counts.shape[1])
 
@@ -142,7 +146,7 @@ def verified_dcm_estimate(counts, weights, threshold, cutoff):
         if difference < threshold or (cutoff is not None and i >= cutoff):
             return alpha
 
-def assert_estimator_ok(estimator, counts, weights):
+def assert_estimator_ok(estimator, counts, weights = None):
     """
     Assert that the DCM estimator provides the verified result.
     """
@@ -165,6 +169,7 @@ def test_minka_fp_simple():
 
     estimator = MinkaFixedPointEstimator(threshold = 1e-6, cutoff = 1e4)
 
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4))
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0
     yield assert_estimator_ok, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5]
@@ -178,6 +183,7 @@ def test_wallach_recurrence_simple():
 
     estimator = WallachRecurrenceEstimator(threshold = 1e-6, cutoff = 1e4)
 
+    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4))
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0
     yield assert_estimator_ok, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5]

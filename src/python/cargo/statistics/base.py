@@ -73,12 +73,20 @@ class Estimator(ABC):
         Build an estimator as requested.
         """
 
+        from cargo.statistics import (
+            DCM_Estimator,
+            TupleEstimator,
+            RestartedEstimator,
+            EM_MixtureEstimator,
+            MultinomialEstimator,
+            )
+
         builders = {
-            "tuple"       : TupleEstimator.build,
-            "multinomial" : MultinomialEstimator.build,
             "dcm"         : DCM_Estimator.build,
-            "mixture"     : EM_MixtureEstimator.build,
+            "tuple"       : TupleEstimator.build,
             "restarted"   : RestartedEstimator.build,
+            "mixture"     : EM_MixtureEstimator.build,
+            "multinomial" : MultinomialEstimator.build,
             }
 
         return builders[request["type"]](request)
