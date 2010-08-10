@@ -63,6 +63,28 @@ class TupleSamples(Sequence):
 
         return TupleSamples(zip(*samples))
 
+#class SparseTupleSample(object):
+    #"""
+    #Sparsely store a single sample from a tuple distribution.
+    #"""
+
+    #def __init__(self, indices, samples):
+        #"""
+        #Initialize.
+        #"""
+
+        #self._indices = indices
+        #self._samples = samples
+
+    #def _log_likelihood(self, distribution):
+        #"""
+        #Return the log likelihood of this sample under C{distribution}.
+        #"""
+
+        #from itertools import izip
+
+        #return sum(distribution._inner[i] for (i, s) in izip(self._indices, self._samples))
+
 class TupleDistribution(Distribution):
     """
     A tuple of independent distributions.

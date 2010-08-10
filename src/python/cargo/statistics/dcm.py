@@ -46,7 +46,7 @@ class DirichletCompoundMultinomial(Distribution):
         - sequence: ND-shaped uint ndarray
     """
 
-    def __init__(self, alpha, norm):
+    def __init__(self, alpha, norm = 1):
         """
         Instantiate the distribution.
 
