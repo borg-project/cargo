@@ -129,8 +129,8 @@ def verified_dcm_estimate(counts, weights, threshold, cutoff):
     else:
         weights = numpy.asarray(weights, dtype = numpy.float)
 
-    counts  = numpy.asarray(counts, dtype  = numpy.uint)
-    alpha   = numpy.ones(counts.shape[1])
+    counts = numpy.asarray(counts, dtype  = numpy.uint)
+    alpha  = numpy.ones(counts.shape[1])
 
     # set up the iteration and go
     from itertools import count
@@ -138,9 +138,9 @@ def verified_dcm_estimate(counts, weights, threshold, cutoff):
     total_weight = numpy.sum(weights)
 
     for i in count(1):
-        old = alpha
-        alpha = alpha_new(old, counts, weights, total_weight)
-        difference = numpy.sum(numpy.abs(old - alpha))
+        old                  = alpha
+        alpha                = alpha_new(old, counts, weights, total_weight)
+        difference           = numpy.sum(numpy.abs(old - alpha))
         alpha[alpha < 1e-16] = 1e-16
 
         if difference < threshold or (cutoff is not None and i >= cutoff):
