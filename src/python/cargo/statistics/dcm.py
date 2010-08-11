@@ -164,6 +164,8 @@ class WallachRecurrenceEstimator(Estimator):
         """
 
         # parameters
+        samples = numpy.asarray(samples, numpy.uint)
+
         if weights is None:
             weights = numpy.ones(samples.shape[0])
         else:

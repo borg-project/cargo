@@ -97,7 +97,7 @@ class EM_MixtureEstimator(Estimator):
     Estimate the parameters of a finite mixture distribution using EM.
     """
 
-    def __init__(self, estimators, iterations = 32, convergence = 1e-8):
+    def __init__(self, estimators, iterations = 128, convergence = 1e-8):
         """
         Initialize.
 
@@ -116,10 +116,12 @@ class EM_MixtureEstimator(Estimator):
         if weights is not None:
             raise NotImplementedError("sample weighting not yet supported")
 
+        log.detail("estimating finite mixture from %i samples" % len(samples))
+
         # generate random initial parameters
         from cargo.random import grab
 
-        components = [e.estimate(grab(samples, random)) for e in self._estimators]
+        components = [e.estimate([grab(samples, random)]) for e in self._estimators]
 
         pi_K  = random.rand(len(self._estimators))
         pi_K /= numpy.sum(pi_K)
@@ -164,10 +166,17 @@ class EM_MixtureEstimator(Estimator):
             else:
                 difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
 
-                log.detail("delta_r = %e", difference)
-
                 if difference < self._convergence:
+                    log.detail("converged with delta_r = %e", difference)
+
                     break
+                else:
+                    log.detail(
+                        "iteration %i < %i: %e to convergence",
+                        i,
+                        self._iterations,
+                        difference - self._convergence,
+                        )
 
             (last_r_NK, r_NK) = (r_NK, last_r_NK)
 

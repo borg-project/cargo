@@ -5,7 +5,31 @@
 import numpy
 
 from abc         import abstractmethod
+from collections import Sequence
 from cargo.sugar import ABC
+
+def set_up_gsl():
+    """
+    Set up the GSL.
+    """
+
+    from cargo.statistics._dcm import disable_gsl_error_handler
+
+    disable_gsl_error_handler()
+
+set_up_gsl()
+
+class SampleSequence(ABC):
+    """
+    Interface to a sequence of samples.
+
+    Does not provide methods beyond that of Sequence; its purpose is to tie in
+    additional supported types that also provide the Sequence interface, such
+    as numpy.ndarray.
+    """
+
+SampleSequence.register(Sequence)
+SampleSequence.register(numpy.ndarray)
 
 class Distribution(ABC):
     """

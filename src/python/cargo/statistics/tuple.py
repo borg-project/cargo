@@ -4,13 +4,13 @@
 
 import numpy
 
-from collections           import Sequence
 from cargo.statistics.base import (
     Estimator,
     Distribution,
+    SampleSequence,
     )
 
-class TupleSamples(Sequence):
+class TupleSamples(SampleSequence):
     """
     Store samples from a tuple distribution.
     """
@@ -23,12 +23,12 @@ class TupleSamples(Sequence):
         """
 
         # sanity
-#         for i in xrange(len(sequences) - 1):
-#             if not isinstance(sequences[i], Sequence):
-#                 raise TypeError("inner sequence is not a sequence")
+        for i in xrange(len(sequences) - 1):
+            if not isinstance(sequences[i], SampleSequence):
+                raise TypeError("inner sequence is not an array or sequence")
 
-#             if len(sequences[i]) != len(sequences[i + 1]):
-#                 raise ValueError("sample sequence lengths are mismatched")
+            if len(sequences[i]) != len(sequences[i + 1]):
+                raise ValueError("sample sequence lengths are mismatched")
 
         # members
         self._sequences = sequences
@@ -45,8 +45,10 @@ class TupleSamples(Sequence):
         Return an iterator over the stored samples.
         """
 
-        for i in xrange(len(self)):
-            yield self[i]
+        from itertools import izip
+
+        for sample in izip(*self._sequences):
+            yield sample
 
     def __getitem__(self, index):
         """
@@ -55,6 +57,20 @@ class TupleSamples(Sequence):
 
         return tuple(s[index] for s in self._sequences)
 
+    def __str__(self):
+        """
+        Return a string description of this sequence.
+        """
+
+        return str(list(self))
+
+    def __repr__(self):
+        """
+        Return a string representation of this sequence.
+        """
+
+        return repr(list(self))
+
     @staticmethod
     def from_sequence(samples):
         """
@@ -62,28 +78,6 @@ class TupleSamples(Sequence):
         """
 
         return TupleSamples(zip(*samples))
-
-#class SparseTupleSample(object):
-    #"""
-    #Sparsely store a single sample from a tuple distribution.
-    #"""
-
-    #def __init__(self, indices, samples):
-        #"""
-        #Initialize.
-        #"""
-
-        #self._indices = indices
-        #self._samples = samples
-
-    #def _log_likelihood(self, distribution):
-        #"""
-        #Return the log likelihood of this sample under C{distribution}.
-        #"""
-
-        #from itertools import izip
-
-        #return sum(distribution._inner[i] for (i, s) in izip(self._indices, self._samples))
 
 class TupleDistribution(Distribution):
     """
@@ -118,6 +112,9 @@ class TupleDistribution(Distribution):
         Return the log likelihood of C{sample} under this distribution.
         """
 
+        if len(sample) != len(self._inner):
+            raise ValueError("sample and distribution width do not match")
+
         from itertools import izip
 
         return sum(d.log_likelihood(s) for (d, s) in izip(self._inner, sample))
@@ -129,6 +126,9 @@ class TupleDistribution(Distribution):
 
         if not isinstance(samples, TupleSamples):
             samples = TupleSamples.from_sequence(samples)
+
+        if len(samples._sequences) != len(self._inner):
+            raise ValueError("samples and distribution width do not match")
 
         from itertools import izip
 
@@ -163,6 +163,15 @@ class TupleEstimator(Estimator):
 
         if not isinstance(samples, TupleSamples):
             samples = TupleSamples.from_sequence(samples)
+
+        if len(samples._sequences) != len(self._estimators):
+            raise \
+                ValueError(
+                    "samples width %i does not match estimators count %i" % (
+                        len(samples._sequences),
+                        len(self._estimators),
+                        ),
+                    )
 
         from itertools import izip
 

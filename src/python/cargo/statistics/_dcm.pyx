@@ -9,8 +9,8 @@ cdef extern from "float.h":
     double DBL_MIN
 
 cdef extern from "math.h":
-    double fabs(double)
-    int isfinite(double)
+    double fabs    (double)
+    int    isfinite(double)
 
 cdef extern from "stdlib.h":
     ctypedef unsigned long size_t
@@ -19,9 +19,12 @@ cdef extern from "stdlib.h":
     void  free  (void* ptr)
 
 cdef extern from "gsl/gsl_errno.h":
+    ctypedef struct gsl_error_handler_t
+
     int GSL_SUCCESS
 
-    char* gsl_strerror(int gsl_errno)
+    char*                gsl_strerror             (int gsl_errno)
+    gsl_error_handler_t* gsl_set_error_handler_off()
 
 cdef extern from "gsl/gsl_sf_result.h":
     ctypedef struct gsl_sf_result:
@@ -29,11 +32,17 @@ cdef extern from "gsl/gsl_sf_result.h":
         double err
 
 cdef extern from "gsl/gsl_sf.h":
-    int gsl_sf_lnpoch_e(double a, double x, gsl_sf_result* result)
-    double gsl_sf_lnpoch(double a, double x)
-    double gsl_sf_psi(double x)
+    int    gsl_sf_lnpoch_e(double a, double x, gsl_sf_result* result)
+    double gsl_sf_psi     (double x)
 
-cpdef double ln_poch(double a, double x):
+def disable_gsl_error_handler():
+    """
+    Disable the GSL's error handler, which aborts by default.
+    """
+
+    gsl_set_error_handler_off()
+
+cpdef double ln_poch(double a, double x) except? -1:
     """
     Compute the natural log of the Pochhammer function.
     """
@@ -41,12 +50,12 @@ cpdef double ln_poch(double a, double x):
     cdef gsl_sf_result result
     cdef int           status = gsl_sf_lnpoch_e(a, x, &result)
 
-    if status != GSL_SUCCESS:
-        raise RuntimeError("%s (a = %f; x = %f)" % (gsl_strerror(status), a, x))
+    if status == GSL_SUCCESS:
+        return result.val
+    else:
+        raise ValueError("%s (a = %f; x = %f)" % (gsl_strerror(status), a, x))
 
         return -1
-
-    return result.val
 
 def dcm_log_probability(
     double                                sum_alpha,
