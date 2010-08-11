@@ -27,7 +27,6 @@ from uuid         import (
 from shutil       import (
     copy2,
     )
-from fnmatch      import fnmatch
 from tempfile     import (
     gettempdir,
     )
@@ -81,17 +80,36 @@ def files_under(path, pattern = "*"):
     """
     Iterate over the set of paths to files in the specified directory tree.
 
-    @param path: Specified path.
+    @param path:    Specified path.
     @param pattern: Optional filter pattern(s).
     """
 
-    if isinstance(pattern, str):
-        pattern = [str]
+    # walk the directory tree
+    from os      import walk
+    from os.path import (
+        join,
+        isfile,
+        )
 
-    for (dirpath, dirnames, filenames) in os.walk(path):
-        for filename in filenames:
-            if any(fnmatch(filename, p) for p in pattern):
-                yield os.path.join(dirpath, filename)
+    if isfile(path):
+        walked = [path]
+    else:
+        def walk_path():
+            for (p, _, f) in walk(path):
+                for n in f:
+                    yield join(p, n)
+
+        walked = walk_path()
+
+    # filter names
+    from fnmatch import fnmatch
+
+    if isinstance(pattern, str):
+        pattern = [pattern]
+
+    for name in walked:
+        if any(fnmatch(name, p) for p in pattern):
+            yield name
 
 def check_call_capturing(arguments, input = None, preexec_fn = None):
     """
