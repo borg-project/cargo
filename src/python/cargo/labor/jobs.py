@@ -1,8 +1,4 @@
 """
-cargo/labor/work.py
-
-Units of work.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -82,7 +78,10 @@ class Jobs(Job):
         """
 
         for job in self.jobs:
-            job.run_with_fixture()
+            if isinstance(job, Job):
+                job.run_with_fixture()
+            else:
+                job[0](*job[1:])
 
 class CallableJob(Job):
     """

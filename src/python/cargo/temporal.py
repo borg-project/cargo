@@ -24,6 +24,14 @@ class TimeDelta(timedelta):
     """
 
     @staticmethod
+    def from_seconds(seconds):
+        """
+        Return a TimeDelta from a timedelta.
+        """
+
+        return TimeDelta(seconds = seconds)
+
+    @staticmethod
     def from_timedelta(delta):
         """
         Return a TimeDelta from a timedelta.

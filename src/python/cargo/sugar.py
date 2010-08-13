@@ -32,29 +32,32 @@ class Curried(object):
     A simple pickleable partially-applied callable.
     """
 
-    def __init__(self, callable, **kwargs):
+    def __init__(self, callable, *args, **kwargs):
         """
         Initialize.
         """
 
         self.callable = callable
+        self.args     = args
         self.kwargs   = kwargs
 
-    def __call__(self, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Call the callable.
         """
 
-        self.kwargs.update(kwargs)
+        keyword = self.kwargs.copy()
 
-        return self.callable(**self.kwargs)
+        keyword.update(kwargs)
 
-def curry(callable, **kwargs):
+        return self.callable(*(self.args + args), **keyword)
+
+def curry(callable, *args, **kwargs):
     """
     Very simple pickleable partial function application.
     """
 
-    return Curried(callable, **kwargs)
+    return Curried(callable, *args, **kwargs)
 
 class ABC(object):
     """

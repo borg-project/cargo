@@ -19,6 +19,15 @@ def chunk(sequence, size):
     for (_, pairs) in groupby(enumerate(sequence), lambda (i, _): i / size):
         yield (v for (_, v) in pairs)
 
+def divide(items, fraction = 0.5):
+    """
+    Split a sequence into two.
+    """
+
+    size = int(round(fraction * len(items)))
+
+    return (items[:size], items[size:])
+
 def shuffled(sequence, random = numpy.random):
     """
     Return an array copy of the sequence in random order.

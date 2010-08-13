@@ -179,11 +179,3 @@ class TupleEstimator(Estimator):
 
         return TupleDistribution([e.estimate(s, random, weights) for (e, s) in zipped])
 
-    @staticmethod
-    def build(request):
-        """
-        Build a tuple-distribution estimator as requested.
-        """
-
-        return TupleEstimator(map(Estimator.build, request["estimators"]))
-
