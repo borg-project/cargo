@@ -113,12 +113,16 @@ class MultinomialEstimator(Estimator):
         Return the estimated maximum likelihood distribution.
         """
 
-        from numpy import newaxis
+        # parameters
+        samples = numpy.asarray(samples)
 
         if weights is None:
             weights = numpy.ones(samples.shape[0])
+        else:
+            weights = numpy.asarray(weights)
 
-        mean  = numpy.sum(samples * weights[:, newaxis], 0)
+        # estimate
+        mean  = numpy.sum(samples * weights[:, None], 0)
         mean /= numpy.sum(mean)
 
         return Multinomial(mean, self._norm)
