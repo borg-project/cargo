@@ -123,11 +123,3 @@ class MultinomialEstimator(Estimator):
 
         return Multinomial(mean, self._norm)
 
-    @staticmethod
-    def build(request):
-        """
-        Build a multinomial estimator as requested.
-        """
-
-        return MultinomialEstimator(request["norm"])
-

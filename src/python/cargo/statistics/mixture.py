@@ -183,19 +183,6 @@ class EM_MixtureEstimator(Estimator):
         # done
         return FiniteMixture(pi_K, components)
 
-    @staticmethod
-    def build(request):
-        """
-        Build an estimator as requested.
-        """
-
-        return \
-            EM_MixtureEstimator(
-                map(Estimator.build, request["estimators"]),
-                request["iterations"],
-                request["convergence"],
-                )
-
 class RestartedEstimator(Estimator):
     """
     Make multiple estimates, and return the best.
@@ -228,16 +215,4 @@ class RestartedEstimator(Estimator):
             log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
 
         return best_estimate
-
-    @staticmethod
-    def build(request):
-        """
-        Build an estimator as requested.
-        """
-
-        return \
-            RestartedEstimator(
-                Estimator.build(request["estimator"]),
-                request["restarts"],
-                )
 

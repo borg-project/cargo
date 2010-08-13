@@ -91,27 +91,3 @@ class Estimator(ABC):
         Return the estimated distribution.
         """
 
-    @staticmethod
-    def build(request):
-        """
-        Build an estimator as requested.
-        """
-
-        from cargo.statistics import (
-            DCM_Estimator,
-            TupleEstimator,
-            RestartedEstimator,
-            EM_MixtureEstimator,
-            MultinomialEstimator,
-            )
-
-        builders = {
-            "dcm"         : DCM_Estimator.build,
-            "tuple"       : TupleEstimator.build,
-            "restarted"   : RestartedEstimator.build,
-            "mixture"     : EM_MixtureEstimator.build,
-            "multinomial" : MultinomialEstimator.build,
-            }
-
-        return builders[request["type"]](request)
-
