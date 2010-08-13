@@ -106,12 +106,24 @@ class CondorWorkerRecord(WorkerRecord):
     cluster = Column(Integer)
     process = Column(Integer)
 
-def outsource_or_run(jobs, name = None, flags = module_flags.given):
+def outsource_or_run(raw_jobs, name = None, flags = module_flags.given):
     """
     Outsource or run a set of jobs based on flags.
     """
 
-    jobs    = list(jobs)
+    def filter_jobs():
+        from cargo.labor.jobs import (
+            Job,
+            CallableJob,
+            )
+
+        for job in raw_jobs:
+            if isinstance(job, Job):
+                yield job
+            else:
+                yield CallableJob(job[0], *job[1:])
+
+    jobs    = list(filter_jobs())
     Session = make_session()
 
     if flags.outsource_jobs:
