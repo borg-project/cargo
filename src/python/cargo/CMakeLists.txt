@@ -24,6 +24,7 @@ install(
 # descend
 #
 
+add_subdirectory(_files)
 add_subdirectory(labor)
 add_subdirectory(sql)
 add_subdirectory(statistics)

@@ -111,9 +111,9 @@ def files_under(path, pattern = "*"):
         if any(fnmatch(name, p) for p in pattern):
             yield name
 
-def check_call_capturing(arguments, input = None, preexec_fn = None):
+def call_capturing(arguments, input = None, preexec_fn = None):
     """
-    Spawn a process and return its output.
+    Spawn a process and return its output and status code.
     """
 
     popened = None
@@ -147,17 +147,26 @@ def check_call_capturing(arguments, input = None, preexec_fn = None):
 
         raised.re_raise()
     else:
-        if popened.returncode == 0:
-            return (stdout, stderr)
-        else:
-            from subprocess import CalledProcessError
+        return (stdout, stderr, popened.returncode)
 
-            error = CalledProcessError(popened.returncode, arguments)
+def check_call_capturing(arguments, input = None, preexec_fn = None):
+    """
+    Spawn a process and return its output.
+    """
 
-            error.stdout = stdout
-            error.stderr = stderr
+    (stdout, stderr, code) = call_capturing(arguments, input, preexec_fn)
 
-            raise error
+    if code == 0:
+        return (stdout, stderr)
+    else:
+        from subprocess import CalledProcessError
+
+        error = CalledProcessError(code, arguments)
+
+        error.stdout = stdout
+        error.stderr = stderr
+
+        raise error
 
 def unset_all(*args):
     """

@@ -7,7 +7,9 @@ cargo/test/io.py
 from nose.tools import (
     eq_,
     timed,
+    raises,
     )
+from subprocess import CalledProcessError
 
 @timed(4)
 def test_unxz():
@@ -73,4 +75,64 @@ def test_files_under():
 
         assert_equal(list(files_under(files[0])),       files[:1])
         assert_equal(list(files_under(directories[0])), [])
+
+def test_call_capturing():
+    """
+    Test subprocess execution with output captured.
+    """
+
+    from nose.tools import assert_equal
+    from cargo      import get_support_path
+    from cargo.io   import call_capturing
+
+    (stdout, stderr, code) = \
+        call_capturing(
+            [
+                get_support_path("for_tests/echo_and_exit"),
+                "foo bar baz",
+                "42",
+                ]
+            )
+
+    assert_equal(stdout, "foo bar baz\n")
+    assert_equal(stderr, "")
+    assert_equal(code, 42)
+
+def test_check_call_capturing_zero():
+    """
+    Test checked-and-capturing execution of a non-failing subprocess.
+    """
+
+    from nose.tools import assert_equal
+    from cargo      import get_support_path
+    from cargo.io   import check_call_capturing
+
+    (stdout, stderr) = \
+        check_call_capturing(
+            [
+                get_support_path("for_tests/echo_and_exit"),
+                "foo bar baz",
+                "0",
+                ]
+            )
+
+    assert_equal(stdout, "foo bar baz\n")
+    assert_equal(stderr, "")
+
+@raises(CalledProcessError)
+def test_check_call_capturing_nonzero():
+    """
+    Test checked-and-capturing execution of a failing subprocess.
+    """
+
+    from cargo      import get_support_path
+    from cargo.io   import check_call_capturing
+
+    check_call_capturing(
+        [
+            get_support_path("for_tests/echo_and_exit"),
+            "foo bar baz",
+            "42",
+            ]
+        )
 
