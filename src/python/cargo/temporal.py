@@ -1,8 +1,4 @@
 """
-cargo/temporal.py
-
-Code relating to time.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -17,6 +13,13 @@ def utc_now():
     """
 
     return pytz.utc.localize(datetime.datetime.utcnow())
+
+def seconds(value):
+    """
+    Conveniently construct TimeDelta(seconds = ...).
+    """
+
+    return TimeDelta(seconds = value)
 
 class TimeDelta(timedelta):
     """
