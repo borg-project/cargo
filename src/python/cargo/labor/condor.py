@@ -202,6 +202,8 @@ class CondorSubmission(object):
         # write the general condor section
         import sys
 
+        from os import environ
+
         submit.write_header("condor configuration")
         submit.write_blank()
         submit.write_pairs_dict({
@@ -218,17 +220,17 @@ class CondorSubmission(object):
             Error        = "condor.err",
             Output       = "condor.out",
             Input        = "/dev/null",
-            Executable   = sys.executable,
+            Executable   = environ.get("SHELL"),
             )
         submit.write_blank()
         submit.write_environment(
             CONDOR_CLUSTER  = "$(Cluster)",
             CONDOR_PROCESS  = "$(Process)",
-            PATH            = os.environ.get("PATH", ""),
-            PYTHONPATH      = os.environ.get("PYTHONPATH", ""),
-            LD_LIBRARY_PATH = os.environ.get("LD_LIBRARY_PATH", ""),
+            PATH            = environ.get("PATH", ""),
+            PYTHONPATH      = environ.get("PYTHONPATH", ""),
+            LD_LIBRARY_PATH = environ.get("LD_LIBRARY_PATH", ""),
             )
-        submit.write_blank(2)
+        submit.write_blank()
 
         # write the jobs section
         submit.write_header("condor jobs")
@@ -236,7 +238,8 @@ class CondorSubmission(object):
 
         for worker in self.workers:
             arguments   = \
-                "-m cargo.labor.worker --labor-database %s --worker-uuid %s" % (
+                '-c \'%s ""$0"" $@\' -m cargo.labor.worker --labor-database %s --worker-uuid %s' % (
+                    sys.executable,
                     worker.database,
                     str(worker.uuid),
                     )
@@ -246,7 +249,7 @@ class CondorSubmission(object):
 
             submit.write_pairs(
                 Initialdir = worker.working,
-                Arguments  = arguments,
+                Arguments  = '"%s"' % arguments,
                 )
             submit.write_queue(1)
             submit.write_blank()
