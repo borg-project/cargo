@@ -249,6 +249,8 @@ def enable_console(level = logging.NOTSET, verbose = True):
     Enable typical logging to the console.
     """
 
+    logging.root.setLevel(logging.NOTSET) # FIXME should use flag
+
     import datetime
 
     handler = StreamHandler(sys.stdout)
@@ -266,6 +268,8 @@ def enable_console(level = logging.NOTSET, verbose = True):
     log.debug("enabled logging to stdout at %s", datetime.datetime.today().isoformat())
 
     return handler
+
+enable_console_log = enable_console
 
 def enable_disk(prefix = None, level = logging.NOTSET):
     """
@@ -300,7 +304,6 @@ def enable_disk(prefix = None, level = logging.NOTSET):
 
     return handler
 
-# enable logging by default
 @run_once
 def enable_default_logging(add_handlers = True):
     # by default, be moderately verbose
