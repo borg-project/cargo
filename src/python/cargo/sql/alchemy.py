@@ -44,6 +44,34 @@ log = get_logger(__name__)
 
 assert sqlalchemy.__version__ >= "0.6.0"
 
+def normalize_url(raw):
+    """
+    Build a URL from a string according to obvious rules.
+
+    Converts *.sqlite paths to sqlite:/// URLs, etc.
+
+    >>> str(normalize_url("/tmp/foo.sqlite"))
+    'sqlite:////tmp/foo.sqlite'
+    >>> str(normalize_url("postgresql://user@host/database"))
+    'postgresql://user@host/database'
+    """
+
+    from sqlalchemy.engine.url import make_url
+    from sqlalchemy.exceptions import ArgumentError
+
+    try:
+        return make_url(raw)
+    except ArgumentError:
+        from os.path import (
+            abspath,
+            splitext,
+            )
+
+        (root, extension) = splitext(raw)
+
+        if extension == ".sqlite":
+            return make_url("sqlite:///%s" % abspath(raw))
+
 def column(name, type = None):
     """
     Return a text-named column, with optional typemap, for use in SQL generation.
