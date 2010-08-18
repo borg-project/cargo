@@ -19,12 +19,13 @@ def test_utc_now():
 
 def test_seconds():
     """
-    Test convenient TimeDelta construction.
+    Test timedelta conversion to seconds.
     """
 
+    from datetime       import timedelta
     from nose.tools     import assert_almost_equal
     from cargo.temporal import seconds
 
-    assert_almost_equal(seconds(5.2).seconds, 5)
-    assert_almost_equal(seconds(5.2).microseconds, 2e5)
+    assert_almost_equal(seconds(timedelta(seconds = 5.0)), 5.0)
+    assert_almost_equal(seconds(timedelta(seconds = 5.2)), 5.2)
 

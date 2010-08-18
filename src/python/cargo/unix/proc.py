@@ -6,8 +6,6 @@ import os
 import re
 import sys
 
-from cargo.temporal import TimeDelta
-
 class ProcFileParseError(RuntimeError):
     """
     A file in /proc could not be parsed.
@@ -134,7 +132,9 @@ class ProcessStat(object):
         Convert kernel clock ticks to a Python timedelta value.
         """
 
-        return TimeDelta(seconds = float(ticks) / self.__ticks_per_second)
+        from datetime import timedelta
+
+        return timedelta(seconds = float(ticks) / self.__ticks_per_second)
 
     # expose the relevant fields
     pid                 = property(lambda self: int(self.__d["pid"]))

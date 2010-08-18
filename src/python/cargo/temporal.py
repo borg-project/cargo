@@ -2,56 +2,51 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import datetime
-import pytz
+from datetime import tzinfo
 
-from datetime import timedelta
+class UTC(tzinfo):
+    """
+    The one true time zone.
+    """
+
+    def utcoffset(self, dt):
+        """
+        Return the offset to UTC.
+        """
+
+        from datetime import timedelta
+
+        return timedelta(0)
+
+    def tzname(self, dt):
+        """
+        Return the time zone name.
+        """
+
+        return "UTC"
+
+    def dst(self, dt):
+        """
+        Return the DST offset.
+        """
+
+        from datetime import timedelta
+
+        return timedelta(0)
 
 def utc_now():
     """
     Return a non-naive UTC datetime instance, zoned pytz.utc.
     """
 
-    return pytz.utc.localize(datetime.datetime.utcnow())
+    from datetime import datetime as DateTime
+
+    return DateTime.now(UTC())
 
 def seconds(value):
     """
-    Conveniently construct TimeDelta(seconds = ...).
+    Return the equivalent number of seconds, floating-point.
     """
 
-    return TimeDelta(seconds = value)
-
-class TimeDelta(timedelta):
-    """
-    Wrap datetime.timedelta with a few convenience methods.
-    """
-
-    @staticmethod
-    def from_seconds(seconds):
-        """
-        Return a TimeDelta from a timedelta.
-        """
-
-        return TimeDelta(seconds = seconds)
-
-    @staticmethod
-    def from_timedelta(delta):
-        """
-        Return a TimeDelta from a timedelta.
-        """
-
-        return \
-            TimeDelta(
-                days         = delta.days,
-                seconds      = delta.seconds,
-                microseconds = delta.microseconds,
-                )
-
-    @property
-    def as_s(self):
-        """
-        Return the equivalent number of seconds, floating-point.
-        """
-
-        return self.days * 86400.0 + self.seconds + self.microseconds / 1E6
+    return value.days * 8.64e4 + value.seconds + value.microseconds / 1e6
 

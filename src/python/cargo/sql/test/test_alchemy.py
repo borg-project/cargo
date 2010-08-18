@@ -63,7 +63,6 @@ def test_sql_timedelta_type(engine):
     from datetime       import timedelta
     from contextlib     import closing
     from sqlalchemy.orm import sessionmaker
-    from cargo.temporal import TimeDelta
 
     Session = sessionmaker(bind = engine)
 
@@ -72,8 +71,6 @@ def test_sql_timedelta_type(engine):
             DeltaRow(id = 0, delta = 6.3),
             DeltaRow(id = 1, delta = 1e6),
             DeltaRow(id = 2, delta = timedelta(12, 3, 9)),
-            DeltaRow(id = 3, delta = TimeDelta(12, 3, 9)),
-            DeltaRow(id = 4, delta = TimeDelta(seconds = 1e6)),
             DeltaRow(id = 5, delta = None),
             DeltaRow(id = 6, delta = 1),
             ])
@@ -83,13 +80,13 @@ def test_sql_timedelta_type(engine):
     with closing(Session()) as session:
         query = session.query(DeltaRow).order_by(DeltaRow.id).all()
 
-        assert_equal(query[0].delta, TimeDelta(seconds = 6.3))
-        assert_equal(query[1].delta, TimeDelta(seconds = 1e6))
-        assert_equal(query[2].delta, TimeDelta(12, 3, 9))
-        assert_equal(query[3].delta, TimeDelta(12, 3, 9))
-        assert_equal(query[4].delta, TimeDelta(seconds = 1e6))
+        assert_equal(query[0].delta, timedelta(seconds = 6.3))
+        assert_equal(query[1].delta, timedelta(seconds = 1e6))
+        assert_equal(query[2].delta, timedelta(12, 3, 9))
+        assert_equal(query[3].delta, timedelta(12, 3, 9))
+        assert_equal(query[4].delta, timedelta(seconds = 1e6))
         assert_equal(query[5].delta, None)
-        assert_equal(query[6].delta, TimeDelta(seconds = 1))
+        assert_equal(query[6].delta, timedelta(seconds = 1))
 
     # try to insert some invalid data
     with closing(Session()) as session:
@@ -129,7 +126,6 @@ def test_sql_uuid_type(engine):
     from uuid           import uuid4
     from contextlib     import closing
     from sqlalchemy.orm import sessionmaker
-    from cargo.temporal import TimeDelta
 
     Session   = sessionmaker(bind = engine)
     some_uuid = uuid4()

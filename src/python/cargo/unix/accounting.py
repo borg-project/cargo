@@ -30,7 +30,6 @@ from cargo.unix.sessions import (
     spawn_pty_session,
     spawn_pipe_session,
     )
-from cargo.temporal      import TimeDelta
 
 log = get_logger(__name__)
 
@@ -69,7 +68,9 @@ class SessionTimeAccountant(object):
         Return estimated total.
         """
 
-        return sum(self.charged.values(), TimeDelta())
+        from datetime import timedelta
+
+        return sum(self.charged.values(), timedelta())
 
 class PollingReader(object):
     """
@@ -264,13 +265,15 @@ def run_cpu_limited(
                 raise RuntimeError("final read from child timed out; undead child?")
 
         # done
+        from datetime import timedelta
+
         return \
             CPU_LimitedRun(
                 started,
                 limit,
                 fd_chunks[popened.stdout.fileno()],
                 fd_chunks[popened.stderr.fileno()],
-                TimeDelta(seconds = usage.ru_utime),
+                timedelta(seconds = usage.ru_utime),
                 accountant.total,
                 os.WEXITSTATUS(termination) if os.WIFEXITED(termination) else None,
                 os.WTERMSIG(termination) if os.WIFSIGNALED(termination) else None,

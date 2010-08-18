@@ -9,7 +9,6 @@ import sqlalchemy.dialects.sqlite
 import sqlalchemy.dialects.postgresql
 
 from uuid                                import UUID
-from datetime                            import timedelta
 from contextlib                          import contextmanager
 from sqlalchemy                          import (
     Column,
@@ -38,7 +37,6 @@ from cargo.flags                         import (
     with_flags_parsed,
     )
 from cargo.errors                        import Raised
-from cargo.temporal                      import TimeDelta
 
 log = get_logger(__name__)
 
@@ -71,18 +69,6 @@ def normalize_url(raw):
 
         if extension == ".sqlite":
             return make_url("sqlite:///%s" % abspath(raw))
-
-def column(name, type = None):
-    """
-    Return a text-named column, with optional typemap, for use in SQL generation.
-    """
-
-    if type is None:
-        typemap = None
-    else:
-        typemap = {name: type}
-
-    return text(name, typemap = typemap)
 
 def make_session(*args, **kwargs):
     """
@@ -267,62 +253,6 @@ class SQL_UUID(TypeDecorator):
 
         return False
 
-class UTC_DateTime(TypeDecorator):
-    """
-    Time zone aware (non-naive) datetime column.
-    """
-
-    impl = DateTime
-
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        import pytz
-
-        self.zone = pytz.utc
-
-        TypeDecorator.__init__(self, timezone = self.zone)
-
-    def process_bind_param(self, value, dialect = None):
-        """
-        Return SQL data from a Python instance.
-        """
-
-        if isinstance(value, datetime.datetime):
-            if value.tzinfo is self.zone:
-                return value
-            else:
-                raise ValueError("value %s is not explicitly zoned %s" % (value, self.zone.zone))
-        elif value is None:
-            return None
-        else:
-            raise TypeError("value of incompatible type %s" % type(value))
-
-    def process_result_value(self, value, dialect = None):
-        """
-        Return a Python instance from SQL data.
-        """
-
-#         if value.tzinfo is not None:
-#             print value.tzinfo.tzname(value)
-
-        # FIXME
-#         assert value.tzinfo is None
-
-        if value:
-            return value.replace(tzinfo = self.zone)
-        else:
-            return None
-
-    def is_mutable(self):
-        """
-        Are instances mutable?
-        """
-
-        return False
-
 class SQL_JSON(TypeDecorator):
     """
     Column for data structures representable as JSON strings.
@@ -368,7 +298,7 @@ class SQL_JSON(TypeDecorator):
 
 class SQL_TimeDelta(TypeDecorator):
     """
-    Column for data structures representable as JSON strings.
+    Column for time intervals.
     """
 
     impl = Interval
@@ -385,6 +315,8 @@ class SQL_TimeDelta(TypeDecorator):
         """
         Return SQL data from a Python instance.
         """
+
+        from datetime import timedelta
 
         if isinstance(value, timedelta):
             return \
@@ -407,11 +339,13 @@ class SQL_TimeDelta(TypeDecorator):
         Return a Python instance from SQL data.
         """
 
+        from datetime import timedelta
+
         if value is None:
             return None
         else:
             return \
-                TimeDelta(
+                timedelta(
                     days         = value.days,
                     seconds      = value.seconds,
                     microseconds = value.microseconds,
