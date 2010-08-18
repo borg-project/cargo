@@ -36,7 +36,7 @@ class UTC(tzinfo):
 
 def utc_now():
     """
-    Return a non-naive UTC datetime instance, zoned pytz.utc.
+    Return a non-naive UTC datetime instance.
     """
 
     from datetime import datetime as DateTime
