@@ -12,5 +12,6 @@ install(
 # descend
 #
 
+add_subdirectory(labor)
 add_subdirectory(sql)
 

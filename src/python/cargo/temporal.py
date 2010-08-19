@@ -50,3 +50,12 @@ def seconds(value):
 
     return value.days * 8.64e4 + value.seconds + value.microseconds / 1e6
 
+def parse_timedelta(s):
+    """
+    Parse a timedelta string.
+    """
+
+    from datetime import timedelta
+
+    return timedelta(seconds = float(s))
+

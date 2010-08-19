@@ -3,49 +3,25 @@
 """
 
 if __name__ == "__main__":
-    from cargo.labor.condor import main
+    from plac                     import call
+    from cargo.tools.labor.submit import main
 
-    raise SystemExit(main())
+    call(main)
 
-import os
-import datetime
-import cargo.labor.storage
+from uuid        import UUID
+from collections import namedtuple
+from plac        import annotations
+from cargo.log   import get_logger
 
-from collections           import namedtuple
-from cargo.log             import get_logger
-from cargo.flags           import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
+log = get_logger(__name__, level = "NOTE")
 
-log          = get_logger(__name__, level = "NOTE")
-module_flags = \
-    Flags(
-        "Worker Configuration",
-        Flag(
-            "--workers",
-            type    = int,
-            default = 64,
-            metavar = "INT",
-            help    = "submit INT workers to Condor [%default]",
-            ),
-        Flag(
-            "--matching",
-            default = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)",
-            metavar = "STRING",
-            help    = "use nodes matching STRING [%default]",
-            ),
-        Flag(
-            "--description",
-            default = "distributed Python worker process(es)",
-            metavar = "STRING",
-            help    = "use cluster description STRING [%default]",
-            ),
-        Flag(
-            "--job-set-uuid",
-            metavar = "UUID",
-            help    = "run only jobs in set UUID",
+CondorWorkerProcess = \
+    namedtuple(
+        "CondorWorkerProcess",
+        (
+            "uuid",
+            "working",
+            "database",
             ),
         )
 
@@ -138,31 +114,10 @@ class CondorSubmissionFile(object):
 
         self.file.write("Queue %i\n" % count)
 
-CondorWorkerProcess = \
-    namedtuple(
-        "CondorWorkerProcess",
-        (
-            "uuid",
-            "working",
-            "database",
-            ),
-        )
-
 class CondorSubmission(object):
     """
     Manage submission of Python workers to Condor.
     """
-
-    class_flags = \
-        Flags(
-            "Condor Submission Configuration",
-            Flag(
-                "--condor-home",
-                default = "workers-%s" % datetime.datetime.now().replace(microsecond = 0).isoformat(),
-                metavar = "PATH",
-                help    = "run workers under PATH [%default]",
-                ),
-            )
 
     def __init__(
         self,
@@ -171,7 +126,7 @@ class CondorSubmission(object):
         job_set_uuid = None,
         group        = "GRAD",
         project      = "AI_ROBOTICS",
-        flags        = class_flags.given,
+        condor_home  = "",
         ):
         """
         Initialize.
@@ -182,8 +137,8 @@ class CondorSubmission(object):
         self.job_set_uuid = job_set_uuid
         self.group        = group
         self.project      = project
-        self.flags        = self.class_flags.merged(flags)
         self.workers      = []
+        self.condor_home  = condor_home
 
     def write(self, file):
         """
@@ -264,10 +219,11 @@ class CondorSubmission(object):
         """
 
         # populate per-worker directories
-        from uuid import uuid4
+        from os.path import join
+        from uuid    import uuid4
 
         uuid     = uuid4()
-        job_path = os.path.join(self.flags.condor_home, str(uuid))
+        job_path = join(self.condor_home, str(uuid))
         process  = CondorWorkerProcess(uuid, job_path, database)
 
         self.workers.append(process)
@@ -286,10 +242,13 @@ class CondorSubmission(object):
         Generate the submission file and working directories.
         """
 
-        for worker in self.workers:
-            os.makedirs(worker.working)
+        from os      import makedirs
+        from os.path import join
 
-        submit_path = os.path.join(self.flags.condor_home, "workers.condor")
+        for worker in self.workers:
+            makedirs(worker.working)
+
+        submit_path = join(self.condor_home, "workers.condor")
 
         with open(submit_path, "w") as opened:
             self.write(opened)
@@ -299,56 +258,42 @@ class CondorSubmission(object):
         Submit the job to condor.
         """
 
+        from os.path    import join
         from subprocess import check_call
 
         check_call([
             "/usr/bin/env",
             "condor_submit",
-            os.path.join(self.flags.condor_home, "workers.condor"),
+            join(self.condor_home, "workers.condor"),
             ])
 
-def pfork(callable, matching, *args, **kwargs):
+def default_condor_home():
     """
-    Immediately fork a callable to a condor process.
-    """
-
-    from cargo.labor.jobs import CallableJob
-
-    pfork_job(CallableJob(callable, *args, **kwargs), matching)
-
-def pfork_job(job, matching):
-    """
-    Immediately fork a job to a condor process.
+    Return the default directory for spawned jobs.
     """
 
-    # create the job directory
-    submission = CondorSubmission(matching = matching)
-    process    = submission.add(database = "sqlite:///labor.sqlite")
+    import datetime
 
-    submission.prepare()
+    return "workers-%s" % datetime.datetime.now().replace(microsecond = 0).isoformat()
 
-    # store the job
-    from cargo.sql.alchemy     import make_session
-    from cargo.labor.storage   import (
-        outsource,
-        labor_connect,
-        )
-    from sqlalchemy.engine.url import URL
-
-    url     = URL("sqlite", database = os.path.join(process.working, "labor.sqlite"))
-    engine  = labor_connect(flags = {"labor_database": url})
-    Session = make_session(bind = engine)
-
-    outsource([job], Session = Session)
-
-    engine.dispose()
-
-    # spawn the process
-    submission.submit()
-
-def submit_workers(nworkers, database, matching, description, job_set_uuid):
+@annotations(
+    job_set_uuid = ("job set on which to work",    "positional", None, UUID),
+    workers      = ("number of workers to submit", "positional", None, int),
+    url          = ("labor database URL",          "flag"),
+    matching     = ("node match restriction",      "flag"),
+    description  = ("condor job description",      "flag"),
+    home         = ("job submission directory",    "flag"),
+    )
+def main(
+    workers,
+    job_set_uuid,
+    url         = defaults.labor_url,
+    matching    = defaults.condor_matching,
+    description = "distributed Python worker process(es)",
+    home        = default_condor_home(),
+    ):
     """
-    Fork worker submission.
+    Spawn condor workers.
     """
 
     submission = \
@@ -356,35 +301,10 @@ def submit_workers(nworkers, database, matching, description, job_set_uuid):
             matching     = matching,
             description  = description,
             job_set_uuid = job_set_uuid,
+            condor_home  = home,
             )
 
-    submission.add_many(nworkers, database)
+    submission.add_many(workers, url)
     submission.prepare()
     submission.submit()
-
-def submit_workers_default(database = None, flags = module_flags.given):
-    """
-    Submit workers using default settings.
-    """
-
-    flags = module_flags.merged(flags)
-
-    if database is None:
-        database = cargo.labor.storage.module_flags.given.labor_database
-
-    submit_workers(
-        flags.workers,
-        database,
-        flags.matching,
-        flags.description,
-        flags.job_set_uuid,
-        )
-
-@with_flags_parsed()
-def main(positional):
-    """
-    Spawn condor workers.
-    """
-
-    submit_workers_default()
 

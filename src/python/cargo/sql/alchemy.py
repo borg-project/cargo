@@ -31,11 +31,6 @@ from sqlalchemy.dialects.postgresql.base import (
     PGArray,
     )
 from cargo.log                           import get_logger
-from cargo.flags                         import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
 from cargo.errors                        import Raised
 
 log = get_logger(__name__)

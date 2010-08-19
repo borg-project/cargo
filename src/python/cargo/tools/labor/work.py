@@ -3,63 +3,24 @@
 """
 
 if __name__ == "__main__":
-    from cargo.labor.worker import main
+    from plac                   import call
+    from cargo.tools.labor.work import main
 
-    raise SystemExit(main())
+    call(main)
 
-import cargo.labor.storage
-
-from cargo.log           import get_logger
-from cargo.flags         import (
-    Flag,
-    Flags,
-    with_flags_parsed,
+from uuid      import (
+    uuid4,
+    UUID,
     )
+from plac      import annotations
+from cargo.log import get_logger
 
-log          = get_logger(__name__)
-script_flags = \
-    Flags(
-        "Worker Configuration",
-        Flag(
-            "--worker-uuid",
-            default = None,
-            metavar = "UUID",
-            help    = "this worker is UUID [%default]",
-            ),
-        Flag(
-            "--job-set-uuid",
-            metavar = "UUID",
-            help    = "run only jobs in set UUID",
-            ),
-        Flag(
-            "--work-chattily",
-            action  = "store_true",
-            help    = "enable worker verbosity on startup",
-            ),
-        Flag(
-            "--max-hired",
-            default = 1,
-            type    = int,
-            metavar = "INT",
-            help    = "allow at most INT workers on a job [%default]",
-            ),
-        )
+log = get_logger(__name__)
 
-def get_worker(session):
+def get_worker(session, worker_uuid = None):
     """
     Create and return a record for this worker.
     """
-
-    # assign ourselves a uuid
-    from uuid import (
-        UUID,
-        uuid4,
-        )
-
-    if script_flags.given.worker_uuid is None:
-        uuid = uuid4()
-    else:
-        uuid = UUID(script_flags.given.worker_uuid)
 
     # grab the worker
     from cargo.labor.storage import (
@@ -89,7 +50,7 @@ def get_worker(session):
 
     return session.merge(worker)
 
-def acquire_work(session, worker):
+def acquire_work(session, worker, job_set_uuid = None, max_hired = 1):
     """
     Find, acquire, and return a unit of work.
     """
@@ -109,12 +70,12 @@ def acquire_work(session, worker):
         WorkerRecord,
         )
 
-    if script_flags.given.job_set_uuid:
+    if job_set_uuid is None:
+        job_filter = JobRecord.completed == False
+    else:
         job_filter =                                                            \
             (JobRecord.completed == False)                                      \
-            & (JobRecord.job_set_uuid == UUID(script_flags.given.job_set_uuid))
-    else:
-        job_filter = JobRecord.completed == False
+            & (JobRecord.job_set_uuid == UUID(job_set_uuid))
 
     statement =                                                 \
         WorkerRecord.__table__                                  \
@@ -124,7 +85,7 @@ def acquire_work(session, worker):
             job_uuid =                                          \
                 select(
                     ("uuid",),
-                    literal_column("hired", Integer) < script_flags.given.max_hired,
+                    literal_column("hired", Integer) < max_hired,
                     select(
                         (
                             JobRecord.uuid,
@@ -152,7 +113,7 @@ def acquire_work(session, worker):
     session.commit()
     session.expire(worker)
 
-def main_loop():
+def main_loop(job_set_uuid = None, worker_uuid = None, max_hired = 1):
     """
     Labor, reconnecting to the database when necessary.
     """
@@ -165,10 +126,10 @@ def main_loop():
 
     with LaborSession() as session:
         try:
-            worker = get_worker(session)
+            worker = get_worker(session, worker_uuid)
 
             while True:
-                acquire_work(session, worker)
+                acquire_work(session, worker, job_set_uuid, max_hired)
 
                 if worker.job is None:
                     log.note("no work available; terminating")
@@ -203,14 +164,19 @@ def main_loop():
 
             raised.re_raise()
 
-@with_flags_parsed()
-def main(positional):
+@annotations(
+    job_set_uuid = ("job set on which to work", "positional", None, UUID),
+    worker_uuid  = ("worker identifier"       , "positional", None, UUID),
+    verbose      = ("be noisier?"             , "flag"      , "v"),
+    max_hired    = ("hiring ceiling"          , "option"    , None, int),
+    )
+def main(job_set_uuid = None, worker_uuid = uuid4(), verbose = False, max_hired = 1):
     """
     Application entry point.
     """
 
     # logging setup
-    if script_flags.given.work_chattily:
+    if verbose:
         from cargo.log import enable_default_logging
 
         enable_default_logging()
@@ -223,5 +189,5 @@ def main(positional):
     from cargo.sql.alchemy import SQL_Engines
 
     with SQL_Engines.default:
-        main_loop()
+        main_loop(job_set_uuid, worker_uuid, max_hired)
 

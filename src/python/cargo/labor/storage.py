@@ -17,37 +17,99 @@ from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_Engines,
-    make_session,
-    )
-from cargo.flags                import (
-    Flag,
-    Flags,
     )
 from cargo.labor.jobs           import Jobs
 
 log          = get_logger(__name__, level = "NOTE")
 LaborBase    = declarative_base()
 LaborSession = make_session()
-module_flags = \
-    Flags(
-        "Labor Storage Configuration",
-        Flag(
-            "--labor-database",
-            default = "sqlite:///:memory:",
-            metavar = "DATABASE",
-            help    = "use labor DATABASE [%default]",
-            ),
-        Flag(
-            "--outsource-jobs",
-            action  = "store_true",
-            help    = "outsource labor to workers",
-            ),
-        Flag(
-            "--create-labor-schema",
-            action  = "store_true",
-            help    = "create the labor data schema [%default]",
-            ),
-        )
+
+def outsource_or_run(raw_jobs, outsource, name = None, url = defaults.labor_url):
+    """
+    Outsource or run a set of jobs.
+    """
+
+    def filter_jobs():
+        from cargo.labor.jobs import (
+            Job,
+            CallableJob,
+            )
+
+        for job in raw_jobs:
+            if isinstance(job, Job):
+                yield job
+            else:
+                yield CallableJob(job[0], *job[1:])
+
+    jobs = list(filter_jobs())
+
+    if outsource:
+        from cargo.sql.alchemy import make_session
+
+        Session = make_session(bind = labor_connect(url = url))
+
+        with Session() as session:
+            outsource_jobs(session, jobs, name)
+    else:
+        log.note("running %i jobs", len(jobs))
+
+        Jobs(jobs).run()
+
+def outsource_jobs(session, jobs, name = None):
+    """
+    Appropriately outsource a set of jobs.
+    """
+
+    # create the job set
+    CHUNK_SIZE = 4096
+    njobs      = len(jobs)
+    job_set    = JobRecordSet(name = name)
+
+    session.add(job_set)
+    session.flush()
+
+    log.note("inserting %i jobs into set %s", njobs, job_set.uuid)
+
+    # insert the jobs
+    ninserted = 0
+
+    while ninserted < njobs:
+        chunk = jobs[ninserted:ninserted + CHUNK_SIZE]
+
+        session.connection().execute(
+            JobRecord.__table__.insert(),
+            [
+                {
+                    "uuid"         : uuid4(),
+                    "job_set_uuid" : job_set.uuid,
+                    "completed"    : False,
+                    "work"         : job,
+                    }
+                for job in chunk
+                ],
+            )
+
+        ninserted += CHUNK_SIZE
+        ninserted  = min(ninserted, len(jobs))
+
+        log.note(
+            "inserted %i jobs so far (%.1f%%)",
+            ninserted,
+            ninserted * 100.0 / njobs,
+            )
+
+    session.commit()
+
+    log.note("committed job insertions")
+
+    return job_set.uuid
+
+def labor_connect(engines = SQL_Engines.default, url = defaults.labor_url):
+    """
+    Connect to acridid storage.
+    """
+
+    return engines.get(url)
 
 class JobRecordSet(LaborBase):
     """
@@ -105,97 +167,4 @@ class CondorWorkerRecord(WorkerRecord):
         )
     cluster = Column(Integer)
     process = Column(Integer)
-
-def outsource_or_run(raw_jobs, name = None, flags = module_flags.given):
-    """
-    Outsource or run a set of jobs based on flags.
-    """
-
-    def filter_jobs():
-        from cargo.labor.jobs import (
-            Job,
-            CallableJob,
-            )
-
-        for job in raw_jobs:
-            if isinstance(job, Job):
-                yield job
-            else:
-                yield CallableJob(job[0], *job[1:])
-
-    jobs    = list(filter_jobs())
-    Session = make_session()
-
-    if flags.outsource_jobs:
-        Session.configure(bind = labor_connect(flags = flags))
-
-        outsource(jobs, name, Session = Session)
-    else:
-        log.note("running %i jobs", len(jobs))
-
-        Jobs(jobs).run()
-
-def outsource(jobs, name = None, Session = LaborSession):
-    """
-    Appropriately outsource a set of jobs.
-    """
-
-    CHUNK_SIZE = 4096
-    njobs      = len(jobs)
-
-    with Session() as session:
-        # create the job set
-        job_set = JobRecordSet(name = name)
-
-        session.add(job_set)
-        session.flush()
-
-        log.note("inserting %i jobs into set %s", njobs, job_set.uuid)
-
-        # insert the jobs
-        ninserted = 0
-
-        while ninserted < njobs:
-            chunk = jobs[ninserted:ninserted + CHUNK_SIZE]
-
-            session.connection().execute(
-                JobRecord.__table__.insert(),
-                [
-                    {
-                        "uuid"         : uuid4(),
-                        "job_set_uuid" : job_set.uuid,
-                        "completed"    : False,
-                        "work"         : job,
-                        }
-                    for job in chunk
-                    ],
-                )
-
-            ninserted += CHUNK_SIZE
-            ninserted  = min(ninserted, len(jobs))
-
-            log.note(
-                "inserted %i jobs so far (%.1f%%)",
-                ninserted,
-                ninserted * 100.0 / njobs,
-                )
-
-        session.commit()
-
-        log.note("committed job insertions")
-
-        return job_set.uuid
-
-def labor_connect(engines = SQL_Engines.default, flags = module_flags.given):
-    """
-    Connect to acridid storage.
-    """
-
-    flags  = module_flags.merged(flags)
-    engine = engines.get(flags.labor_database)
-
-    if flags.create_labor_schema:
-        LaborBase.metadata.create_all(engine)
-
-    return engine
 

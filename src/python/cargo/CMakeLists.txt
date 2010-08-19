@@ -6,7 +6,6 @@ install(
     FILES
         __init__.py
         errors.py
-        flags.py
         io.py
         iterators.py
         json.py

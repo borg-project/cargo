@@ -17,10 +17,6 @@ from logging     import (
     StreamHandler,
     )
 from cargo.sugar import run_once
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
 
 class DefaultLogger(logging.getLoggerClass()):
     """
@@ -52,6 +48,7 @@ class DefaultLogger(logging.getLoggerClass()):
 
 # global customization (unfortunate, but whatever)
 logging.setLoggerClass(DefaultLogger)
+
 logging.DETAIL = 15
 logging.NOTE   = 25
 
@@ -91,37 +88,6 @@ def get_logger(name, level = None, default_level = logging.WARNING):
     return logger
 
 log = get_logger(__name__)
-
-#    log_to_console_flag = \
-#        Flag(
-#            "--log-to-console",
-#            action = "store_true",
-#            help = "force console-style logging to stdout [%default]",
-#            )
-#    log_to_file_flag = \
-#        Flag(
-#            "--log-to-file",
-#            action = "store_true",
-#            help = "force logging to script.log.N",
-#            )
-
-flags = \
-    Flags(
-        "Logging",
-        Flag(
-            "--log-file-prefix",
-            default = "script.log",
-            metavar = "PREFIX",
-            help    = "file logging will write to PREFIX.N [script.log]",
-            ),
-#         Flag(
-#             "-v",
-#             "--verbosity",
-#             default = logging.INFO,
-#             metavar = "N",
-#             help    = "log messages of at least level N [%default]",
-#             ),
-        )
 
 class TTY_ConciseFormatter(Formatter):
     """
@@ -276,23 +242,24 @@ def enable_disk(prefix = None, level = logging.NOTSET):
     Enable typical logging to disk.
     """
 
-    import os.path
-    import datetime
-
+    # generate an unused log file path
+    from os.path   import lexists
     from itertools import count
 
-    # generate an unused log file path
     if prefix is None:
-        #prefix = flags.given.log_file_prefix
-        prefix = "script.log" # FIXME use the flag
+        from cargo import defaults
+
+        prefix = defaults.log_file_prefix
 
     for i in count():
         path = "%s.%i" % (prefix, i)
 
-        if not os.path.lexists(path):
+        if not lexists(path):
             break
 
     # set up logging
+    import datetime
+
     handler = FileHandler(path, encoding = "UTF-8")
 
     handler.setFormatter(VerboseFileFormatter())
