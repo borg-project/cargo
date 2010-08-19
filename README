@@ -1,0 +1,56 @@
+CARGO
+=====
+
+ABOUT
+-----
+
+Cargo is a collection of general-purpose support modules for Python. It aims to
+be loosely-coupled, so that subsets of the library can be used individually. It
+is primarily intended to support the borg algorithm portfolio project:
+
+http://github.com/borg-project/borg
+
+Pieces of its functionality, however, could be useful in other contexts.
+
+REQUIREMENTS
+------------
+
+The project assumes a reasonably-standard Linux environment, available C
+compiler, CMake, and at least Python 2.6, along with a variety of supporting
+modules. Using virtualenv is strongly recommended. The core dependencies are
+listed in the `MODULES` file, which can be passed as a requirements file to the
+pip package management tool with `pip install -r MODULES`.
+
+COMPILATION
+-----------
+
+# Overview
+
+Most of the project is written in Python, but certain subsets are written in
+Cython and compiled. CMake is used to handle compilation and installation. The
+procedure roughly follows:
+
+1. create an out-of-source build directory, eg, `mkdir build`
+2. run cmake from the build directory, eg:
+
+`cmake -DCMAKE_INSTALL_PREFIX=<prefix> <path_to_source_tree>`
+
+3. `make`
+4. `make install`
+
+# Dependencies
+
+To provide the location of libraries in nonstandard installation prefixes to
+cmake, define `CMAKE_PREFIX_PATH`; eg, if required libraries are installed under
+`/opt/foo/include` and `/opt/foo/lib`:
+
+`cmake -DCMAKE_PREFIX_PATH=/opt/foo <other_options>`
+
+Note that CMake has known issues with paths that include colons.
+
+LICENSE
+-------
+
+This software package is provided under the non-copyleft open-source "MIT"
+license. The complete legal notice can be found in the included LICENSE file.
+
