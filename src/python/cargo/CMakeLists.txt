@@ -16,6 +16,7 @@ install(
         temporal.py
         testing.py
 		profile.py
+        defaults.py
     DESTINATION lib/cargo
     )
 

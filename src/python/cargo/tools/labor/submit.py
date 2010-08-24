@@ -12,6 +12,7 @@ from uuid        import UUID
 from collections import namedtuple
 from plac        import annotations
 from cargo.log   import get_logger
+from cargo       import defaults
 
 log = get_logger(__name__, level = "NOTE")
 
@@ -192,15 +193,18 @@ class CondorSubmission(object):
         submit.write_blank()
 
         for worker in self.workers:
-            arguments   = \
-                '-c \'%s ""$0"" $@\' -m cargo.labor.worker --labor-database %s --worker-uuid %s' % (
+            if self.job_set_uuid:
+                job_set_argument = "%s " % str(self.job_set_uuid)
+            else:
+                job_set_argument = ""
+
+            arguments = \
+                '-c \'%s ""$0"" $@\' -m cargo.tools.labor.work -url %s %s%s' % (
                     sys.executable,
                     worker.database,
+                    job_set_argument,
                     str(worker.uuid),
                     )
-
-            if self.job_set_uuid:
-                arguments += " --job-set-uuid %s" % str(self.job_set_uuid)
 
             submit.write_pairs(
                 Initialdir = worker.working,
@@ -279,10 +283,10 @@ def default_condor_home():
 @annotations(
     job_set_uuid = ("job set on which to work",    "positional", None, UUID),
     workers      = ("number of workers to submit", "positional", None, int),
-    url          = ("labor database URL",          "flag"),
-    matching     = ("node match restriction",      "flag"),
-    description  = ("condor job description",      "flag"),
-    home         = ("job submission directory",    "flag"),
+    url          = ("labor database URL",          "option"),
+    matching     = ("node match restriction",      "option"),
+    description  = ("condor job description",      "option"),
+    home         = ("job submission directory",    "option"),
     )
 def main(
     workers,

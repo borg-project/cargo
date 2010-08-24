@@ -15,14 +15,15 @@ from sqlalchemy.orm             import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
+    make_session,
     SQL_UUID,
     SQL_Engines,
     )
 from cargo.labor.jobs           import Jobs
+from cargo                      import defaults
 
-log          = get_logger(__name__, level = "NOTE")
-LaborBase    = declarative_base()
-LaborSession = make_session()
+log       = get_logger(__name__, level = "NOTE")
+LaborBase = declarative_base()
 
 def outsource_or_run(raw_jobs, outsource, name = None, url = defaults.labor_url):
     """

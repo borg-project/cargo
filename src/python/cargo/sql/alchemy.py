@@ -159,19 +159,26 @@ class SQL_Engines(object):
         except:
             Raised().print_ignored()
 
-    def get(self, database):
+    def get(self, url):
         """
-        Return the default global SQL engine.
+        Return the default global SQL engine for a URL.
         """
 
         try:
-            return self.engines[database]
+            return self.engines[str(url)]
         except KeyError:
-            engine = self.engines[database] = create_engine(database)
+            log.info("establishing a new connection to %s", url)
 
-            log.info("establishing a new connection to %s", database)
+            engine = self.engines[str(url)] = create_engine(url)
 
             return engine
+
+    def make_session(self, url):
+        """
+        Return a new session, bound to an engine.
+        """
+
+        return make_session(bind = self.get(url))
 
 SQL_Engines.default = SQL_Engines()
 
