@@ -8,14 +8,15 @@ if __name__ == "__main__":
 
     call(main)
 
-from plac      import annotations
-from cargo.log import get_logger
+from plac              import annotations
+from cargo.log         import get_logger
+from cargo.sql.alchemy import normalize_url
 
 log = get_logger(__name__, level = "NOTSET")
 
 @annotations(
-    url   = ("database URL"),
-    quiet = ("be less noisy", "flag", "q"),
+    url   = ("database URL" , "positional", None, normalize_url),
+    quiet = ("be less noisy", "flag"      , "q"),
     )
 def main(url, quiet = False):
     """

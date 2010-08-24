@@ -6,7 +6,7 @@ from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-def copy_table(from_connection, to_connection, table):
+def copy_table(from_connection, to_connection, table, where = None):
     """
     Copy a table from one connection to another.
     """
@@ -14,16 +14,21 @@ def copy_table(from_connection, to_connection, table):
     # copy the schema, if necessary
     table.create(bind = to_connection, checkfirst = True)
 
-    # copy the rows
-    from sqlalchemy import (
-        select,
-        insert,
-        )
+    # retrieve the rows
+    from sqlalchemy import select
 
-    result    = from_connection.execute(select(table.columns))
-    statement = table.insert(dict((c, None) for c in table.columns))
+    query = select(table.columns, whereclause = where)
 
-    log.detail("inserting via statement: %s", statement)
+    log.detail("querying via statement: %s", query)
+
+    result = from_connection.execute(query)
+
+    # insert the rows
+    from sqlalchemy import insert
+
+    command = table.insert(dict((c, None) for c in table.columns))
+
+    log.detail("inserting via statement: %s", command)
 
     while True:
         rows = result.fetchmany(8192)
@@ -31,7 +36,7 @@ def copy_table(from_connection, to_connection, table):
         if rows:
             log.detail("inserting %i row(s) into %s", len(rows), table)
 
-            to_connection.execute(statement, rows)
+            to_connection.execute(command, rows)
         else:
             break
 
