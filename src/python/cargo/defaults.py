@@ -4,6 +4,7 @@
 
 log_file_prefix = "script.log"
 condor_matching = None
+labor_url       = None
 
 try:
     from cargo_site_defaults import *
