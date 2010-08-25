@@ -183,7 +183,7 @@ class SQL_Engines(object):
         except KeyError:
             log.info("establishing a new connection to %s", url)
 
-            engine = self.engines[str(url)] = create_engine(url)
+            engine = self.engines[str(url)] = make_engine(url)
 
             return engine
 
