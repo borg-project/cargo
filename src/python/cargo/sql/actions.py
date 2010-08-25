@@ -6,7 +6,7 @@ from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-def copy_table(from_connection, to_connection, table, where = None):
+def copy_table(from_connection, to_connection, table, where = None, fetch = 8192):
     """
     Copy a table from one connection to another.
     """
@@ -31,7 +31,7 @@ def copy_table(from_connection, to_connection, table, where = None):
     log.detail("inserting via statement: %s", command)
 
     while True:
-        rows = result.fetchmany(8192)
+        rows = result.fetchmany(fetch)
 
         if rows:
             log.detail("inserting %i row(s) into %s", len(rows), table)

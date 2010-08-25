@@ -64,6 +64,20 @@ def normalize_url(raw):
 
         if extension == ".sqlite":
             return make_url("sqlite:///%s" % abspath(raw))
+        else:
+            raise ArgumentError("could not parse supposed URL \"%s\"" % raw)
+
+def make_engine(url):
+    """
+    Create a SQLAlchemy engine, normalizing the URL, etc.
+    """
+
+    normalized = normalize_url(url)
+
+    if normalized.drivername == "postgresql":
+        return create_engine(normalized, server_side_cursors = True)
+    else:
+        return create_engine(normalized)
 
 def make_session(*args, **kwargs):
     """
