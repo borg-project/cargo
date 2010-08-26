@@ -15,30 +15,30 @@ log = get_logger(__name__, level = "NOTSET")
 
 @annotations(
     to_url    = ("destination URL"),
-	schema    = ("schema name"),
-    tables    = ("only table(s)"   , "option", "t" , lambda s: s.split(", ")),
+    schema    = ("schema name"),
+    tables    = ("only table(s)"   , "option", "t" , lambda s: s.split(",")),
     quiet     = ("be less noisy"   , "flag"  , "q"),
     where     = ("SQL filter"      , "option", "w"),
     fetch     = ("buffer size"     , "option", "f" , int),
     from_urls = ("source URL(s)")  ,
     )
 def main(
-	to_url,
-	schema = None,
-	tables = None,
-	quiet  = False,
-	where  = None,
-	fetch  = 8192,
-	*from_urls,
-	):
+    to_url,
+    schema = None,
+    tables = None,
+    quiet  = False,
+    where  = None,
+    fetch  = 8192,
+    *from_urls
+    ):
     """
     Copy data from source database(s) to some single target.
     """
 
     # basic setup
-    from cargo.log import enable_console_log
+    from cargo.log import enable_default_logging
 
-    enable_console_log()
+    enable_default_logging()
 
     if not quiet:
         get_logger("sqlalchemy.engine", level = "WARNING")
@@ -67,13 +67,13 @@ def main(
 
             # load the appropriate schema
             if schema is None:
-				from sqlalchemy.schema import MetaData
+                from sqlalchemy.schema import MetaData
 
-				metadata = MetaData(bind = from_connection, reflect = True)
-			else:
-				from cargo.sugar import value_by_name
+                metadata = MetaData(bind = from_connection, reflect = True)
+            else:
+                from cargo.sugar import value_by_name
 
-				metadata = value_by_name(schema)
+                metadata = value_by_name(schema)
 
             # copy its data
             for sorted_table in metadata.sorted_tables:

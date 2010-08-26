@@ -24,9 +24,9 @@ def main(url, quiet = False):
     """
 
     # basic setup
-    from cargo.log import enable_console_log
+    from cargo.log import enable_default_logging
 
-    enable_console_log()
+    enable_default_logging()
 
     if not quiet:
         get_logger("sqlalchemy.engine", level = "WARNING")
