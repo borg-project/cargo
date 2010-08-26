@@ -16,6 +16,7 @@ install(
         temporal.py
         testing.py
 		profile.py
+		labor.py
         defaults.py
     DESTINATION lib/cargo
     )
@@ -25,7 +26,6 @@ install(
 #
 
 add_subdirectory(_files)
-add_subdirectory(labor)
 add_subdirectory(sql)
 add_subdirectory(statistics)
 add_subdirectory(test)

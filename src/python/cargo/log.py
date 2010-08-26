@@ -1,22 +1,13 @@
 """
-cargo/log.py
-
-Application-wide logging configuration.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
+
+Environment variables that matter:
+- CARGO_LOG_ROOT_LEVEL
+- CARGO_LOG_FILE_PREFIX
 """
 
-import sys
+# global customization (unfortunate, but whatever)
 import logging
-
-from logging     import (
-    Filter,
-    Logger,
-    Formatter,
-    FileHandler,
-    StreamHandler,
-    )
-from cargo.sugar import run_once
 
 class DefaultLogger(logging.getLoggerClass()):
     """
@@ -46,14 +37,22 @@ class DefaultLogger(logging.getLoggerClass()):
 
         return self.log(logging.NOTE, message, *args, **kwargs)
 
-# global customization (unfortunate, but whatever)
 logging.setLoggerClass(DefaultLogger)
 
 logging.DETAIL = 15
 logging.NOTE   = 25
 
 logging.addLevelName(logging.DETAIL, "DETAIL")
-logging.addLevelName(logging.NOTE, "NOTE")
+logging.addLevelName(logging.NOTE,   "NOTE")
+
+# everything else
+from logging     import (
+    Filter,
+    Logger,
+    Formatter,
+    FileHandler,
+    StreamHandler,
+    )
 
 def level_to_number(level):
     """
@@ -65,18 +64,25 @@ def level_to_number(level):
     else:
         return level
 
-def get_logger(name, level = None, default_level = logging.WARNING):
+def get_logger(name = None, level = None, default_level = logging.WARNING):
     """
     Get or create a logger.
     """
 
-    logger = logging.getLogger(name)
+    if name is None:
+        logger = logging.root
+    else:
+        logger = logging.getLogger(name)
 
     # FIXME the defaults mechanism still isn't quite right
 
     # set the default level, if the logger is new
-    if logger.is_squeaky_clean:
-        if default_level is not None:
+    try:
+        clean = logger.is_squeaky_clean
+    except AttributeError:
+        pass
+    else:
+        if clean and default_level is not None:
             logger.setLevel(level_to_number(default_level))
 
     # unconditionally set the logger level, if requested
@@ -155,7 +161,7 @@ class VerboseFileFormatter(Formatter):
     A verbose log formatter for file output.
     """
 
-    _FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    _FORMAT      = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     _DATE_FORMAT = "%y%m%d%H%M%S"
 
     def __init__(self):
@@ -165,79 +171,34 @@ class VerboseFileFormatter(Formatter):
 
         Formatter.__init__(self, VerboseFileFormatter._FORMAT, VerboseFileFormatter._DATE_FORMAT)
 
-class OpaqueFilter(Filter):
-    """
-    Exclude all records.
-    """
-
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        Filter.__init__(self)
-
-    def filter(self, record):
-        """
-        Allow no records.
-        """
-
-        return False
-
-class ExactExcludeFilter(Filter):
-    """
-    Exclude records with a specific name.
-    """
-
-    def __init__(self, exclude):
-        """
-        Initialize this filter.
-        """
-
-        # members
-        self.__exclude = exclude
-
-        # base
-        Filter.__init__(self)
-
-    def filter(self, record):
-        """
-        Allow all records save those with the excluded name.
-        """
-
-        if record.name != self.__exclude:
-            return True
-        else:
-            return False
-
-def enable_console(level = logging.NOTSET, verbose = True):
+def add_console_handler(level = logging.NOTSET, verbose = True):
     """
     Enable typical logging to the console.
     """
 
-    logging.root.setLevel(logging.NOTSET) # FIXME should use flag
-
-    import datetime
-
-    handler = StreamHandler(sys.stdout)
-
+    # get the appropriate formatter
     if verbose:
         formatter = TTY_VerboseFormatter
     else:
         formatter = TTY_ConciseFormatter
 
-    handler.setFormatter(formatter(sys.stdout))
+    # build a handler
+    from sys            import stdout
+    from cargo.temporal import utc_now
+
+    handler = StreamHandler(stdout)
+
+    handler.setFormatter(formatter(stdout))
     handler.setLevel(level)
 
+    # add it
     logging.root.addHandler(handler)
 
-    log.debug("enabled logging to stdout at %s", datetime.datetime.today().isoformat())
+    log.debug("added log handler for console at %s", utc_now())
 
     return handler
 
-enable_console_log = enable_console
-
-def enable_disk(prefix = None, level = logging.NOTSET):
+def add_disk_handler(prefix, level = logging.NOTSET):
     """
     Enable typical logging to disk.
     """
@@ -246,40 +207,46 @@ def enable_disk(prefix = None, level = logging.NOTSET):
     from os.path   import lexists
     from itertools import count
 
-    if prefix is None:
-        from cargo import defaults
-
-        prefix = defaults.log_file_prefix
-
     for i in count():
         path = "%s.%i" % (prefix, i)
 
         if not lexists(path):
             break
 
-    # set up logging
-    import datetime
+    # build a handler
+    from cargo.temporal import utc_now
 
-    handler = FileHandler(path, encoding = "UTF-8")
+    handler = FileHandler(path, encoding = "utf-8")
 
     handler.setFormatter(VerboseFileFormatter())
     handler.setLevel(level)
 
+    # add it
     logging.root.addHandler(handler)
 
-    log.debug("enabled logging to %s at %s", path, datetime.datetime.today().isoformat())
+    log.debug("added log handler for file %s at %s", path, utc_now())
 
     return handler
 
-@run_once
-def enable_default_logging(add_handlers = True):
-    # by default, be moderately verbose
-    logging.root.setLevel(logging.NOTSET) # FIXME should use flag
+def enable_default_logging():
+    """
+    Set up logging in the typical way.
+    """
 
-    # default setup (FIXME which is silly: should enable the disk log via flag or environment)
-    if add_handlers:
-        if sys.stdout.isatty():
-            enable_console()
-        else:
-            enable_disk()
+    # configure the default global level
+    from cargo import defaults
+
+    get_logger(level = defaults.root_log_level)
+
+    # add the appropriate handlers
+    try:
+        from os import environ
+
+        prefix = environ["CARGO_LOG_FILE_PREFIX"]
+    except KeyError:
+        pass
+    else:
+        add_disk_handler(prefix)
+
+    add_console_handler()
 

@@ -13,69 +13,61 @@ from sqlalchemy                 import (
     )
 from sqlalchemy.orm             import relationship
 from sqlalchemy.ext.declarative import declarative_base
+from cargo                      import defaults
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
-    make_session,
     SQL_UUID,
     SQL_Engines,
     )
-from cargo.labor.jobs           import Jobs
-from cargo                      import defaults
 
 log       = get_logger(__name__, level = "NOTE")
 LaborBase = declarative_base()
 
-def outsource_or_run(raw_jobs, outsource, name = None, url = defaults.labor_url):
+def outsource_or_run(jobs, outsource, name = None, url = defaults.labor_url):
     """
     Outsource or run a set of jobs.
     """
 
-    def filter_jobs():
-        from cargo.labor.jobs import (
-            Job,
-            CallableJob,
+    if outsource:
+        from cargo.sql.alchemy import (
+            make_engine,
+            make_session,
             )
 
-        for job in raw_jobs:
-            if isinstance(job, Job):
-                yield job
-            else:
-                yield CallableJob(job[0], *job[1:])
-
-    jobs = list(filter_jobs())
-
-    if outsource:
-        from cargo.sql.alchemy import make_session
-
-        Session = make_session(bind = labor_connect(url = url))
+        Session = make_session(bind = make_engine(url))
 
         with Session() as session:
             outsource_jobs(session, jobs, name)
     else:
-        log.note("running %i jobs", len(jobs))
+        log.note("running %i jobs immediately", len(jobs))
 
-        Jobs(jobs).run()
+        for job in jobs:
+            job()
 
-def outsource_jobs(session, jobs, name = None):
+def outsource_jobs(session, jobs, name = None, chunk_size = 1024):
     """
     Appropriately outsource a set of jobs.
     """
 
     # create the job set
-    CHUNK_SIZE = 4096
-    njobs      = len(jobs)
-    job_set    = JobRecordSet(name = name)
+    if name is None:
+        from cargo.temporal import utc_now
+
+        name = "work outsourced at %s" % utc_now()
+
+    job_set = JobRecordSet(name = name)
 
     session.add(job_set)
     session.flush()
 
-    log.note("inserting %i jobs into set %s", njobs, job_set.uuid)
+    log.note("inserting %i jobs into set %s", len(jobs), job_set.uuid)
 
     # insert the jobs
-    ninserted = 0
+    count = 0
 
-    while ninserted < njobs:
-        chunk = jobs[ninserted:ninserted + CHUNK_SIZE]
+    while count < len(jobs):
+        chunk  = jobs[count:count + chunk_size]
+        count += len(chunk)
 
         session.connection().execute(
             JobRecord.__table__.insert(),
@@ -90,20 +82,17 @@ def outsource_jobs(session, jobs, name = None):
                 ],
             )
 
-        ninserted += CHUNK_SIZE
-        ninserted  = min(ninserted, len(jobs))
-
         log.note(
             "inserted %i jobs so far (%.1f%%)",
-            ninserted,
-            ninserted * 100.0 / njobs,
+            count,
+            count * 100.0 / len(jobs),
             )
 
     session.commit()
 
     log.note("committed job insertions")
 
-    return job_set.uuid
+    return job_set
 
 def labor_connect(engines = SQL_Engines.default, url = defaults.labor_url):
     """
@@ -160,12 +149,7 @@ class CondorWorkerRecord(WorkerRecord):
     __tablename__   = "condor_workers"
     __mapper_args__ = {"polymorphic_identity": "condor"}
 
-    uuid    = Column(
-        SQL_UUID,
-        ForeignKey("workers.uuid"),
-        default     = uuid4,
-        primary_key = True,
-        )
+    uuid    = Column(SQL_UUID, ForeignKey("workers.uuid"), primary_key = True, default = uuid4)
     cluster = Column(Integer)
     process = Column(Integer)
 

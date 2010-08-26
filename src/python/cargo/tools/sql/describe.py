@@ -8,27 +8,60 @@ if __name__ == "__main__":
 
     call(main)
 
-def main(url, topological = False):
+from plac import annotations
+
+@annotations(
+    url          = ("database URL"                 , "positional"),
+    schema       = ("fully-qualified metadata name", "positional"),
+    apply        = ("create the generated schema"  , "flag"       , "a"),
+    alphabetical = ("sort by name"                 , "flag"       , "b"),
+    quiet        = ("be less noisy"                , "flag"       , "q"),
+    )
+def main(url, schema = None, apply = False, alphabetical = False, quiet = False):
     """
-    Print or apply the database schema.
+    Print or apply a reflected or loaded database schema.
     """
 
-    # retrieve the schema
-    from sqlalchemy        import create_engine
-    from sqlalchemy.schema import MetaData
+    # output
+    from cargo.log import (
+        get_logger,
+        enable_default_logging,
+        )
 
-    engine     = create_engine(url)
-    connection = engine.connect()
-    metadata   = MetaData(bind = connection, reflect = True)
+    enable_default_logging()
 
-    # print the DDL
-    from sqlalchemy.schema import CreateTable
+    # build the particular database engine
+    from cargo.sql.alchemy import make_engine
 
-    if topological:
-        sorted_tables = metadata.sorted_tables
+    engine = make_engine(url)
+
+    # load the appropriate schema
+    if schema is None:
+        # examine the database to construct a schema
+        from sqlalchemy.schema import MetaData
+
+        metadata = MetaData(bind = engine.connect(), reflect = True)
     else:
-        sorted_tables = sorted(metadata.sorted_tables, key = lambda t: t.name)
+        # load an already-defined schema
+        from cargo.sugar import value_by_name
 
-    for table in sorted_tables:
-        print CreateTable(table).compile(engine)
+        metadata = value_by_name(schema)
+
+    # print or apply the schema
+    if apply:
+        if not quiet:
+            get_logger("sqlalchemy.engine", level = "DEBUG")
+
+        metadata.create_all(engine)
+    else:
+        # print the DDL
+        from sqlalchemy.schema import CreateTable
+
+        if alphabetical:
+            sorted_tables = sorted(metadata.sorted_tables, key = lambda t: t.name)
+        else:
+            sorted_tables = metadata.sorted_tables
+
+        for table in sorted_tables:
+            print CreateTable(table).compile(engine)
 

@@ -13,8 +13,8 @@ from uuid      import (
     UUID,
     )
 from plac      import annotations
-from cargo.log import get_logger
 from cargo     import defaults
+from cargo.log import get_logger
 
 log = get_logger(__name__)
 
@@ -30,10 +30,10 @@ def get_worker(session, worker_uuid = None):
         )
 
     try:
-        import os
+        from os import environ
 
-        cluster = os.environ["CONDOR_CLUSTER"]
-        process = os.environ["CONDOR_PROCESS"]
+        cluster = environ["CONDOR_CLUSTER"]
+        process = environ["CONDOR_PROCESS"]
     except KeyError:
         worker = WorkerRecord(uuid = worker_uuid)
     else:
@@ -137,7 +137,7 @@ def main_loop(session, job_set_uuid = None, worker_uuid = None, max_hired = 1):
 
                 session.commit()
 
-                work.run_with_fixture()
+                work()
 
                 # mark it as done
                 log.note("finished job")

@@ -1,8 +1,4 @@
 """
-cargo/sugar.py
-
-Simple sugar.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -26,6 +22,28 @@ def run_once(callable):
             return callable(*args, **kwargs)
 
     return wrapper
+
+def value_by_name(name):
+    """
+    Look up a value by fully-qualified name.
+
+    Imports modules if necessary.
+    """
+
+    parts = name.split(".")
+    value = __import__(".".join(parts[:-1]))
+
+    for component in parts[1:]:
+        value = getattr(value, component)
+
+    return value
+
+def curry(callable, *args, **kwargs):
+    """
+    Very simple pickleable partial function application.
+    """
+
+    return Curried(callable, *args, **kwargs)
 
 class Curried(object):
     """
@@ -51,13 +69,6 @@ class Curried(object):
         keyword.update(kwargs)
 
         return self.callable(*(self.args + args), **keyword)
-
-def curry(callable, *args, **kwargs):
-    """
-    Very simple pickleable partial function application.
-    """
-
-    return Curried(callable, *args, **kwargs)
 
 class ABC(object):
     """
