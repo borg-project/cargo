@@ -180,7 +180,7 @@ class CondorSubmission(object):
             )
         submit.write_blank()
         submit.write_environment(
-            CARGO_LOG_FILE_PREFIX = "log.",
+            CARGO_LOG_FILE_PREFIX = "log",
             CONDOR_CLUSTER        = "$(Cluster)",
             CONDOR_PROCESS        = "$(Process)",
             PATH                  = environ.get("PATH", ""),
