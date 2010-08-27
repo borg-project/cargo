@@ -55,7 +55,8 @@ def outsource_jobs(session, jobs, name = None, chunk_size = 1024):
 
         name = "work outsourced at %s" % utc_now()
 
-    job_set = JobRecordSet(name = name)
+    job_set_uuid = uuid4()
+    job_set      = JobRecordSet(uuid = job_set_uuid, name = name)
 
     session.add(job_set)
     session.flush()
@@ -70,11 +71,11 @@ def outsource_jobs(session, jobs, name = None, chunk_size = 1024):
         count += len(chunk)
 
         session.connection().execute(
-            JobRecord.__table__.insert(),
+            JobRecord.__table__.insert(["uuid", "job_set_uuid", "completed", "work"]),
             [
                 {
                     "uuid"         : uuid4(),
-                    "job_set_uuid" : job_set.uuid,
+                    "job_set_uuid" : job_set_uuid,
                     "completed"    : False,
                     "work"         : job,
                     }

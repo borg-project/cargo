@@ -24,7 +24,7 @@ def get_worker(session, worker_uuid = None):
     """
 
     # grab the worker
-    from cargo.labor.storage import (
+    from cargo.labor import (
         WorkerRecord,
         CondorWorkerRecord,
         )
@@ -64,7 +64,7 @@ def acquire_work(session, worker, job_set_uuid = None, max_hired = 1):
         literal_column,
         )
     from sqlalchemy.sql.functions import count
-    from cargo.labor.storage      import (
+    from cargo.labor              import (
         JobRecord,
         WorkerRecord,
         )
@@ -180,11 +180,11 @@ def main(
     """
 
     # logging setup
+    from cargo.log import enable_default_logging
+
+    enable_default_logging()
+
     if verbose:
-        from cargo.log import enable_default_logging
-
-        enable_default_logging()
-
         get_logger("cargo.sql.alchemy",  level = "DEBUG")
         get_logger("cargo.labor.worker", level = "DEBUG")
         get_logger("sqlalchemy.engine",  level = "DEBUG")

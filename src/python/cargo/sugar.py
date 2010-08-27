@@ -38,9 +38,27 @@ def value_by_name(name):
 
     return value
 
+def composed(outer):
+    """
+    Wrap a callable in a call to outer.
+    """
+
+    def decorator(inner):
+        from functools import wraps
+
+        @wraps(inner)
+        def wrapper(*args, **kwargs):
+            return outer(inner(*args, **kwargs))
+
+        return wrapper
+
+    return decorator
+
 def curry(callable, *args, **kwargs):
     """
     Very simple pickleable partial function application.
+
+    We'd use functools.partial if it could be pickled.
     """
 
     return Curried(callable, *args, **kwargs)
