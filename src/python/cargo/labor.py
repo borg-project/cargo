@@ -22,6 +22,7 @@ from cargo.sql.alchemy          import (
 
 log       = get_logger(__name__, level = "NOTE")
 LaborBase = declarative_base()
+metadata  = LaborBase.metadata
 
 def outsource_or_run(jobs, outsource, name = None, url = defaults.labor_url):
     """
