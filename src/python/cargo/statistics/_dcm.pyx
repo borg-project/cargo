@@ -5,6 +5,8 @@
 import  numpy
 cimport numpy
 
+from cargo.statistics.base import Distribution
+
 cdef extern from "float.h":
     double DBL_MIN
 
@@ -35,12 +37,7 @@ cdef extern from "gsl/gsl_sf.h":
     int    gsl_sf_lnpoch_e(double a, double x, gsl_sf_result* result)
     double gsl_sf_psi     (double x)
 
-def disable_gsl_error_handler():
-    """
-    Disable the GSL's error handler, which aborts by default.
-    """
-
-    gsl_set_error_handler_off()
+gsl_set_error_handler_off() # horrible hack
 
 cpdef double ln_poch(double a, double x) except? -1:
     """
@@ -57,34 +54,93 @@ cpdef double ln_poch(double a, double x) except? -1:
 
         return -1
 
-def dcm_log_probability(
-    double                                sum_alpha,
-    numpy.ndarray[double, ndim = 1]       alpha_D,
-    numpy.ndarray[unsigned int, ndim = 1] counts_D,
-    ):
+class DirichletCompoundMultinomial(Distribution):
     """
-    Calculate the log probability of the DCM distribution.
+    The Dirichlet compound multinomial (DCM) distribution.
+
+    Relevant types:
+    - sample: D-shaped uint ndarray
+    - sequence: ND-shaped uint ndarray
     """
 
-    # mise en place
-    cdef size_t D = alpha_D.shape[0]
+    def __init__(self, alpha, norm = 1):
+        """
+        Instantiate the distribution.
 
-    if counts_D.shape[0] != D:
-        raise ValueError("shapes of alpha and counts arrays do not match")
+        @param alpha: The distribution parameter vector.
+        @param norm:  The L1 norm of samples from this distribution.
+        """
 
-    # calculate
-    cdef size_t        d
-    cdef unsigned long n = 0
+        # initialization
+        self._alpha = numpy.asarray(alpha)
+        self._norm  = norm
 
-    for d in xrange(D):
-        n += counts_D[d]
+        # let's not let us be idiots
+        self._alpha.flags.writeable = False
 
-    cdef double psigm = 0.0
+    def random_variate(self, random = numpy.random):
+        """
+        Return a sample from this distribution.
+        """
 
-    for d in xrange(D):
-        psigm += ln_poch(alpha_D[d], counts_D[d])
+        return random.multinomial(self._norm, random.dirichlet(self._alpha))
 
-    return psigm - ln_poch(sum_alpha, n)
+    def random_variates(self, size, random = numpy.random):
+        """
+        Return an array of samples from this distribution.
+        """
+
+        variates = numpy.empty((size, self._alpha.size))
+
+        for i in xrange(size):
+            variates[i] = self.random_variate(random)
+
+        return variates
+
+    def log_likelihood(self, sample):
+        """
+        Return the log likelihood of C{sample} under this distribution.
+        """
+
+        # mise en place
+        cdef numpy.ndarray[double      , ndim = 1] alpha_D  = self._alpha
+        cdef numpy.ndarray[unsigned int, ndim = 1] counts_D = sample
+
+        if counts_D.shape[0] != sample.shape[0]:
+            raise ValueError("shapes of alpha and counts arrays do not match")
+
+        # calculate
+        cdef size_t        d
+        cdef unsigned long n = 0
+
+        for d in xrange(counts_D.shape[0]):
+            n += counts_D[d]
+
+        cdef double psigm     = 0.0
+        cdef double sum_alpha = 0.0
+
+        for d in xrange(counts_D.shape[0]):
+            psigm     += ln_poch(alpha_D[d], counts_D[d])
+            sum_alpha += alpha_D[d]
+
+        return psigm - ln_poch(sum_alpha, n)
+
+    def given(self, samples):
+        """
+        Return the conditional distribution.
+        """
+
+        samples = numpy.asarray(samples, numpy.uint)
+
+        return DirichletCompoundMultinomial(self._alpha + numpy.sum(samples, 0), self._norm)
+
+    @property
+    def alpha(self):
+        """
+        Return the Dirichlet parameter vector.
+        """
+
+        return self._alpha
 
 def minka_fixed_update(
     numpy.ndarray[double, ndim = 1]       alpha_D,

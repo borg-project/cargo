@@ -4,6 +4,7 @@
 
 # FIXME are relative imports truly necessary here?
 
+from base        import *
 from dcm         import *
 from mixture     import *
 from constant    import *

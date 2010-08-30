@@ -8,17 +8,6 @@ from abc         import abstractmethod
 from collections import Sequence
 from cargo.sugar import ABC
 
-def set_up_gsl():
-    """
-    Set up the GSL.
-    """
-
-    from cargo.statistics._dcm import disable_gsl_error_handler
-
-    disable_gsl_error_handler()
-
-set_up_gsl()
-
 class SampleSequence(ABC):
     """
     Interface to a sequence of samples.
@@ -31,16 +20,17 @@ class SampleSequence(ABC):
 SampleSequence.register(Sequence)
 SampleSequence.register(numpy.ndarray)
 
-class Distribution(ABC):
+class Distribution(object):
     """
     Interface to a probability distribution.
     """
 
-    @abstractmethod
     def random_variate(self, random = numpy.random):
         """
         Return a single sample from this distribution.
         """
+
+        raise NotImplementedError()
 
     def random_variates(self, size, random = numpy.random):
         """
@@ -51,13 +41,14 @@ class Distribution(ABC):
 
         return [self.random_variate(random) for i in xrange(size)]
 
-    @abstractmethod
     def log_likelihood(self, sample):
         """
         Return the log likelihood of C{sample} under this distribution.
 
         @param samples: An arbitrary sample value.
         """
+
+        raise NotImplementedError()
 
     def total_log_likelihood(self, samples):
         """
