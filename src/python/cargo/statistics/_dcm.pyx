@@ -2,57 +2,27 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import  numpy
-cimport numpy
+import numpy
 
 from cargo.statistics.base import Distribution
 
-cdef extern from "float.h":
-    double DBL_MIN
+cimport numpy
+
+from libc.float  cimport DBL_MIN
+from libc.stdlib cimport (
+    free,
+    malloc,
+    )
+from cargo.gsl.sf cimport (
+    psi,
+    ln_poch,
+    )
 
 cdef extern from "math.h":
     double fabs    (double)
     int    isfinite(double)
 
-cdef extern from "stdlib.h":
-    ctypedef unsigned long size_t
-
-    void* malloc(size_t size)
-    void  free  (void* ptr)
-
-cdef extern from "gsl/gsl_errno.h":
-    ctypedef struct gsl_error_handler_t
-
-    int GSL_SUCCESS
-
-    char*                gsl_strerror             (int gsl_errno)
-    gsl_error_handler_t* gsl_set_error_handler_off()
-
-cdef extern from "gsl/gsl_sf_result.h":
-    ctypedef struct gsl_sf_result:
-        double val
-        double err
-
-cdef extern from "gsl/gsl_sf.h":
-    int    gsl_sf_lnpoch_e(double a, double x, gsl_sf_result* result)
-    double gsl_sf_psi     (double x)
-
-gsl_set_error_handler_off() # horrible hack
-
-cpdef double ln_poch(double a, double x) except? -1:
-    """
-    Compute the natural log of the Pochhammer function.
-    """
-
-    cdef gsl_sf_result result
-    cdef int           status = gsl_sf_lnpoch_e(a, x, &result)
-
-    if status == GSL_SUCCESS:
-        return result.val
-    else:
-        raise ValueError("%s (a = %f; x = %f)" % (gsl_strerror(status), a, x))
-
-        return -1
+numpy.seterr(divide = "raise", invalid = "raise", over = "warn", under = "warn") # horrible hack
 
 class DirichletCompoundMultinomial(Distribution):
     """
@@ -75,7 +45,7 @@ class DirichletCompoundMultinomial(Distribution):
         self._alpha = numpy.asarray(alpha)
         self._norm  = norm
 
-        # let's not let us be idiots
+        # let's not let ourselves be idiots
         self._alpha.flags.writeable = False
 
     def random_variate(self, random = numpy.random):
@@ -168,9 +138,9 @@ def minka_fixed_update(
     cdef double denominator = 0.0
 
     for n in xrange(N):
-        denominator += gsl_sf_psi(counts_sum1_N[n] + alpha_sum) * weights_N[n]
+        denominator += psi(counts_sum1_N[n] + alpha_sum) * weights_N[n]
 
-    denominator -= weights_sum * gsl_sf_psi(alpha_sum)
+    denominator -= weights_sum * psi(alpha_sum)
 
     # calculate the numerator and update alpha
     cdef double difference = 0.0
@@ -181,9 +151,9 @@ def minka_fixed_update(
         numerator = 0.0
 
         for n in xrange(N):
-            numerator += gsl_sf_psi(alpha_D[d] + counts_ND[n, d]) * weights_N[n]
+            numerator += psi(alpha_D[d] + counts_ND[n, d]) * weights_N[n]
 
-        numerator -= weights_sum * gsl_sf_psi(alpha_D[d])
+        numerator -= weights_sum * psi(alpha_D[d])
 
         # update alpha
         ratio = numerator / denominator

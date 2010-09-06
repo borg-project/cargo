@@ -76,6 +76,7 @@ def make_engine(url):
 
     if normalized.drivername == "postgresql":
         return create_engine(normalized, server_side_cursors = True)
+        #return create_engine(normalized)
     else:
         return create_engine(normalized)
 

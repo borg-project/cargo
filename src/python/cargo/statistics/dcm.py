@@ -3,7 +3,6 @@
 """
 
 import numpy
-import scipy
 
 from cargo.log             import get_logger
 from cargo.statistics.base import (
@@ -13,31 +12,6 @@ from cargo.statistics.base import (
 from cargo.statistics._dcm import DirichletCompoundMultinomial
 
 log = get_logger(__name__)
-
-# FIXME should be some visitorish thing?
-def smooth_dcm_mixture(mixture, epsilon = 1e-6):
-    """
-    Apply a smoothing term to the DCM mixture components.
-    """
-
-    # find the smallest non-zero dimension
-    smallest = numpy.inf
-
-    for components in mixture.components:
-        for component in components:
-            for v in component.alpha:
-                if v < smallest and v > epsilon:
-                    smallest = v
-
-    if numpy.isinf(smallest):
-        smallest = epsilon
-
-    log.debug("smallest nonzero value is %f", smallest)
-
-    for m in xrange(mixture.ndomains):
-        for k in xrange(mixture.ncomponents):
-            alpha                    = mixture.components[m, k].alpha
-            mixture.components[m, k] = DirichletCompoundMultinomial(alpha + smallest * 1e-2)
 
 class MinkaFixedPointEstimator(Estimator):
     """
@@ -82,7 +56,7 @@ class WallachRecurrenceEstimator(Estimator):
     models.
     """
 
-    def __init__(self, norm = 1, threshold = 1e-5, cutoff = 1e3):
+    def __init__(self, norm = 1, threshold = 1e-5, cutoff = 1e3, epsilon = 1e-6):
         """
         Initialize.
         """
@@ -90,6 +64,7 @@ class WallachRecurrenceEstimator(Estimator):
         self._norm      = norm
         self._threshold = threshold
         self._cutoff    = int(cutoff)
+        self._epsilon   = epsilon
 
     def estimate(self, samples, random = numpy.random, weights = None):
         """
@@ -115,6 +90,11 @@ class WallachRecurrenceEstimator(Estimator):
                 self._cutoff,
                 )
 
+        # smooth, if requested
+        if self._epsilon is not None:
+            alpha += max(numpy.min(alpha), epsilon) * 1e-2
+
+        # done
         return DirichletCompoundMultinomial(alpha, self._norm)
 
 # select the "best" estimator

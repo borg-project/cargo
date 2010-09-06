@@ -2,61 +2,100 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import  numpy
+import numpy
+
+from cargo.statistics.base import Distribution
+
 cimport numpy
 
-cdef extern from "gsl/gsl_errno.h":
-    int GSL_SUCCESS
+from libc.float   cimport DBL_MAX
+from cargo.gsl.sf cimport (
+    log,
+    ln_gamma,
+    )
 
-    char* gsl_strerror(int gsl_errno)
-
-cdef extern from "gsl/gsl_sf_result.h":
-    ctypedef struct gsl_sf_result:
-        double val
-        double err
-
-cdef extern from "gsl/gsl_sf.h":
-    int gsl_sf_lngamma_e(double v, gsl_sf_result* result)
-
-cpdef double ln_gamma(double v):
+class Multinomial(Distribution):
     """
-    Compute the natural log of the Pochhammer function.
+    The multinomial distribution.
+
+    Relevant types:
+        - sample: D-shaped uint ndarray
+        - sequence: ND-shaped uint ndarray
     """
 
-    cdef gsl_sf_result result
-    cdef int           status = gsl_sf_lngamma_e(v, &result)
+    def __init__(self, beta, norm = 1):
+        """
+        Instantiate the distribution.
 
-    if status != GSL_SUCCESS:
-        raise RuntimeError("%s (v = %f)" % (gsl_strerror(status), v))
+        @param beta: The distribution parameter vector.
+        """
 
-        return -1
+        # initialization
+        self._beta     = numpy.asarray(beta)
+        self._norm     = norm
 
-    return result.val
+        # let's not let ourselves be idiots
+        self._beta.flags.writeable     = False
 
-def multinomial_log_probability(
-    numpy.ndarray[double, ndim = 1]        log_beta_D,
-    numpy.ndarray[unsigned long, ndim = 1] counts_D,
-    ):
-    """
-    Calculate the log probability of the multinomial distribution.
-    """
+    def random_variate(self, random = numpy.random):
+        """
+        Return a sample from this distribution.
+        """
 
-    # mise en place
-    cdef size_t D = log_beta_D.shape[0]
+        return random.multinomial(self._norm, self._beta).astype(numpy.uint)
 
-    assert counts_D.shape[0] == D
+    def random_variates(self, size, random = numpy.random):
+        """
+        Return an array of samples from this distribution.
+        """
 
-    # calculate
-    cdef unsigned long n = 0
+        return random.multinomial(self._norm, self._beta, size).astype(numpy.uint)
 
-    for d in xrange(D):
-        n += counts_D[d]
+    def log_likelihood(self, sample):
+        """
+        Return the log probability of C{sample} under this distribution.
+        """
 
-    cdef double lp = ln_gamma(n + 1)
+        # mise en place
+        cdef numpy.ndarray[double       , ndim = 1] beta_D   = self._beta
+        cdef numpy.ndarray[unsigned long, ndim = 1] counts_D = sample
 
-    for d in xrange(D):
-        lp -= ln_gamma(counts_D[d] + 1)
-        lp += log_beta_D[d] * counts_D[d]
+        assert counts_D.shape[0] == beta_D.shape[0]
 
-    return lp
+        # calculate
+        cdef double        lp = 0.0
+        cdef unsigned long n  = 0
+
+        for d in xrange(counts_D.shape[0]):
+            n += counts_D[d]
+
+            if beta_D[d] > 0.0:
+                lp += log(beta_D[d]) * counts_D[d] - ln_gamma(counts_D[d] + 1)
+            else:
+                lp += -DBL_MAX * counts_D[d] - ln_gamma(counts_D[d] + 1)
+
+        return lp + ln_gamma(n + 1)
+
+    def total_log_likelihood(self, samples):
+        """
+        Return the log likelihood of C{samples} under this distribution.
+        """
+
+        return self.log_likelihood(numpy.sum(samples, 0))
+
+    @property
+    def beta(self):
+        """
+        Return the multinomial parameter vector.
+        """
+
+        return self._beta
+
+    @property
+    def log_beta(self):
+        """
+        Return the multinomial log parameter vector.
+        """
+
+        return numpy.nan_to_num(numpy.log(self._beta))
 

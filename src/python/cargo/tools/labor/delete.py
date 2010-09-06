@@ -43,10 +43,10 @@ def delete_labor(session, job_set_uuid):
     session.commit()
 
 @annotations(
-    job_set_uuid = ("job set on which to work", "positional", None, UUID),
-    url          = ("labor database URL"      , "option")   ,
+    job_set_uuids = ("job set(s) on which to work", "positional", None, UUID),
+    url           = ("labor database URL"         , "option")   ,
     )
-def main(job_set_uuid, url = defaults.labor_url):
+def main(url = defaults.labor_url, *job_set_uuids):
     """
     Delete an entire set of jobs.
     """
@@ -67,5 +67,6 @@ def main(job_set_uuid, url = defaults.labor_url):
     Session = make_session(bind = make_engine(url))
 
     with Session() as session:
-        delete_labor(session, job_set_uuid)
+        for job_set_uuid in job_set_uuids:
+            delete_labor(session, job_set_uuid)
 

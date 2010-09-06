@@ -31,4 +31,5 @@ add_subdirectory(statistics)
 add_subdirectory(test)
 add_subdirectory(unix)
 add_subdirectory(tools)
+add_subdirectory(gsl)
 

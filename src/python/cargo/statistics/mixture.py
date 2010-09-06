@@ -53,7 +53,8 @@ class FiniteMixture(Distribution):
         total = numpy.finfo(float).min
 
         for (pi_k, component) in izip(self.pi, self.components):
-            total = add_log(total, numpy.log(pi_k) + component.log_likelihood(sample))
+            if pi_k > 0.0:
+                total = add_log(total, numpy.log(pi_k) + component.log_likelihood(sample))
 
         return total
 
@@ -182,6 +183,14 @@ class EM_MixtureEstimator(Estimator):
 
         # done
         return FiniteMixture(pi_K, components)
+
+    @property
+    def estimators(self):
+        """
+        Return the component estimators.
+        """
+
+        return self._estimators
 
 class RestartedEstimator(Estimator):
     """
