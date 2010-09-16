@@ -69,7 +69,7 @@ def test_multinomial_estimator():
     from nose.tools                   import assert_almost_equal
     from cargo.statistics.multinomial import MultinomialEstimator
 
-    estimator   = MultinomialEstimator()
+    estimator   = MultinomialEstimator(epsilon = 0.0)
     multinomial = estimator.estimate(vectors)
 
     assert_almost_equal(multinomial.beta[0], 0.75)

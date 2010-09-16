@@ -11,8 +11,8 @@ from cargo.statistics.base import (
 
 cimport numpy
 
-from libc.float  cimport DBL_MIN
-from libc.stdlib cimport (
+from libc.float   cimport DBL_MIN
+from libc.stdlib  cimport (
     free,
     malloc,
     )
@@ -25,7 +25,7 @@ cdef extern from "math.h":
     double fabs    (double)
     int    isfinite(double)
 
-numpy.seterr(divide = "raise", invalid = "raise", over = "warn", under = "warn") # horrible hack
+numpy.seterr(divide = "raise", invalid = "raise", over = "warn", under = "warn") # FIXME hack
 
 class DirichletCompoundMultinomial(Distribution):
     """
@@ -330,8 +330,6 @@ class WallachRecurrenceEstimator(Estimator):
             weights = numpy.asarray(weights)
 
         # counts are available; estimate
-        from cargo.statistics._dcm import estimate_dcm_wallach_recurrence
-
         alpha = \
             estimate_dcm_wallach_recurrence(
                 samples,

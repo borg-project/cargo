@@ -2,14 +2,25 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-def test_ln_poch():
-	"""
-	Test computation of the natural log of the Pochhammer function.
-	"""
+import numpy
 
-	from nose.tools                 import assert_equal
-	from cargo.statistics.functions import ln_poch
+def test_add_log():
+    """
+    Test logarithmic addition (add_log).
+    """
 
-	assert_equal(ln_poch(1, 2), 0.69314718055994529)
-	assert_equal(ln_poch(2, 3), 3.1780538303479458)
+    from nose.tools                 import assert_almost_equal
+    from cargo.statistics.functions import add_log
+
+    assert_almost_equal(add_log(1.0, 2.0), numpy.log(numpy.exp(1.0) + numpy.exp(2.0)))
+
+def test_log_plus():
+    """
+    Test logarithmic addition (log_plus).
+    """
+
+    from nose.tools                 import assert_almost_equal
+    from cargo.statistics.functions import log_plus
+
+    assert_almost_equal(log_plus(1.0, 2.0), numpy.log(numpy.exp(1.0) + numpy.exp(2.0)))
 

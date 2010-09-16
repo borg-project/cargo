@@ -37,7 +37,7 @@ cpdef double log_plus(double x, double y):
     """
 
     if x >= y:
-        return x + log(exp(y - x))
+        return x + log(1.0 + exp(y - x))
     else:
-        return y + log(exp(x - y))
+        return y + log(1.0 + exp(x - y))
 

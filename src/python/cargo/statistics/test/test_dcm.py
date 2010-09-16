@@ -40,7 +40,7 @@ def verified_dcm_log_likelihood(alpha, bins):
     Return the log likelihood of C{bins} under the DCM.
     """
 
-    from cargo.statistics.functions import ln_poch
+    from cargo.gsl.sf import ln_poch
 
     u_lnp = numpy.frompyfunc(ln_poch, 2, 1)
     psigm = numpy.sum(u_lnp(alpha, bins))
@@ -138,10 +138,9 @@ def verified_dcm_estimate(counts, weights, threshold, cutoff):
     total_weight = numpy.sum(weights)
 
     for i in count(1):
-        old                  = alpha
-        alpha                = alpha_new(old, counts, weights, total_weight)
-        difference           = numpy.sum(numpy.abs(old - alpha))
-        alpha[alpha < 1e-16] = 1e-16
+        old        = alpha
+        alpha      = alpha_new(old, counts, weights, total_weight)
+        difference = numpy.sum(numpy.abs(old - alpha))
 
         if difference < threshold or (cutoff is not None and i >= cutoff):
             return alpha
@@ -158,21 +157,10 @@ def assert_estimator_ok(estimator, counts, weights = None):
     verified_alpha = verified_dcm_estimate(counts, weights, 1e-6, 1e4)
     estimated_dcm  = estimator.estimate(counts, RandomState(1), weights)
 
+    print estimated_dcm.alpha
+    print verified_alpha
+
     assert_true(numpy.allclose(estimated_dcm.alpha, verified_alpha))
-
-def test_minka_fp_simple():
-    """
-    Test the Minka fixed-point estimator.
-    """
-
-    from cargo.statistics.dcm import MinkaFixedPointEstimator
-
-    estimator = MinkaFixedPointEstimator(threshold = 1e-6, cutoff = 1e4)
-
-    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4))
-    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
-    yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2) / 2.0
-    yield assert_estimator_ok, estimator, [[0, 3], [3, 0], [9, 2]], [0.3, 0.7, 0.5]
 
 def test_wallach_recurrence_simple():
     """
@@ -181,7 +169,7 @@ def test_wallach_recurrence_simple():
 
     from cargo.statistics.dcm import WallachRecurrenceEstimator
 
-    estimator = WallachRecurrenceEstimator(threshold = 1e-6, cutoff = 1e4)
+    estimator = WallachRecurrenceEstimator(threshold = 1e-6, cutoff = 1e4, epsilon = None)
 
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4))
     yield assert_estimator_ok, estimator, numpy.arange(8).reshape((2, 4)), numpy.ones(2)
