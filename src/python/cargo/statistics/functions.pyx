@@ -3,6 +3,8 @@
 """
 
 cdef extern from "math.h":
+    double      exp (double)
+    double      log (double)
     long double expl(long double)
     long double logl(long double)
 
@@ -25,4 +27,17 @@ cpdef long double add_log(long double x, long double y):
         return y
     else:
         return y + logl(1.0 + expl(x - y))
+
+cpdef double log_plus(double x, double y):
+    """
+    Return log(x + y) given log(x) and log(y); see [1].
+
+    [1] Digital Filtering Using Logarithmic Arithmetic.
+        Kingsbury and Rayner, 1970.
+    """
+
+    if x >= y:
+        return x + log(exp(y - x))
+    else:
+        return y + log(exp(x - y))
 

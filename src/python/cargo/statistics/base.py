@@ -4,7 +4,6 @@
 
 import numpy
 
-from abc         import abstractmethod
 from collections import Sequence
 from cargo.sugar import ABC
 
@@ -71,14 +70,15 @@ class Distribution(object):
 
         return self
 
-class Estimator(ABC):
+class Estimator(object):
     """
     Interface to a maximum-likelihood estimator of distributions.
     """
 
-    @abstractmethod
     def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """
+
+        raise NotImplementedError()
 
