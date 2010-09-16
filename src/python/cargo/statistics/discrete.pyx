@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -9,6 +10,10 @@ from cargo.statistics.base import (
     Estimator,
     Distribution,
     )
+
+cimport numpy
+
+from cargo.gsl.sf cimport log
 
 class Discrete(Distribution):
     """
@@ -33,16 +38,24 @@ class Discrete(Distribution):
         Return a sample from this distribution.
         """
 
-        ((k,),) = numpy.nonzero(random.multinomial(1, self._beta))
+        # mise en place
+        cdef numpy.ndarray[double, ndim = 1] beta = self._beta
 
-        return k
+        # sample from this distribution
+        r = random.rand()
 
-    def log_likelihood(self, sample):
+        for i in xrange(beta.shape[0] - 1):
+            if r < beta[i]:
+                return i
+
+        return beta.shape[0] - 1
+
+    def log_likelihood(self, int sample):
         """
         Return the log likelihood of C{sample} under this distribution.
         """
 
-        return numpy.log(self._beta[sample])
+        return log(self._beta[sample])
 
     @property
     def beta(self):
@@ -151,12 +164,7 @@ class ObjectDiscreteEstimator(Estimator):
         Return the estimated distribution.
         """
 
-        indices = \
-            numpy.fromiter(
-                (self._domain.index(s) for s in samples),
-                numpy.uint,
-                len(samples),
-                )
+        indices = numpy.array(map(self._domain.index, samples), numpy.uint)
 
         return self._estimator.estimate(indices, random, weights)
 

@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -10,6 +11,7 @@ from cargo.statistics.base import (
     )
 
 cimport numpy
+cimport cython
 
 from libc.float   cimport DBL_MAX
 from cargo.gsl.sf cimport (
@@ -78,6 +80,40 @@ class Multinomial(Distribution):
                 lp += -DBL_MAX * counts_D[d] - ln_gamma(counts_D[d] + 1)
 
         return lp + ln_gamma(n + 1)
+
+    @cython.boundscheck(False)
+    def add_log_likelihoods(self, samples, to):
+        """
+        Add the log likelihoods of C{samples} under this distribution.
+        """
+
+        # mise en place
+        cdef numpy.ndarray[double       , ndim = 1] beta_D     = self._beta
+        cdef numpy.ndarray[unsigned long, ndim = 2] samples_ND = samples
+        cdef numpy.ndarray[double       , ndim = 1] to_N       = to
+
+        assert samples_ND.shape[0] == to_N.shape[0]
+        assert samples_ND.shape[1] == beta_D.shape[0]
+
+        # calculate
+        cdef size_t        n
+        cdef size_t        d
+        cdef unsigned long m
+        cdef double        p
+
+        for n in xrange(samples_ND.shape[0]):
+            m = 0
+            p = 0.0
+
+            for d in xrange(samples_ND.shape[1]):
+                m += samples_ND[n, d]
+
+                if beta_D[d] > 0.0:
+                    p += log(beta_D[d]) * samples_ND[n, d] - ln_gamma(samples_ND[n, d] + 1)
+                else:
+                    p += -DBL_MAX * samples_ND[n, d] - ln_gamma(samples_ND[n, d] + 1)
+
+            to_N[n] += p + ln_gamma(m + 1)
 
     def total_log_likelihood(self, samples):
         """

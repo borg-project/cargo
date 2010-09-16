@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -98,7 +99,7 @@ class EM_MixtureEstimator(Estimator):
     Estimate the parameters of a finite mixture distribution using EM.
     """
 
-    def __init__(self, estimators, iterations = 128, convergence = 1e-8):
+    def __init__(self, estimators, iterations = 8, convergence = 1e-8):
         """
         Initialize.
 
@@ -128,24 +129,20 @@ class EM_MixtureEstimator(Estimator):
         pi_K /= numpy.sum(pi_K)
 
         # run EM until convergence
-        from numpy import newaxis
-
         last_r_NK = None
         r_NK      = numpy.empty((len(samples), len(components)))
 
         for i in xrange(self._iterations):
             # evaluate the responsibilities
+            r_NK[:, :] = 0.0
+
             for (k, component) in enumerate(components):
-                for (n, sample) in enumerate(samples):
-                    r  = pi_K[k]
-                    r *= numpy.exp(component.log_likelihood(sample))
+                component.add_log_likelihoods(samples, r_NK[:, k])
 
-                    if r == 0.0:
-                        r_NK[n, k] = numpy.finfo(numpy.float).tiny
-                    else:
-                        r_NK[n, k] = r
+            numpy.exp(r_NK, r_NK)
 
-            r_NK /= numpy.sum(r_NK, 1)[:, newaxis]
+            r_NK *= pi_K[None, :]
+            r_NK /= numpy.sum(r_NK, 1)[:, None]
 
             # find the maximum-likelihood estimates of components
             for (k, estimator) in enumerate(self._estimators):
@@ -157,7 +154,7 @@ class EM_MixtureEstimator(Estimator):
             # tracing
             log.debug(
                 "pi [%s] (com %.2f)",
-                " ".join("%.2f" % p for p in pi_K),
+                " ".join(["%.2f" % p for p in pi_K]),
                 numpy.sum((numpy.arange(len(components)) + 1) * pi_K),
                 )
 
