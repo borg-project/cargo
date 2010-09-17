@@ -33,8 +33,9 @@ def test_finite_mixture():
         ones   = 0
         twos   = 0
         random = RandomState(42)
+        draws  = 32768
 
-        for i in xrange(1024):
+        for i in xrange(draws):
             sample = mixture.random_variate(random = random)
 
             if sample == 1.0:
@@ -44,8 +45,8 @@ def test_finite_mixture():
             else:
                 assert_not_equal(sample, sample)
 
-        assert_almost_equal(ones / 1024.0, 0.25, places = 2)
-        assert_almost_equal(twos / 1024.0, 0.75, places = 2)
+        assert_almost_equal(ones / float(draws), 0.25, places = 2)
+        assert_almost_equal(twos / float(draws), 0.75, places = 2)
 
     yield test_random_variate
 
@@ -78,9 +79,6 @@ def assert_mixture_estimator_ok(estimator):
     """
     Test estimation of finite mixture distributions.
     """
-
-    from cargo.log import get_logger
-    get_logger("cargo.statistics.mixture", level = "DEBUG")
 
     # generate some data
     from numpy.random                 import RandomState

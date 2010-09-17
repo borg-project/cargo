@@ -26,14 +26,15 @@ def test_discrete_distribution():
 
         from nose.tools import assert_almost_equal
 
-        samples = distribution.random_variates(1024, random)
+        length  = 32768
+        samples = distribution.random_variates(length, random)
         counts  = numpy.zeros(2)
 
         for k in samples:
             counts[k] += 1
 
-        assert_almost_equal(counts[0] / 1024.0, 0.25, places = 2)
-        assert_almost_equal(counts[1] / 1024.0, 0.75, places = 2)
+        assert_almost_equal(counts[0] / length, 0.25, places = 2)
+        assert_almost_equal(counts[1] / length, 0.75, places = 2)
 
     yield test_random_variate, index_discrete
     yield test_random_variate, object_discrete

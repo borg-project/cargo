@@ -42,7 +42,8 @@ class Discrete(Distribution):
         cdef numpy.ndarray[double, ndim = 1] beta = self._beta
 
         # sample from this distribution
-        r = random.rand()
+        cdef size_t i
+        cdef double r = random.rand()
 
         for i in xrange(beta.shape[0] - 1):
             if r < beta[i]:

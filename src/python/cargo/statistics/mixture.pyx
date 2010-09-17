@@ -151,13 +151,6 @@ class EM_MixtureEstimator(Estimator):
             # find the maximum-likelihood pis
             pi_K = numpy.sum(r_NK, 0) / len(samples)
 
-            # tracing
-            log.debug(
-                "pi [%s] (com %.2f)",
-                " ".join(["%.2f" % p for p in pi_K]),
-                numpy.sum((numpy.arange(len(components)) + 1) * pi_K),
-                )
-
             # termination?
             if last_r_NK is None:
                 last_r_NK = numpy.empty((len(samples), len(components)))

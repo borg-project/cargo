@@ -89,8 +89,8 @@ class Multinomial(Distribution):
 
         # mise en place
         cdef numpy.ndarray[double       , ndim = 1] beta_D     = self._beta
-        cdef numpy.ndarray[unsigned long, ndim = 2] samples_ND = samples
-        cdef numpy.ndarray[double       , ndim = 1] to_N       = to
+        cdef numpy.ndarray[unsigned long, ndim = 2] samples_ND = numpy.asarray(samples, numpy.uint)
+        cdef numpy.ndarray[double       , ndim = 1] to_N       = numpy.asarray(to)
 
         assert samples_ND.shape[0] == to_N.shape[0]
         assert samples_ND.shape[1] == beta_D.shape[0]
