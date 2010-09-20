@@ -14,6 +14,7 @@ cimport numpy
 cimport cython
 
 from libc.float   cimport DBL_MAX
+from numpy        cimport uint_t
 from cargo.gsl.sf cimport (
     log,
     ln_gamma,
@@ -36,11 +37,8 @@ class Multinomial(Distribution):
         """
 
         # initialization
-        self._beta     = numpy.asarray(beta)
-        self._norm     = norm
-
-        # let's not let ourselves be idiots
-        self._beta.flags.writeable     = False
+        self._beta = numpy.asarray(beta)
+        self._norm = norm
 
     def random_variate(self, random = numpy.random):
         """
@@ -62,8 +60,8 @@ class Multinomial(Distribution):
         """
 
         # mise en place
-        cdef numpy.ndarray[double       , ndim = 1] beta_D   = self._beta
-        cdef numpy.ndarray[unsigned long, ndim = 1] counts_D = sample
+        cdef numpy.ndarray[double]       beta_D   = self._beta
+        cdef numpy.ndarray[numpy.uint_t] counts_D = sample
 
         assert counts_D.shape[0] == beta_D.shape[0]
 
@@ -88,9 +86,9 @@ class Multinomial(Distribution):
         """
 
         # mise en place
-        cdef numpy.ndarray[double       , ndim = 1] beta_D     = self._beta
-        cdef numpy.ndarray[unsigned long, ndim = 2] samples_ND = numpy.asarray(samples, numpy.uint)
-        cdef numpy.ndarray[double       , ndim = 1] to_N       = numpy.asarray(to)
+        cdef numpy.ndarray[double]                 beta_D     = self._beta
+        cdef numpy.ndarray[numpy.uint_t, ndim = 2] samples_ND = numpy.asarray(samples, numpy.uint)
+        cdef numpy.ndarray[double]                 to_N       = to
 
         assert samples_ND.shape[0] == to_N.shape[0]
         assert samples_ND.shape[1] == beta_D.shape[0]
@@ -148,30 +146,50 @@ class MultinomialEstimator(Estimator):
         Initialize.
         """
 
-        self._norm    = norm
-        self._epsilon = epsilon
+        self._norm = norm
 
+        if epsilon is None:
+            self._epsilon = 0.0
+        else:
+            self._epsilon = epsilon
+
+    @cython.boundscheck(False)
     def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated maximum likelihood distribution.
         """
 
         # parameters
-        samples = numpy.asarray(samples)
+        cdef numpy.ndarray[uint_t, ndim = 2] samples_ND = numpy.asarray(samples, numpy.uint)
+        cdef numpy.ndarray[double]           weights_N
 
         if weights is None:
-            weights = numpy.ones(samples.shape[0])
+            weights_N = numpy.ones(samples_ND.shape[0])
         else:
-            weights = numpy.asarray(weights)
+            weights_N = numpy.asarray(weights)
+
+        assert samples_ND.shape[0] == weights_N.shape[0]
 
         # estimate
-        mean  = numpy.sum(samples * weights[:, None], 0)
-        mean /= numpy.sum(mean)
+        cdef size_t                D      = samples_ND.shape[1]
+        cdef numpy.ndarray[double] beta_D = numpy.zeros(D)
+        cdef size_t                n
+        cdef size_t                d
 
-        # heuristic smoothing, if requested
-        if self._epsilon is not None:
-            mean += self._epsilon
-            mean /= numpy.sum(mean)
+        for n in xrange(samples_ND.shape[0]):
+            for d in xrange(D):
+                beta_D[d] += weights_N[n] * samples_ND[n, d]
 
-        return Multinomial(mean, self._norm)
+        # normalization and heuristic smoothing
+        cdef double epsilon  = self._epsilon
+        cdef double sum_beta = 0.0
+
+        for d in xrange(D):
+            beta_D[d] += epsilon
+            sum_beta  += beta_D[d]
+
+        for d in xrange(D):
+            beta_D[d] /= sum_beta
+
+        return Multinomial(beta_D, self._norm)
 

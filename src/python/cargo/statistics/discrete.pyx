@@ -12,6 +12,7 @@ from cargo.statistics.base import (
     )
 
 cimport numpy
+cimport cython
 
 from cargo.gsl.sf cimport log
 
@@ -58,6 +59,32 @@ class Discrete(Distribution):
 
         return log(self._beta[sample])
 
+    @cython.boundscheck(False)
+    def add_log_likelihoods(self, samples, to):
+        """
+        Add the log likelihoods of C{samples} under this distribution.
+        """
+
+        # mise en place
+        cdef numpy.ndarray[double]       beta_D    = self._beta
+        cdef numpy.ndarray[numpy.uint_t] samples_N = numpy.asarray(samples, numpy.uint)
+        cdef numpy.ndarray[double]       to_N      = to
+
+        assert samples_N.shape[0] == to_N.shape[0]
+
+        # calculate
+        cdef size_t D = beta_D.shape[0]
+        cdef size_t n
+        cdef size_t s
+
+        for n in xrange(samples_N.shape[0]):
+            s = samples_N[n]
+
+            if s >= D:
+                raise ValueError("discrete-draw index out of bounds")
+            else:
+                to[n] += beta_D[s]
+
     @property
     def beta(self):
         """
@@ -71,31 +98,54 @@ class DiscreteEstimator(Estimator):
     A maximum-likelihood estimator of discrete distributions.
     """
 
-    def __init__(self, D):
+    def __init__(self, D, epsilon = 1e-3):
         """
         Initialize.
 
         @param D: The dimensionality of beta.
         """
 
-        self._D = D
+        self._D       = D
+        self._epsilon = epsilon
 
     def estimate(self, samples, random = numpy.random, weights = None):
         """
         Return the estimated distribution.
         """
 
-        from itertools import izip
+        # samples array
+        cdef numpy.ndarray[numpy.uint_t] samples_N = numpy.asarray(samples, numpy.uint)
+
+        # weights array
+        cdef numpy.ndarray[double] weights_N
 
         if weights is None:
-            weights = numpy.ones(len(samples))
+            weights_N = numpy.ones(len(samples))
+        else:
+            weights_N = numpy.asarray(weights)
 
-        counts = numpy.zeros(self._D)
+        assert samples_N.shape[0] == weights_N.shape[0]
 
-        for (k, w) in izip(samples, weights):
-            counts[k] += w
+        # build the estimate
+        cdef size_t                D      = self._D
+        cdef numpy.ndarray[double] beta_D = numpy.zeros(D)
+        cdef numpy.uint_t          d
+        cdef size_t                n
 
-        return Discrete(counts / numpy.sum(weights))
+        for n in xrange(samples_N.shape[0]):
+            d = samples_N[n]
+
+            if d < D:
+                beta_D[d] += weights_N[n]
+            else:
+                raise ValueError("invalid discrete sample index")
+
+        if self._epsilon is not None:
+            beta_D += self._epsilon
+
+        beta_D /= numpy.sum(beta_D)
+
+        return Discrete(beta_D)
 
 class ObjectDiscrete(Distribution):
     """
@@ -152,13 +202,13 @@ class ObjectDiscreteEstimator(Estimator):
     A maximum-likelihood estimator of discrete distributions.
     """
 
-    def __init__(self, domain):
+    def __init__(self, domain, epsilon = 1e-3):
         """
         Initialize.
         """
 
         self._domain    = domain
-        self._estimator = DiscreteEstimator(len(domain))
+        self._estimator = DiscreteEstimator(len(domain), epsilon = epsilon)
 
     def estimate(self, samples, random = numpy.random, weights = None):
         """

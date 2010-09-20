@@ -48,9 +48,6 @@ class DirichletCompoundMultinomial(Distribution):
         self._alpha = numpy.asarray(alpha)
         self._norm  = norm
 
-        # let's not let ourselves be idiots
-        self._alpha.flags.writeable = False
-
     def random_variate(self, random = numpy.random):
         """
         Return a sample from this distribution.
@@ -76,8 +73,8 @@ class DirichletCompoundMultinomial(Distribution):
         """
 
         # mise en place
-        cdef numpy.ndarray[double      , ndim = 1] alpha_D  = self._alpha
-        cdef numpy.ndarray[unsigned int, ndim = 1] counts_D = sample
+        cdef numpy.ndarray[double]       alpha_D  = self._alpha
+        cdef numpy.ndarray[numpy.uint_t] counts_D = sample
 
         if counts_D.shape[0] != sample.shape[0]:
             raise ValueError("shapes of alpha and counts arrays do not match")
@@ -145,8 +142,8 @@ def get_first(pair):
     return pair[0]
 
 def pre_estimate_dcm_wallach_recurrence(
-    numpy.ndarray[unsigned int, ndim = 2] counts_ND,
-    numpy.ndarray[double, ndim = 1]       weights_N,
+    numpy.ndarray[numpy.uint_t, ndim = 2] counts_ND,
+    numpy.ndarray[double]                 weights_N,
     ):
     """
     Precomputation for the Wallach DCM estimator.
@@ -206,8 +203,8 @@ def pre_estimate_dcm_wallach_recurrence(
     return pre
 
 def estimate_dcm_wallach_recurrence(
-    numpy.ndarray[unsigned int, ndim = 2] counts_ND,
-    numpy.ndarray[double, ndim = 1]       weights_N,
+    numpy.ndarray[numpy.uint_t, ndim = 2] counts_ND,
+    numpy.ndarray[double]                 weights_N,
     double threshold,
     unsigned int cutoff,
     ):
@@ -223,7 +220,7 @@ def estimate_dcm_wallach_recurrence(
 
     assert weights_N.shape[0] == N
 
-    cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D)
+    cdef numpy.ndarray[double] alpha_D = numpy.ones(D)
 
     # precompute the weighted norms
     cdef PreWallachRecurrence pre = pre_estimate_dcm_wallach_recurrence(counts_ND, weights_N)

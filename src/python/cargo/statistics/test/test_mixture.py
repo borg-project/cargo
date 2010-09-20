@@ -110,10 +110,10 @@ def test_em_mixture_estimator():
     Test EM estimation of finite mixture distributions.
     """
 
-    from cargo.statistics.mixture     import EM_MixtureEstimator
-    from cargo.statistics.multinomial import MultinomialEstimator
+    from cargo.statistics.mixture     import FiniteMixture
+    from cargo.statistics.multinomial import Multinomial
 
-    estimator = EM_MixtureEstimator([MultinomialEstimator()] * 2)
+    estimator = FiniteMixture([Multinomial()] * 2)
 
     assert_mixture_estimator_ok(estimator)
 

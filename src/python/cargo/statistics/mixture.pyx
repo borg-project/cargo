@@ -5,36 +5,39 @@
 
 import numpy
 
-from cargo.log             import get_logger
-from cargo.statistics.base import (
-    Estimator,
-    Distribution,
+from cargo.log import get_logger
+
+cimport numpy
+
+from numpy cimport (
+    ndarray,
+    float_t,
     )
 
 log = get_logger(__name__)
 
 class FiniteMixture(Distribution):
     """
-    An arbitrary finite mixture distribution.
-
-    Relevant types:
-        - sample: arbitrary; sampled from a component
-        - sequence: list
+    An arbitrary finite homogeneous mixture distribution.
     """
 
-    def __init__(self, pi, components):
+    def __init__(self, distribution, K, iterations = 256, convergence = 1e-8):
         """
         Initialize.
         """
 
-        # sanity
-        if len(pi) != len(components):
-            raise ValueError("component and parameter counts do not match")
-
-        # members
-        from cargo.statistics.discrete import ObjectDiscrete
-
-        self._mixer = ObjectDiscrete(pi, components)
+        self._distribution    = distribution
+        self._K               = K
+        self._iterations      = iterations
+        self._convergence     = convergence
+        self._parameter_dtype = \
+            numpy.dtype((
+                [
+                    ("p", numpy.float_),
+                    ("c", distribution.parameter_dtype),
+                    ],
+                K,
+                ))
 
     def random_variate(self, random = numpy.random):
         """
@@ -78,39 +81,12 @@ class FiniteMixture(Distribution):
         # done
         return FiniteMixture(post_pi, post_components)
 
-    @property
-    def pi(self):
-        """
-        Return the mixture parameter vector.
-        """
-
-        return self._mixer.beta
-
-    @property
-    def components(self):
-        """
-        Return the mixture components.
-        """
-
-        return self._mixer.domain
-
-class EM_MixtureEstimator(Estimator):
-    """
-    Estimate the parameters of a finite mixture distribution using EM.
-    """
-
-    def __init__(self, estimators, iterations = 8, convergence = 1e-8):
-        """
-        Initialize.
-
-        @param estimators: Estimators of the component distributions.
-        """
-
-        self._estimators  = estimators
-        self._iterations  = iterations
-        self._convergence = convergence
-
-    def estimate(self, samples, random = numpy.random, weights = None):
+    def ml(
+                                   self,
+        ndarray[         ndim = 1] samples,
+        ndarray[float_t, ndim = 1] weights,
+                                   random = numpy.random,
+        ):
         """
         Use EM to estimate mixture parameters.
         """
@@ -123,21 +99,25 @@ class EM_MixtureEstimator(Estimator):
         # generate random initial parameters
         from cargo.random import grab
 
-        components = [e.estimate([grab(samples, random)]) for e in self._estimators]
+        one_weights = numpy.ones_like(samples)
+        components  = [d.ml([grab(samples, random)], one_weights, random) for d in self._distributions]
 
-        pi_K  = random.rand(len(self._estimators))
+        pi_K  = random.rand(len(self._distributions))
         pi_K /= numpy.sum(pi_K)
 
         # run EM until convergence
         last_r_NK = None
         r_NK      = numpy.empty((len(samples), len(components)))
+        ll_N      = numpy.empty(len(samples))
 
         for i in xrange(self._iterations):
             # evaluate the responsibilities
             r_NK[:, :] = 0.0
 
-            for (k, component) in enumerate(components):
-                component.add_log_likelihoods(samples, r_NK[:, k])
+            for (k, distribution) in enumerate(self._distributions):
+                distribution.ll(components[k], samples, ll_N)
+
+                r_NK[:, k] += ll_N
 
             numpy.exp(r_NK, r_NK)
 
@@ -145,8 +125,8 @@ class EM_MixtureEstimator(Estimator):
             r_NK /= numpy.sum(r_NK, 1)[:, None]
 
             # find the maximum-likelihood estimates of components
-            for (k, estimator) in enumerate(self._estimators):
-                components[k] = estimator.estimate(samples, random, r_NK[:, k])
+            for (k, distribution) in enumerate(self._distributions):
+                components[k] = distribution.ml(samples, r_NK[:, k], random)
 
             # find the maximum-likelihood pis
             pi_K = numpy.sum(r_NK, 0) / len(samples)
@@ -157,17 +137,13 @@ class EM_MixtureEstimator(Estimator):
             else:
                 difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
 
-                if difference < self._convergence:
-                    log.detail("converged with delta_r = %e", difference)
-
-                    break
-                else:
-                    log.detail(
-                        "iteration %i < %i: %e to convergence",
-                        i,
-                        self._iterations,
-                        difference - self._convergence,
-                        )
+                log.detail(
+                    "iteration %i < %i ; delta %e >? %e",
+                    i,
+                    self._iterations,
+                    difference,
+                    self._convergence,
+                    )
 
             (last_r_NK, r_NK) = (r_NK, last_r_NK)
 
@@ -175,12 +151,22 @@ class EM_MixtureEstimator(Estimator):
         return FiniteMixture(pi_K, components)
 
     @property
-    def estimators(self):
+    def distribution(self):
         """
-        Return the component estimators.
+        Return the mixture components.
         """
 
-        return self._estimators
+        return self._distribution
+
+    @property
+    def parameter_dtype(self):
+        """
+        Return the parameter type.
+        """
+
+        return self._parameter_dtype
+
+    def 
 
 class RestartedEstimator(Estimator):
     """

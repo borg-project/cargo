@@ -5,13 +5,15 @@
 
 import numpy
 
-from cargo.statistics.base import (
-    Estimator,
-    Distribution,
-    SampleSequence,
+cimport numpy
+
+from numpy cimport (
+    ndarray,
+    uint_t,
+    float_t,
     )
 
-class TupleDistribution(Distribution):
+class Tuple(Distribution):
     """
     A tuple of independent distributions.
     """
@@ -21,74 +23,106 @@ class TupleDistribution(Distribution):
         Initialize.
         """
 
-        self._inner = distributions
+        self._distributions   = distributions
+        self._names           = ["d%i" % i for i in xrange(len(distributions))]
+        self._parameter_dtype = \
+            numpy.dtype([
+                (n, d.parameter_dtype)
+                for n in self._names
+                for d in distributions
+                ])
+        self._sample_dtype    = \
+            numpy.dtype([
+                (n, d.sample_dtype)
+                for n in self._names
+                for d in distributions
+                ])
 
-    def random_variate(self, random = numpy.random):
+    def rv(
+                          self,
+        ndarray[ndim = 1] parameters,
+        ndarray[ndim = 2] out,
+                          random = numpy.random,
+        ):
         """
-        Return a single sample from this distribution.
-        """
-
-        return [d.random_variate(random) for d in self._inner]
-
-    def random_variates(self, size, random = numpy.random):
-        """
-        Return a sequence of samples from this distribution.
-
-        @param size: The size of the sample set to return.
-        """
-
-        return TupleSamples([d.random_variates(size, random) for d in self._inner])
-
-    def log_likelihood(self, sample):
-        """
-        Return the log likelihood of C{sample} under this distribution.
-        """
-
-        cdef int    i
-        cdef double p = 0.0
-
-        for i in xrange(len(self._inner)):
-            p += self._inner[i].log_likelihood(sample[i])
-
-        return p
-
-    def add_log_likelihoods(self, samples, to):
-        """
-        Add the log likelihoods of C{samples} under this distribution.
+        Return samples from this distribution.
         """
 
-        if not isinstance(samples, TupleSamples):
-            samples = TupleSamples.from_sequence(samples)
+        # arguments
+        assert parameters.shape[0] == out.shape[0]
 
-        cdef int i
+        # computation
+        cdef size_t            i
+        cdef size_t            j
+        cdef BinomialParameter p
 
-        for i in xrange(len(self._inner)):
-            self._inner[i].add_log_likelihoods(samples._sequences[i], to)
+        for i in xrange(out.shape[0]):
+            p         = parameters[i]
+            out[i, :] = random.binomial(p.n, p.p, out.shape[1])
 
-    def total_log_likelihood(self, samples):
+        return out
+
+    def ll(
+                          self,
+        ndarray[ndim = 1] parameters,
+        ndarray[ndim = 2] samples,
+        ndarray[ndim = 2] out = None,
+        ):
         """
-        Return the total log likelihood of C{samples} under this distribution.
+        Return the log probability of samples under this distribution.
         """
 
-        if not isinstance(samples, TupleSamples):
-            samples = TupleSamples.from_sequence(samples)
+        # arguments
+        assert len(parameters.dtype.names) == len(self._distributions)
+        assert samples.shape[0] == parameters.shape[0]
 
-        if len(samples._sequences) != len(self._inner):
-            raise ValueError("samples and distribution width do not match")
+        if out is None:
+            out = numpy.empty((samples.shape[0], samples.shape[1]), numpy.float_)
+        else:
+            assert samples.shape[0] == out.shape[0]
+            assert samples.shape[1] == out.shape[1]
 
-        from itertools import izip
+        # computation
+        for (name, distribution) in zip(self._names, self._distributions):
+            distribution.ll(parameters[name], samples[name], out[name])
 
-        zipped = izip(self._inner, samples._sequences)
+        return out
 
-        return sum(d.total_log_likelihood(s) for (d, s) in zipped)
+    def ml(
+                                   self,
+        ndarray[         ndim = 1] samples,
+        ndarray[float_t, ndim = 1] weights,
+                                   random = numpy.random,
+        ):
+        """
+        Return the estimated maximum-likelihood parameter.
+        """
+
+        #parameters = numpy.
 
     @property
-    def inner(self):
+    def distributions(self):
         """
         Return the inner distributions.
         """
 
-        return self._inner
+        return self._distributions
+
+    @property
+    def parameter_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
+
+        return self._parameter_dtype
+
+    @property
+    def sample_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
+
+        return self._sample_dtype
 
 class TupleEstimator(Estimator):
     """
@@ -124,98 +158,4 @@ class TupleEstimator(Estimator):
         zipped = izip(self._estimators, samples._sequences)
 
         return TupleDistribution([e.estimate(s, random, weights) for (e, s) in zipped])
-
-def tuple_samples_from_sequence(samples):
-    """
-    Build a tuple-specific sample sequence from a generic sample sequence.
-    """
-
-    return TupleSamples(zip(*samples))
-
-class TupleSamples(SampleSequence):
-    """
-    Store samples from a tuple distribution.
-    """
-
-    def __init__(self, sequences):
-        """
-        Initialize.
-
-        @param sequences: Sequence of samples from each component.
-        """
-
-        # sanity
-        for i in xrange(len(sequences) - 1):
-            if not isinstance(sequences[i], SampleSequence):
-                raise TypeError("inner sequence is not an array or sequence")
-
-            if len(sequences[i]) != len(sequences[i + 1]):
-                raise ValueError("sample sequence lengths are mismatched")
-
-        # members
-        self._sequences = sequences
-
-    def __len__(self):
-        """
-        How many samples are stored?
-        """
-
-        return len(self._sequences[0])
-
-    def __iter__(self):
-        """
-        Return an iterator over the stored samples.
-        """
-
-        return TupleSamplesIterator(self)
-
-    def __getitem__(self, index):
-        """
-        Return a particular sample.
-        """
-
-        return [s[index] for s in self._sequences]
-
-    def __str__(self):
-        """
-        Return a string description of this sequence.
-        """
-
-        return str(list(self))
-
-    def __repr__(self):
-        """
-        Return a string representation of this sequence.
-        """
-
-        return repr(list(self))
-
-    from_sequence = tuple_samples_from_sequence
-
-class TupleSamplesIterator(object):
-    """
-    Iterate over tuple samples.
-    """
-
-    def __init__(self, samples):
-        """
-        Initialize.
-        """
-
-        self._samples = samples
-        self._i       = 0
-
-    def next(self):
-        """
-        Return the next sample.
-        """
-
-        cdef int i = self._i
-
-        if i >= len(self._samples):
-            raise StopIteration()
-        else:
-            self._i = i + 1
-
-            return [s[i] for s in self._samples._sequences]
 
