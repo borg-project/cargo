@@ -13,7 +13,7 @@ from numpy cimport (
     float_t,
     )
 
-class Tuple(Distribution):
+class Tuple(object):
     """
     A tuple of independent distributions.
     """
@@ -40,33 +40,33 @@ class Tuple(Distribution):
 
     def rv(
                           self,
-        ndarray[ndim = 1] parameters,
-        ndarray[ndim = 2] out,
+        ndarray           parameters, # ndim = 1
+        ndarray           out,        # ndim = 2
                           random = numpy.random,
         ):
         """
         Return samples from this distribution.
         """
 
-        # arguments
-        assert parameters.shape[0] == out.shape[0]
+        ## arguments
+        #assert parameters.shape[0] == out.shape[0]
 
-        # computation
-        cdef size_t            i
-        cdef size_t            j
-        cdef BinomialParameter p
+        ## computation
+        #cdef size_t            i
+        #cdef size_t            j
+        #cdef BinomialParameter p
 
-        for i in xrange(out.shape[0]):
-            p         = parameters[i]
-            out[i, :] = random.binomial(p.n, p.p, out.shape[1])
+        #for i in xrange(out.shape[0]):
+            #p         = parameters[i]
+            #out[i, :] = random.binomial(p.n, p.p, out.shape[1])
 
         return out
 
     def ll(
                           self,
-        ndarray[ndim = 1] parameters,
-        ndarray[ndim = 2] samples,
-        ndarray[ndim = 2] out = None,
+        ndarray           parameters, # ndim = 1
+        ndarray           samples,    # ndim = 2
+        ndarray           out = None, # ndim = 2
         ):
         """
         Return the log probability of samples under this distribution.
@@ -90,7 +90,7 @@ class Tuple(Distribution):
 
     def ml(
                                    self,
-        ndarray[         ndim = 1] samples,
+        ndarray                    samples, # ndim = 1
         ndarray[float_t, ndim = 1] weights,
                                    random = numpy.random,
         ):
@@ -124,7 +124,7 @@ class Tuple(Distribution):
 
         return self._sample_dtype
 
-class TupleEstimator(Estimator):
+class TupleEstimator(object):
     """
     A maximum-likelihood estimator of tuple distributions.
     """
@@ -141,21 +141,21 @@ class TupleEstimator(Estimator):
         Return the estimated distribution.
         """
 
-        if not isinstance(samples, TupleSamples):
-            samples = TupleSamples.from_sequence(samples)
+        #if not isinstance(samples, TupleSamples):
+            #samples = TupleSamples.from_sequence(samples)
 
-        if len(samples._sequences) != len(self._estimators):
-            raise \
-                ValueError(
-                    "samples width %i does not match estimators count %i" % (
-                        len(samples._sequences),
-                        len(self._estimators),
-                        ),
-                    )
+        #if len(samples._sequences) != len(self._estimators):
+            #raise \
+                #ValueError(
+                    #"samples width %i does not match estimators count %i" % (
+                        #len(samples._sequences),
+                        #len(self._estimators),
+                        #),
+                    #)
 
-        from itertools import izip
+        #from itertools import izip
 
-        zipped = izip(self._estimators, samples._sequences)
+        #zipped = izip(self._estimators, samples._sequences)
 
-        return TupleDistribution([e.estimate(s, random, weights) for (e, s) in zipped])
+        #return TupleDistribution([e.estimate(s, random, weights) for (e, s) in zipped])
 

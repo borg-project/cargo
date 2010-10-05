@@ -16,7 +16,7 @@ from numpy cimport (
 
 log = get_logger(__name__)
 
-class FiniteMixture(Distribution):
+class FiniteMixture(object):
     """
     An arbitrary finite homogeneous mixture distribution.
     """
@@ -83,7 +83,36 @@ class FiniteMixture(Distribution):
 
     def ml(
                                    self,
-        ndarray[         ndim = 1] samples,
+        ndarray                    samples, # ndim = 2
+        ndarray[float_t, ndim = 2] weights,
+        ndarray                    out,     # ndim = 1
+                                   random = numpy.random,
+        ):
+        """
+        Use EM to estimate mixture parameters.
+        """
+
+        # arguments
+        assert samples.shape[0] == weights.shape[0]
+        assert samples.shape[1] == weights.shape[1]
+
+        if not numpy.all(weights == 1.0):
+            raise NotImplementedError("non-unit sample weighting not yet supported")
+
+        if out is None:
+            out = numpy.empty(samples.shape[0], self._parameter_dtype)
+        else:
+            assert samples.shape[0] == out.shape[0]
+
+        # computation
+        log.detail("estimating finite mixture from %i samples" % samples.shape[1])
+
+        for i in xrange(samples.shape[0]):
+            out[i] = self._ml(samples[i], weights[i], random)
+
+    def _ml(
+                                   self,
+        ndarray                    samples, # ndim = 1
         ndarray[float_t, ndim = 1] weights,
                                    random = numpy.random,
         ):
@@ -91,64 +120,64 @@ class FiniteMixture(Distribution):
         Use EM to estimate mixture parameters.
         """
 
-        if weights is not None:
-            raise NotImplementedError("sample weighting not yet supported")
+        ## generate random initial parameters
+        #cdef size_t N = samples.shape[0]
+        #cdef size_t K = self._K
 
-        log.detail("estimating finite mixture from %i samples" % len(samples))
+        #d = self._distribution
+        #p = numpy.empty((), self._parameter_dtype)
 
-        # generate random initial parameters
-        from cargo.random import grab
+        #d.ml(samples[(0, random.randint(N, K))], weights, p["c"], random)
 
-        one_weights = numpy.ones_like(samples)
-        components  = [d.ml([grab(samples, random)], one_weights, random) for d in self._distributions]
+        #p["p"]  = random.rand(K)
+        #p["p"] /= numpy.sum(pi_K)
 
-        pi_K  = random.rand(len(self._distributions))
-        pi_K /= numpy.sum(pi_K)
+        ## run EM until convergence
+        #last_r_NK = None
+        #r_NK      = numpy.empty((N, K))
+        #ll_N      = numpy.empty(N)
 
-        # run EM until convergence
-        last_r_NK = None
-        r_NK      = numpy.empty((len(samples), len(components)))
-        ll_N      = numpy.empty(len(samples))
+        #for i in xrange(self._iterations):
+            ## evaluate the responsibilities
+            #ll_N = d.ll(p["c"], samples, )
 
-        for i in xrange(self._iterations):
-            # evaluate the responsibilities
-            r_NK[:, :] = 0.0
+            #r_NK[:, :] = 0.0
 
-            for (k, distribution) in enumerate(self._distributions):
-                distribution.ll(components[k], samples, ll_N)
+            #for (k, distribution) in enumerate(self._distributions):
+                #distribution.ll(components[k], samples, ll_N)
 
-                r_NK[:, k] += ll_N
+                #r_NK[:, k] += ll_N
 
-            numpy.exp(r_NK, r_NK)
+            #numpy.exp(r_NK, r_NK)
 
-            r_NK *= pi_K[None, :]
-            r_NK /= numpy.sum(r_NK, 1)[:, None]
+            #r_NK *= pi_K[None, :]
+            #r_NK /= numpy.sum(r_NK, 1)[:, None]
 
-            # find the maximum-likelihood estimates of components
-            for (k, distribution) in enumerate(self._distributions):
-                components[k] = distribution.ml(samples, r_NK[:, k], random)
+            ## find the maximum-likelihood estimates of components
+            #for (k, distribution) in enumerate(self._distributions):
+                #components[k] = distribution.ml(samples, r_NK[:, k], random)
 
-            # find the maximum-likelihood pis
-            pi_K = numpy.sum(r_NK, 0) / len(samples)
+            ## find the maximum-likelihood pis
+            #pi_K = numpy.sum(r_NK, 0) / len(samples)
 
-            # termination?
-            if last_r_NK is None:
-                last_r_NK = numpy.empty((len(samples), len(components)))
-            else:
-                difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
+            ## termination?
+            #if last_r_NK is None:
+                #last_r_NK = numpy.empty((len(samples), len(components)))
+            #else:
+                #difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
 
-                log.detail(
-                    "iteration %i < %i ; delta %e >? %e",
-                    i,
-                    self._iterations,
-                    difference,
-                    self._convergence,
-                    )
+                #log.detail(
+                    #"iteration %i < %i ; delta %e >? %e",
+                    #i,
+                    #self._iterations,
+                    #difference,
+                    #self._convergence,
+                    #)
 
-            (last_r_NK, r_NK) = (r_NK, last_r_NK)
+            #(last_r_NK, r_NK) = (r_NK, last_r_NK)
 
-        # done
-        return FiniteMixture(pi_K, components)
+        ## done
+        #return p
 
     @property
     def distribution(self):
@@ -166,9 +195,14 @@ class FiniteMixture(Distribution):
 
         return self._parameter_dtype
 
-    def 
+    def sample_dtype(self):
+        """
+        Return the sample type.
+        """
 
-class RestartedEstimator(Estimator):
+        return self._distribution.sample_dtype
+
+class RestartedEstimator(object):
     """
     Make multiple estimates, and return the best.
     """

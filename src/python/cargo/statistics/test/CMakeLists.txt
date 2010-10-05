@@ -8,6 +8,7 @@ install(
         test_tuple.py
         test_mixture.py
 		test_constant.py
+		test_binomial.py
     DESTINATION lib/cargo/statistics/test
     )
 

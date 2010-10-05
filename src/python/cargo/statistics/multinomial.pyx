@@ -25,8 +25,8 @@ class Multinomial(Distribution):
     The multinomial distribution.
 
     Relevant types:
-        - sample: D-shaped uint ndarray
-        - sequence: ND-shaped uint ndarray
+    - sample: D-shaped uint ndarray
+    - sequence: ND-shaped uint ndarray
     """
 
     def __init__(self, beta, norm = 1):

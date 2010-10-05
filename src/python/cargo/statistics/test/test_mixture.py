@@ -2,14 +2,43 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import numpy
+
+from numpy                     import (
+    ones,
+    array,
+    )
+from cargo.testing             import assert_almost_equal_deep
+
+def test_finite_mixture_ml():
+    """
+    Test EM estimation of finite mixture distributions.
+    """
+
+    from numpy.random              import RandomState
+    from cargo.statistics.mixture  import FiniteMixture
+    from cargo.statistics.binomial import MixedBinomial
+
+    d    = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
+    (e,) = \
+        d.ml(
+            array([[(3, 4)] * 1000 + [(1, 4)] * 2000]),
+            ones((1, 3000)),
+            None,
+            RandomState(42),
+            )
+
+    assert_almost_equal_deep(
+        e[numpy.argsort(e["p"])],
+        array([(1.0 / 3.0, 0.75), (2.0 / 3.0, 0.25)], d.parameter_dtype),
+        )
+
 def test_finite_mixture():
     """
     Test a finite mixture.
     """
 
     # build a simple finite mixture
-    import numpy
-
     from cargo.statistics.mixture  import FiniteMixture
     from cargo.statistics.constant import Constant
 
