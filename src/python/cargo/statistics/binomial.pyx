@@ -14,15 +14,13 @@ from numpy       cimport (
     ndarray,
     uint_t,
     float_t,
-    npy_intp,
-    PyUFunc_None,
-    PyUFuncGenericFunction,
-    PyUFunc_FromFuncAndData,
     import_array,
-    import_ufunc,
+    broadcast,
+    PyArray_MultiIter_DATA,
+    PyArray_MultiIter_NEXT,
+    PyArray_MultiIter_NOTDONE,
     )
 
-import_ufunc()
 import_array()
 
 cdef packed struct BinomialParameter:
@@ -101,59 +99,6 @@ cdef packed struct MixedBinomialSample:
     uint_t k
     uint_t n
 
-cdef void mixed_binomial_ll_ufunc_loop(char** args, npy_intp* dimensions, npy_intp* strides, void* data):
-    """
-    The core loop of the mixed-binomial log-probability ufunc.
-    """
-
-    #cdef char* p        = args[0]
-    #cdef char* s        = args[1]
-    #cdef char* o        = args[2]
-    #cdef int   p_stride = strides[0]
-    #cdef int   s_stride = strides[1]
-    #cdef int   o_stride = strides[2]
-    #cdef size_t i
-
-    #for i in xrange(dimensions[0]):
-        ##out[i] = log(scipy.stats.binom.pmf(samples[i].k, samples[i].n, parameters[i]))
-        ##(<double*>o)[0] = (<double*>s)[0] + (<double*>p)[0]
-
-        #p += p_stride
-        #s += s_stride
-        #o += o_stride
-
-def mixed_binomial_ll_ufunc():
-    """
-    Construct the mixed-binomial log-probability ufunc.
-    """
-
-    # allocate the functions array
-    cdef PyUFuncGenericFunction* functions = <PyUFuncGenericFunction*>malloc(sizeof(PyUFuncGenericFunction) * 1)
-
-    functions[0] = mixed_binomial_ll_ufunc_loop
-
-    # allocate the data array
-    cdef void** data = <void**>malloc(sizeof(void*) * 1)
-
-    data[0] = NULL
-
-    # construct the ufunc
-    return \
-        PyUFunc_FromFuncAndData(
-            functions,                           # functions
-            data,                                # data
-            "ddd",                               # types
-            1,                                   # ntypes
-            2,                                   # nin
-            1,                                   # nout
-            PyUFunc_None,                        # identity
-            "binomial_ll",                       # name
-            "Compute binomial log-probability.", # doc
-            0,                                   # check_return
-            )
-
-ll = mixed_binomial_ll_ufunc()
-
 class MixedBinomial(object):
     """
     Operate on multiple binomials with a single common probability parameter.
@@ -172,58 +117,67 @@ class MixedBinomial(object):
         else:
             self._epsilon = epsilon
 
-    #def ll(
-                                               #self,
-        #ndarray[float_t            , ndim = 2] parameters,
-        #ndarray[MixedBinomialSample, ndim = 2] samples,
-        #ndarray[float_t            , ndim = 2] out = None,
-        #):
-        #"""
-        #Return the log probability of samples under this distribution.
-        #"""
+    def ll(self, parameters, samples, out = None):
+        """
+        Compute the log probabilities of binomial samples.
+        """
 
-        ## arguments
-        #assert samples.shape[0] == parameters.shape[0]
+        # arguments
+        parameters = numpy.asarray(parameters, self._parameter_dtype)
+        samples    = numpy.asarray(samples, self._sample_dtype)
 
-        #if out is None:
-            #out = numpy.empty((samples.shape[0], samples.shape[1]), numpy.float_)
-        #else:
-            #assert samples.shape[0] == out.shape[0]
-            #assert samples.shape[1] == out.shape[1]
+        cdef broadcast i = broadcast(parameters, samples)
 
-        ## computation
-        #cdef size_t              i
-        #cdef size_t              j
-        #cdef MixedBinomialSample s
+        if out is None:
+            out = numpy.empty(i.shape)
+        else:
+            if out.shape != i.shape:
+                raise ValueError("out argument has invalid shape")
+            if out.dtype != numpy.float_:
+                raise ValueError("out argument has invalid dtype")
 
-        #for i in xrange(out.shape[0]):
-            #for j in xrange(out.shape[1]):
-                #s         = samples[i, j]
-                #out[i, j] = scipy.stats.binom.pmf(s.k, s.n, parameters[i, j])
+        # computation
+        i = broadcast(parameters, samples, out)
 
-        #numpy.log(out, out)
+        cdef double              p
+        cdef double              v
+        cdef MixedBinomialSample s
 
-        #return out
+        while PyArray_MultiIter_NOTDONE(i):
+            p = (<double*>PyArray_MultiIter_DATA(i, 0))[0]
+            s = (<MixedBinomialSample*>PyArray_MultiIter_DATA(i, 1))[0]
+            v = numpy.log(scipy.stats.binom.pmf(s.k, s.n, p))
 
-    def ml(
-                                               self,
-        ndarray[MixedBinomialSample, ndim = 2] samples,
-        ndarray[float_t            , ndim = 2] weights,
-        ndarray[float_t            , ndim = 1] out = None,
-                                               random = numpy.random,
-        ):
+            (<double*>PyArray_MultiIter_DATA(i, 2))[0] = v
+
+            PyArray_MultiIter_NEXT(i)
+
+        return out
+
+    def ml(self, samples, weights, out = None, random = numpy.random):
         """
         Return the estimated maximum-likelihood parameter.
         """
 
         # arguments
-        assert samples.shape[0] == weights.shape[0]
-        assert samples.shape[1] == weights.shape[1]
+        (broad_samples, broad_weights) = \
+            numpy.broadcast_arrays(
+                numpy.asarray(samples, self._sample_dtype),
+                numpy.asarray(weights),
+                )
+
+        # restore the dtype (broadcast_arrays partially strips it)
+        cdef ndarray[MixedBinomialSample, ndim = 2] samples_ = numpy.asarray(broad_samples, self._sample_dtype)
+        cdef ndarray[float_t            , ndim = 2] weights_ = broad_weights
+        cdef ndarray[float_t            , ndim = 1] out_
 
         if out is None:
-            out = numpy.empty(samples.shape[0], numpy.float_)
+            out_ = numpy.empty(samples_.shape[0], numpy.float_)
         else:
-            assert samples.shape[0] == out.shape[0]
+            out_ = out
+
+            assert out_.ndim == 1
+            assert samples_.shape[0] == out_.shape[0]
 
         # computation
         cdef uint_t              i
@@ -232,18 +186,18 @@ class MixedBinomial(object):
         cdef float_t             n
         cdef MixedBinomialSample s
 
-        for i in xrange(samples.shape[0]):
+        for i in xrange(samples_.shape[0]):
             k = 0.0
             n = 0.0
 
-            for j in xrange(samples.shape[1]):
-                s  = samples[i, j]
-                k += s.k * weights[i, j]
-                n += s.n * weights[i, j]
+            for j in xrange(samples_.shape[1]):
+                s  = samples_[i, j]
+                k += s.k * weights_[i, j]
+                n += s.n * weights_[i, j]
 
-            out[i] = (k + self._epsilon) / (n + self._epsilon)
+            out_[i] = (k + self._epsilon) / (n + self._epsilon)
 
-        return out
+        return out_
 
     @property
     def parameter_dtype(self):

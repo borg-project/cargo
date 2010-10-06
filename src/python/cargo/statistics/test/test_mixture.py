@@ -22,15 +22,15 @@ def test_finite_mixture_ml():
     d    = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
     (e,) = \
         d.ml(
-            array([[(3, 4)] * 1000 + [(1, 4)] * 2000]),
-            ones((1, 3000)),
+            array([[(3, 4)] * 1 + [(1, 4)] * 2], d.sample_dtype),
+            ones((1, 3)),
             None,
             RandomState(42),
             )
 
     assert_almost_equal_deep(
-        e[numpy.argsort(e["p"])],
-        array([(1.0 / 3.0, 0.75), (2.0 / 3.0, 0.25)], d.parameter_dtype),
+        e[numpy.argsort(e["p"])].tolist(),
+        [(1.0 / 3.0, 0.75), (2.0 / 3.0, 0.25)],
         )
 
 def test_finite_mixture():

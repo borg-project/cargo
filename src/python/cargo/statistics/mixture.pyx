@@ -110,6 +110,8 @@ class FiniteMixture(object):
         for i in xrange(samples.shape[0]):
             out[i] = self._ml(samples[i], weights[i], random)
 
+        return out
+
     def _ml(
                                    self,
         ndarray                    samples, # ndim = 1
@@ -120,64 +122,63 @@ class FiniteMixture(object):
         Use EM to estimate mixture parameters.
         """
 
-        ## generate random initial parameters
-        #cdef size_t N = samples.shape[0]
-        #cdef size_t K = self._K
+        # generate random initial parameters
+        print "samples shape", (<object>samples).shape
+        print "weights shape", (<object>weights).shape
 
-        #d = self._distribution
-        #p = numpy.empty((), self._parameter_dtype)
+        cdef size_t N = samples.shape[0]
+        cdef size_t K = self._K
 
-        #d.ml(samples[(0, random.randint(N, K))], weights, p["c"], random)
+        d = self._distribution
+        p = numpy.empty((), self._parameter_dtype)
 
-        #p["p"]  = random.rand(K)
-        #p["p"] /= numpy.sum(pi_K)
+        seeds = random.randint(N, size = K)
 
-        ## run EM until convergence
-        #last_r_NK = None
-        #r_NK      = numpy.empty((N, K))
-        #ll_N      = numpy.empty(N)
+        d.ml(samples[seeds][:, None], weights[seeds][:, None], p["c"], random)
 
-        #for i in xrange(self._iterations):
-            ## evaluate the responsibilities
-            #ll_N = d.ll(p["c"], samples, )
+        p["p"]  = random.rand(K)
+        p["p"] /= numpy.sum(p["p"])
 
-            #r_NK[:, :] = 0.0
+        # run EM until convergence
+        last_r_NK = None
+        r_NK      = numpy.empty((N, K))
 
-            #for (k, distribution) in enumerate(self._distributions):
-                #distribution.ll(components[k], samples, ll_N)
+        for i in xrange(self._iterations):
+            print "current parameter estimate:"
+            print p
 
-                #r_NK[:, k] += ll_N
+            # evaluate the responsibilities
+            d.ll(p["c"], samples[:, None], r_NK)
 
-            #numpy.exp(r_NK, r_NK)
+            numpy.exp(r_NK, r_NK)
 
-            #r_NK *= pi_K[None, :]
-            #r_NK /= numpy.sum(r_NK, 1)[:, None]
+            r_NK *= p["p"][None, :]
+            r_NK /= numpy.sum(r_NK, 1)[:, None]
 
-            ## find the maximum-likelihood estimates of components
-            #for (k, distribution) in enumerate(self._distributions):
-                #components[k] = distribution.ml(samples, r_NK[:, k], random)
+            # find the maximum-likelihood estimates of components
+            d.ml(samples, r_NK.T, p["c"], random)
 
-            ## find the maximum-likelihood pis
-            #pi_K = numpy.sum(r_NK, 0) / len(samples)
+            # find the maximum-likelihood pis
+            p["p"] = numpy.sum(r_NK, 0) / N
 
-            ## termination?
-            #if last_r_NK is None:
-                #last_r_NK = numpy.empty((len(samples), len(components)))
-            #else:
-                #difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
+            # termination?
+            if last_r_NK is None:
+                last_r_NK = numpy.empty((N, K))
+            else:
+                difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
 
-                #log.detail(
-                    #"iteration %i < %i ; delta %e >? %e",
-                    #i,
-                    #self._iterations,
-                    #difference,
-                    #self._convergence,
-                    #)
+                log.detail(
+                    "iteration %i < %i ; delta %e >? %e",
+                    i,
+                    self._iterations,
+                    difference,
+                    self._convergence,
+                    )
 
-            #(last_r_NK, r_NK) = (r_NK, last_r_NK)
+            (last_r_NK, r_NK) = (r_NK, last_r_NK)
 
-        ## done
-        #return p
+        # done
+        return p
 
     @property
     def distribution(self):
@@ -195,6 +196,7 @@ class FiniteMixture(object):
 
         return self._parameter_dtype
 
+    @property
     def sample_dtype(self):
         """
         Return the sample type.
