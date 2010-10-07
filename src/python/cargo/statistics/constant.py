@@ -4,34 +4,77 @@
 
 import numpy
 
-from cargo.statistics.base import Distribution
-
-class Constant(Distribution):
+class Constant(object):
     """
     The trivial fixed constant distribution.
     """
 
-    def __init__(self, constant):
+    def __init__(self, dtype):
         """
         Initialize.
         """
 
-        self._constant = constant
+        self._dtype = dtype
 
-    def random_variate(self, random = numpy.random):
+    def rv(self, parameters, out, random = numpy.random):
         """
         Return the constant.
         """
 
-        return self._constant
+        # arguments
+        parameters = numpy.asarray(parameters, self._dtype)
 
-    def log_likelihood(self, sample):
-        """
-        Return the log likelihood of C{sample} under this distribution.
-        """
-
-        if sample == self._constant:
-            return 0.0
+        if out is None:
+            out = numpy.empty(parameters.shape)
         else:
-            return numpy.finfo(float).min
+            (parameters, out) = numpy.broadcast_arrays(parameters, out)
+
+            if out.dtype != numpy.float_:
+                raise ValueError("out argument has invalid dtype")
+
+        # computation
+        out[:] = parameters
+
+        return out
+
+    def ll(self, parameters, samples, out = None):
+        """
+        Compute constant-distribution log-likelihood.
+        """
+
+        # arguments
+        parameters = numpy.asarray(parameters, self._dtype)
+        samples    = numpy.asarray(samples,    self._dtype)
+
+        (parameters, samples) = numpy.broadcast_arrays(parameters, samples)
+
+        if out is None:
+            out = numpy.empty(parameters.shape)
+        else:
+            if out.shape != parameters.shape:
+                raise ValueError("out argument has invalid shape")
+            if out.dtype != numpy.float_:
+                raise ValueError("out argument has invalid dtype")
+
+        # computation
+        out[:] = numpy.finfo(numpy.float_).min
+        out[samples == parameters] = 0.0
+
+        return out
+
+    @property
+    def sample_dtype(self):
+        """
+        Sample dtype.
+        """
+
+        return self._dtype
+
+    @property
+    def parameter_dtype(self):
+        """
+        Parameter dtype.
+        """
+
+        return self._dtype
 

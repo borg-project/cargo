@@ -8,16 +8,20 @@ from numpy                     import (
     ones,
     array,
     )
+from numpy.random              import RandomState
+from nose.tools                import (
+    assert_not_equal,
+    assert_almost_equal,
+    )
 from cargo.log                 import get_logger
 from cargo.testing             import assert_almost_equal_deep
+from cargo.statistics.mixture  import FiniteMixture
 
 def test_finite_mixture_ml():
     """
     Test EM estimation of finite mixture distributions.
     """
 
-    from numpy.random              import RandomState
-    from cargo.statistics.mixture  import FiniteMixture
     from cargo.statistics.binomial import MixedBinomial
 
     get_logger("cargo.statistics.mixture", level = "NOTSET")
@@ -37,6 +41,20 @@ def test_finite_mixture_ml():
          (2.0 / 3.0, 1.0 / 8.0)],
         places = 4,
         )
+
+def test_finite_mixture_ll():
+    """
+    Test finite mixture log-likelihood computation.
+    """
+
+    from cargo.statistics.constant import Constant
+
+    d = FiniteMixture(Constant(numpy.float_), 2)
+    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
+
+    assert_almost_equal(d.ll(p,  1.0), numpy.log(0.25))
+    assert_almost_equal(d.ll(p, [ 2.0]), numpy.log(0.75))
+    assert_almost_equal(d.ll(p, [42.0]), numpy.finfo(float).min)
 
 def test_finite_mixture():
     """

@@ -12,6 +12,7 @@ cimport numpy
 from numpy cimport (
     ndarray,
     float_t,
+    broadcast,
     )
 
 log = get_logger(__name__)
@@ -46,22 +47,6 @@ class FiniteMixture(object):
 
         return self._mixer.random_variate(random).random_variate(random)
 
-    def log_likelihood(self, sample):
-        """
-        Return the log likelihood of C{sample} under this distribution.
-        """
-
-        from itertools                  import izip
-        from cargo.statistics.functions import add_log
-
-        total = numpy.finfo(float).min
-
-        for (pi_k, component) in izip(self.pi, self.components):
-            if pi_k > 0.0:
-                total = add_log(total, numpy.log(pi_k) + component.log_likelihood(sample))
-
-        return total
-
     def given(self, samples):
         """
         Return the conditional distribution.
@@ -80,6 +65,49 @@ class FiniteMixture(object):
 
         # done
         return FiniteMixture(post_pi, post_components)
+
+    def ll(self, parameters, samples, out = None):
+        """
+        Compute finite-mixture log-likelihood.
+        """
+
+        # arguments
+        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
+        samples    = numpy.asarray(samples,    self._distribution.sample_dtype)
+
+        (parameters, samples) = numpy.broadcast_arrays(parameters, samples)
+
+        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
+        samples    = numpy.asarray(samples,    self._distribution.sample_dtype)
+
+        if out is None:
+            out = numpy.empty(parameters.shape[:-1])
+        else:
+            if out.shape != parameters.shape[:-1]:
+                raise ValueError("out argument has invalid shape")
+            if out.dtype != numpy.float_:
+                raise ValueError("out argument has invalid dtype")
+
+        # computation
+        from cargo.statistics.base import log_add
+
+        ll_out = self._distribution.ll(parameters["c"], samples)
+
+        print ll_out
+
+        ll_out += numpy.log(parameters["p"])
+
+        print ll_out
+
+        pre_out = log_add.reduce(ll_out, -1)
+        #numpy.add(pre_out, numpy.finfo(numpy.float_).tiny, pre_out)
+        numpy.sum(pre_out, -1, out = out)
+
+        print parameters
+        print samples
+        print out
+
+        return out
 
     def ml(
                                    self,
@@ -122,13 +150,14 @@ class FiniteMixture(object):
         Use EM to estimate mixture parameters.
         """
 
-        # generate random initial parameters
+        # mise en place
         cdef size_t N = samples_N.shape[0]
         cdef size_t K = self._K
 
         d = self._distribution
         p = numpy.empty((), self._parameter_dtype)
 
+        # generate a random initial state
         seeds = random.randint(N, size = K)
 
         d.ml(samples_N[seeds][:, None], weights_N[seeds][:, None], p["c"], random)
@@ -141,8 +170,7 @@ class FiniteMixture(object):
         r_KN      = numpy.empty((K, N))
 
         for i in xrange(self._iterations):
-
-            # evaluate the responsibilities
+            # evaluate responsibilities
             d.ll(p["c"][:, None], samples_N, r_KN)
 
             numpy.exp(r_KN, r_KN)
@@ -150,13 +178,12 @@ class FiniteMixture(object):
             r_KN *= p["p"][:, None]
             r_KN /= numpy.sum(r_KN, 0)
 
-            # find the maximum-likelihood estimates of components
+            # make maximum-likelihood estimates
             d.ml(samples_N, r_KN, p["c"], random)
 
-            # find the maximum-likelihood pis
             p["p"] = numpy.sum(r_KN, 1) / N
 
-            # termination?
+            # check for convergence
             if last_r_KN is None:
                 last_r_KN = numpy.empty((K, N))
             else:

@@ -125,7 +125,7 @@ class MixedBinomial(object):
 
     def ll(self, parameters, samples, out = None):
         """
-        Compute the log probabilities of binomial samples.
+        Compute binomial log-likelihood.
         """
 
         # arguments
