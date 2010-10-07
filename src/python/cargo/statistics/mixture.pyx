@@ -114,8 +114,8 @@ class FiniteMixture(object):
 
     def _ml(
                                    self,
-        ndarray                    samples, # ndim = 1
-        ndarray[float_t, ndim = 1] weights,
+        ndarray                    samples_N,
+        ndarray[float_t, ndim = 1] weights_N,
                                    random = numpy.random,
         ):
         """
@@ -123,10 +123,7 @@ class FiniteMixture(object):
         """
 
         # generate random initial parameters
-        print "samples shape", (<object>samples).shape
-        print "weights shape", (<object>weights).shape
-
-        cdef size_t N = samples.shape[0]
+        cdef size_t N = samples_N.shape[0]
         cdef size_t K = self._K
 
         d = self._distribution
@@ -134,38 +131,36 @@ class FiniteMixture(object):
 
         seeds = random.randint(N, size = K)
 
-        d.ml(samples[seeds][:, None], weights[seeds][:, None], p["c"], random)
+        d.ml(samples_N[seeds][:, None], weights_N[seeds][:, None], p["c"], random)
 
         p["p"]  = random.rand(K)
         p["p"] /= numpy.sum(p["p"])
 
         # run EM until convergence
-        last_r_NK = None
-        r_NK      = numpy.empty((N, K))
+        last_r_KN = None
+        r_KN      = numpy.empty((K, N))
 
         for i in xrange(self._iterations):
-            print "current parameter estimate:"
-            print p
 
             # evaluate the responsibilities
-            d.ll(p["c"], samples[:, None], r_NK)
+            d.ll(p["c"][:, None], samples_N, r_KN)
 
-            numpy.exp(r_NK, r_NK)
+            numpy.exp(r_KN, r_KN)
 
-            r_NK *= p["p"][None, :]
-            r_NK /= numpy.sum(r_NK, 1)[:, None]
+            r_KN *= p["p"][:, None]
+            r_KN /= numpy.sum(r_KN, 0)
 
             # find the maximum-likelihood estimates of components
-            d.ml(samples, r_NK.T, p["c"], random)
+            d.ml(samples_N, r_KN, p["c"], random)
 
             # find the maximum-likelihood pis
-            p["p"] = numpy.sum(r_NK, 0) / N
+            p["p"] = numpy.sum(r_KN, 1) / N
 
             # termination?
-            if last_r_NK is None:
-                last_r_NK = numpy.empty((N, K))
+            if last_r_KN is None:
+                last_r_KN = numpy.empty((K, N))
             else:
-                difference = numpy.sum(numpy.abs(r_NK - last_r_NK))
+                difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
 
                 log.detail(
                     "iteration %i < %i ; delta %e >? %e",
@@ -175,7 +170,10 @@ class FiniteMixture(object):
                     self._convergence,
                     )
 
-            (last_r_NK, r_NK) = (r_NK, last_r_NK)
+                if difference < self._convergence:
+                    break
+
+            (last_r_KN, r_KN) = (r_KN, last_r_KN)
 
         # done
         return p

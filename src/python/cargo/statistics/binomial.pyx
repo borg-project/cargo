@@ -9,6 +9,10 @@ import scipy.stats
 cimport numpy
 cimport cython
 
+from libc.float  cimport (
+    DBL_MIN,
+    DBL_EPSILON,
+    )
 from libc.stdlib cimport malloc
 from numpy       cimport (
     ndarray,
@@ -20,6 +24,8 @@ from numpy       cimport (
     PyArray_MultiIter_NEXT,
     PyArray_MultiIter_NOTDONE,
     )
+from cargo.gsl.sf      cimport log
+from cargo.gsl.randist cimport binomial_pdf
 
 import_array()
 
@@ -146,7 +152,7 @@ class MixedBinomial(object):
         while PyArray_MultiIter_NOTDONE(i):
             p = (<double*>PyArray_MultiIter_DATA(i, 0))[0]
             s = (<MixedBinomialSample*>PyArray_MultiIter_DATA(i, 1))[0]
-            v = numpy.log(scipy.stats.binom.pmf(s.k, s.n, p))
+            v = log(binomial_pdf(s.k, p, s.n))
 
             (<double*>PyArray_MultiIter_DATA(i, 2))[0] = v
 

@@ -8,6 +8,7 @@ from numpy                     import (
     ones,
     array,
     )
+from cargo.log                 import get_logger
 from cargo.testing             import assert_almost_equal_deep
 
 def test_finite_mixture_ml():
@@ -19,18 +20,22 @@ def test_finite_mixture_ml():
     from cargo.statistics.mixture  import FiniteMixture
     from cargo.statistics.binomial import MixedBinomial
 
+    get_logger("cargo.statistics.mixture", level = "NOTSET")
+
     d    = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
     (e,) = \
         d.ml(
-            array([[(3, 4)] * 1 + [(1, 4)] * 2], d.sample_dtype),
-            ones((1, 3)),
+            array([[(7, 8)] * 100 + [(1, 8)] * 200], d.sample_dtype),
+            ones((1, 300)),
             None,
-            RandomState(42),
+            RandomState(41),
             )
 
     assert_almost_equal_deep(
         e[numpy.argsort(e["p"])].tolist(),
-        [(1.0 / 3.0, 0.75), (2.0 / 3.0, 0.25)],
+        [(1.0 / 3.0, 7.0 / 8.0),
+         (2.0 / 3.0, 1.0 / 8.0)],
+        places = 4,
         )
 
 def test_finite_mixture():
