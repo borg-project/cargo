@@ -16,6 +16,7 @@ from nose.tools                import (
 from cargo.log                 import get_logger
 from cargo.testing             import assert_almost_equal_deep
 from cargo.statistics.mixture  import FiniteMixture
+from cargo.statistics.constant import Constant
 
 def test_finite_mixture_ml():
     """
@@ -47,8 +48,6 @@ def test_finite_mixture_ll():
     Test finite-mixture log-likelihood computation.
     """
 
-    from cargo.statistics.constant import Constant
-
     d = FiniteMixture(Constant(numpy.float_), 2)
     p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
 
@@ -61,13 +60,8 @@ def test_finite_mixture_rv():
     Test finite-mixture random-variate generation.
     """
 
-    # build a simple finite mixture
-    from cargo.statistics.constant import Constant
-
     d = FiniteMixture(Constant(numpy.float_), 2)
     p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
-
-    # test sampling
     s = numpy.empty(32768)
 
     d.rv(p, s, RandomState(42))
@@ -75,37 +69,20 @@ def test_finite_mixture_rv():
     assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
     assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
 
-def test_finite_mixture():
+def test_finite_mixture_given():
     """
-    Test a finite mixture.
+    Test finite-mixture posterior-parameter computation.
     """
 
-    # build a simple finite mixture
-    from cargo.statistics.mixture  import FiniteMixture
-    from cargo.statistics.constant import Constant
+    d = FiniteMixture(Constant(numpy.float_), 2)
+    p = numpy.array([(0.25, 1.0), (0.75, 2.0)], d.parameter_dtype.base)
+    c = d.given(p, 2.0)
 
-    one     = Constant(1.0)
-    two     = Constant(2.0)
-    mixture = FiniteMixture([0.25, 0.75], [one, two])
+    print "conditioned!", c
+    print "conditioned! p", c["p"]
 
-    # test sampling
-    from nose.tools import (
-        assert_not_equal,
-        assert_almost_equal,
-        )
-
-    # test conditional distribution computation
-    def test_given():
-        """
-        Test computation of a posterior finite mixture.
-        """
-
-        conditional = mixture.given([2.0])
-
-        assert_almost_equal(conditional.pi[0], 0.0)
-        assert_almost_equal(conditional.pi[1], 1.0)
-
-    yield test_given
+    assert_almost_equal(c["p"][0], 0.0)
+    assert_almost_equal(c["p"][1], 1.0)
 
 def assert_mixture_estimator_ok(estimator):
     """

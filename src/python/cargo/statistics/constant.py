@@ -63,6 +63,38 @@ class Constant(object):
 
         return out
 
+    def given(self, parameters, samples, out = None):
+        """
+        Return the conditional distribution.
+        """
+
+        from cargo.numpy import semicast
+
+        parameters = numpy.asarray(parameters, self._dtype)
+        samples    = numpy.asarray(samples   , self._dtype)
+
+        if out is None:
+            (parameters, samples) = \
+                semicast(
+                    (parameters, None),
+                    (samples   , None),
+                    )
+
+            out = numpy.empty(samples.shape, dtype = self._parameter_dtype)
+        else:
+            (parameters, samples, _) = \
+                semicast(
+                    (parameters, None),
+                    (samples   , None),
+                    (out       , None),
+                    )
+
+            assert out.shape == parameters.shape
+
+        out[:] = parameters
+
+        return out
+
     @property
     def sample_dtype(self):
         """

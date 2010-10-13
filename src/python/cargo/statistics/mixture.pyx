@@ -40,25 +40,6 @@ class FiniteMixture(object):
                 K,
                 ))
 
-    def given(self, samples):
-        """
-        Return the conditional distribution.
-        """
-
-        # generate the posterior mixture parameters
-        post_pi = numpy.copy(self.pi)
-
-        for k in xrange(post_pi.size):
-            post_pi[k] *= numpy.exp(self.components[k].total_log_likelihood(samples))
-
-        post_pi /= numpy.sum(post_pi)
-
-        # generate the posterior mixture components
-        post_components = [c.given(samples) for c in self.components]
-
-        # done
-        return FiniteMixture(post_pi, post_components)
-
     def rv(self, parameters, out, random = numpy.random):
         """
         Make a draw from this mixture distribution.
@@ -221,6 +202,60 @@ class FiniteMixture(object):
 
         # done
         return p
+
+    def given(self, parameters, samples, out = None):
+        """
+        Return the conditional distribution.
+        """
+
+        # arguments
+        from cargo.numpy import semicast
+
+        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
+        samples    = numpy.asarray(samples   , self.sample_dtype         )
+
+        if out is None:
+            (parameters, samples) = \
+                semicast(
+                    (parameters, -1                                   ),
+                    (samples   , -len(self.sample_dtype.shape) or None),
+                    )
+
+            print parameters.shape, samples.shape
+
+            out = numpy.empty_like(parameters)
+        else:
+            (parameters, samples, _) = \
+                semicast(
+                    (parameters, -1                                   ),
+                    (samples   , -len(self.sample_dtype.shape) or None),
+                    (out       , -1                                   ),
+                    )
+
+            assert out.shape == parameters.shape
+
+        # compute posterior mixture parameters
+        print "params p", parameters["p"]
+        print "params c", parameters["c"]
+        print "samples", samples, "shape", samples.shape
+        out["p"]  = parameters["p"]
+        print "out p", out["p"]
+        print "ll", self._distribution.ll(parameters["c"], samples[..., None])
+        if parameters["c"].ndim > 1:
+            out["p"] *= numpy.exp(numpy.sum(self._distribution.ll(parameters["c"], samples[..., None]), -2))
+            #print "exp sum ll", numpy.exp(numpy.sum(self._distribution.ll(parameters["c"], samples[..., None]), -2))
+        else:
+            out["p"] *= numpy.exp(self._distribution.ll(parameters["c"], samples[..., None]))
+        print "out p", out["p"]
+        print "sum out p", numpy.sum(out["p"], -1)[..., None]
+        out["p"] /= numpy.sum(out["p"], -1)[..., None]
+        print "out p", out["p"]
+
+        # compute posterior mixture components
+        self._distribution.given(parameters["c"], samples[..., None], out["c"])
+
+        # done
+        return out
 
     @property
     def distribution(self):
