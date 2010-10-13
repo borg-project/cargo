@@ -40,13 +40,6 @@ class FiniteMixture(object):
                 K,
                 ))
 
-    def random_variate(self, random = numpy.random):
-        """
-        Make a draw from this mixture distribution.
-        """
-
-        return self._mixer.random_variate(random).random_variate(random)
-
     def given(self, samples):
         """
         Return the conditional distribution.
@@ -65,6 +58,40 @@ class FiniteMixture(object):
 
         # done
         return FiniteMixture(post_pi, post_components)
+
+    def rv(self, parameters, out, random = numpy.random):
+        """
+        Make a draw from this mixture distribution.
+        """
+
+        # identify the common prefix
+        if self._distribution.sample_dtype.shape:
+            out_prefix = out.shape[:-len(self._distribution.sample_dtype.shape)]
+        else:
+            out_prefix = out.shape
+
+        selected = numpy.empty(out_prefix, dtype = self._distribution.parameter_dtype)
+
+        # select the relevant components
+        extension  = (1,) * (len(selected.shape) - len(parameters.shape)) + parameters.shape
+        components = \
+            numpy.reshape(
+                parameters["c"],
+                extension + self._distribution.parameter_dtype.shape,
+                )
+        mixing     = numpy.reshape(parameters["p"], extension)
+
+        less   = 1 + len(self._distribution.parameter_dtype.shape)
+        re_max = tuple([s - 1 for s in components.shape[:-less]])
+
+        for i in numpy.ndindex(selected.shape):
+            re_i = tuple(map(min, re_max, i))
+            j    = numpy.nonzero(random.multinomial(1, mixing[re_i]))
+
+            selected[i] = components[re_i + j]
+
+        # generate random variates
+        return self._distribution.rv(selected, out, random)
 
     def ll(self, parameters, samples, out = None):
         """
@@ -91,21 +118,11 @@ class FiniteMixture(object):
         # computation
         from cargo.statistics.base import log_add
 
-        ll_out = self._distribution.ll(parameters["c"], samples)
-
-        print ll_out
-
+        ll_out  = self._distribution.ll(parameters["c"], samples)
         ll_out += numpy.log(parameters["p"])
-
-        print ll_out
-
         pre_out = log_add.reduce(ll_out, -1)
-        #numpy.add(pre_out, numpy.finfo(numpy.float_).tiny, pre_out)
-        numpy.sum(pre_out, -1, out = out)
 
-        print parameters
-        print samples
-        print out
+        numpy.sum(pre_out, -1, out = out)
 
         return out
 

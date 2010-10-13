@@ -110,7 +110,7 @@ class MixedBinomial(object):
     Operate on multiple binomials with a single common probability parameter.
     """
 
-    _parameter_dtype = numpy.float_
+    _parameter_dtype = numpy.dtype(numpy.float_)
     _sample_dtype    = numpy.dtype([("k", numpy.uint), ("n", numpy.uint)])
 
     def __init__(self, epsilon = 1e-3):

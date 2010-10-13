@@ -44,7 +44,7 @@ def test_finite_mixture_ml():
 
 def test_finite_mixture_ll():
     """
-    Test finite mixture log-likelihood computation.
+    Test finite-mixture log-likelihood computation.
     """
 
     from cargo.statistics.constant import Constant
@@ -52,9 +52,28 @@ def test_finite_mixture_ll():
     d = FiniteMixture(Constant(numpy.float_), 2)
     p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
 
-    assert_almost_equal(d.ll(p,  1.0), numpy.log(0.25))
+    assert_almost_equal(d.ll(p,   1.0 ), numpy.log(0.25))
     assert_almost_equal(d.ll(p, [ 2.0]), numpy.log(0.75))
     assert_almost_equal(d.ll(p, [42.0]), numpy.finfo(float).min)
+
+def test_finite_mixture_rv():
+    """
+    Test finite-mixture random-variate generation.
+    """
+
+    # build a simple finite mixture
+    from cargo.statistics.constant import Constant
+
+    d = FiniteMixture(Constant(numpy.float_), 2)
+    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
+
+    # test sampling
+    s = numpy.empty(32768)
+
+    d.rv(p, s, RandomState(42))
+
+    assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
+    assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
 
 def test_finite_mixture():
     """
@@ -74,45 +93,6 @@ def test_finite_mixture():
         assert_not_equal,
         assert_almost_equal,
         )
-
-    def test_random_variate():
-        """
-        Test sampling of a random variate from a finite mixture.
-        """
-
-        from numpy.random import RandomState
-
-        ones   = 0
-        twos   = 0
-        random = RandomState(42)
-        draws  = 32768
-
-        for i in xrange(draws):
-            sample = mixture.random_variate(random = random)
-
-            if sample == 1.0:
-                ones += 1
-            elif sample == 2.0:
-                twos += 1
-            else:
-                assert_not_equal(sample, sample)
-
-        assert_almost_equal(ones / float(draws), 0.25, places = 2)
-        assert_almost_equal(twos / float(draws), 0.75, places = 2)
-
-    yield test_random_variate
-
-    # test likelihood computation
-    def test_log_likelihood():
-        """
-        Test computation of log likelihood in a finite mixture.
-        """
-
-        assert_almost_equal(mixture.log_likelihood( 1.0), numpy.log(0.25))
-        assert_almost_equal(mixture.log_likelihood( 2.0), numpy.log(0.75))
-        assert_almost_equal(mixture.log_likelihood(42.0), numpy.finfo(float).min)
-
-    yield test_log_likelihood
 
     # test conditional distribution computation
     def test_given():

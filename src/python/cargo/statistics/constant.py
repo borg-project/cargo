@@ -14,7 +14,7 @@ class Constant(object):
         Initialize.
         """
 
-        self._dtype = dtype
+        self._dtype = numpy.dtype(dtype)
 
     def rv(self, parameters, out, random = numpy.random):
         """
@@ -27,6 +27,7 @@ class Constant(object):
         if out is None:
             out = numpy.empty(parameters.shape)
         else:
+            print parameters.shape, out.shape, "incompat?"
             (parameters, out) = numpy.broadcast_arrays(parameters, out)
 
             if out.dtype != numpy.float_:
