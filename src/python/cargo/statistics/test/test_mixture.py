@@ -13,21 +13,16 @@ from nose.tools                import (
     assert_not_equal,
     assert_almost_equal,
     )
-from cargo.log                 import get_logger
-from cargo.testing             import assert_almost_equal_deep
 from cargo.statistics.mixture  import FiniteMixture
 from cargo.statistics.constant import Constant
 
-def test_finite_mixture_ml():
+def assert_finite_mixture_ml_ok(d):
     """
-    Test EM estimation of finite mixture distributions.
+    Verify EM estimation of finite mixture distributions.
     """
 
-    from cargo.statistics.binomial import MixedBinomial
+    from cargo.testing import assert_almost_equal_deep
 
-    get_logger("cargo.statistics.mixture", level = "NOTSET")
-
-    d    = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
     (e,) = \
         d.ml(
             array([[(7, 8)] * 100 + [(1, 8)] * 200], d.sample_dtype),
@@ -42,6 +37,17 @@ def test_finite_mixture_ml():
          (2.0 / 3.0, 1.0 / 8.0)],
         places = 4,
         )
+
+def test_finite_mixture_ml():
+    """
+    Test EM estimation of finite mixture distributions.
+    """
+
+    from cargo.statistics.binomial import MixedBinomial
+
+    d = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
+
+    assert_finite_mixture_ml_ok(d)
 
 def test_finite_mixture_ll():
     """
@@ -78,67 +84,19 @@ def test_finite_mixture_given():
     p = numpy.array([(0.25, 1.0), (0.75, 2.0)], d.parameter_dtype.base)
     c = d.given(p, 2.0)
 
-    print "conditioned!", c
-    print "conditioned! p", c["p"]
-
     assert_almost_equal(c["p"][0], 0.0)
     assert_almost_equal(c["p"][1], 1.0)
 
-def assert_mixture_estimator_ok(estimator):
+def test_restarting_ml():
     """
-    Test estimation of finite mixture distributions.
-    """
-
-    # generate some data
-    from numpy.random                 import RandomState
-    from cargo.statistics.multinomial import Multinomial
-
-    random     = RandomState(42)
-    components = [Multinomial([0.1, 0.9], 8), Multinomial([0.9, 0.1], 8)]
-    samples    = [components[0].random_variate(random) for i in xrange(250)]
-    samples   += [components[1].random_variate(random) for i in xrange(750)]
-
-    # estimate the distribution from data
-    import numpy
-
-    from nose.tools import assert_almost_equal
-
-    mixture   = estimator.estimate(samples, random = random)
-    order     = numpy.argsort(mixture.pi)
-    estimated = numpy.asarray(mixture.components)[order]
-
-    assert_almost_equal(mixture.pi[order][0], 0.25, places = 2)
-    assert_almost_equal(mixture.pi[order][1], 0.75, places = 2)
-    assert_almost_equal(estimated[0].beta[0], 0.10, places = 2)
-    assert_almost_equal(estimated[0].beta[1], 0.90, places = 2)
-    assert_almost_equal(estimated[1].beta[0], 0.90, places = 2)
-    assert_almost_equal(estimated[1].beta[1], 0.10, places = 2)
-
-def test_em_mixture_estimator():
-    """
-    Test EM estimation of finite mixture distributions.
+    Test the restarting-ML distribution wrapper.
     """
 
-    from cargo.statistics.mixture     import FiniteMixture
-    from cargo.statistics.multinomial import Multinomial
+    from cargo.statistics.mixture  import RestartingML
+    from cargo.statistics.binomial import MixedBinomial
 
-    estimator = FiniteMixture([Multinomial()] * 2)
+    m = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
+    d = RestartingML(m)
 
-    assert_mixture_estimator_ok(estimator)
-
-def test_restarted_estimator():
-    """
-    Test the restarting wrapper estimator.
-    """
-
-    from cargo.statistics.mixture     import (
-        RestartedEstimator,
-        EM_MixtureEstimator,
-        )
-    from cargo.statistics.multinomial import MultinomialEstimator
-
-    estimator = EM_MixtureEstimator([MultinomialEstimator()] * 2)
-    restarted = RestartedEstimator(estimator, 3)
-
-    assert_mixture_estimator_ok(restarted)
+    assert_finite_mixture_ml_ok(d)
 

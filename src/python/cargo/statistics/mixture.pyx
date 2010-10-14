@@ -235,21 +235,17 @@ class FiniteMixture(object):
             assert out.shape == parameters.shape
 
         # compute posterior mixture parameters
-        print "params p", parameters["p"]
-        print "params c", parameters["c"]
-        print "samples", samples, "shape", samples.shape
         out["p"]  = parameters["p"]
-        print "out p", out["p"]
-        print "ll", self._distribution.ll(parameters["c"], samples[..., None])
-        if parameters["c"].ndim > 1:
-            out["p"] *= numpy.exp(numpy.sum(self._distribution.ll(parameters["c"], samples[..., None]), -2))
-            #print "exp sum ll", numpy.exp(numpy.sum(self._distribution.ll(parameters["c"], samples[..., None]), -2))
+
+        ll = self._distribution.ll(parameters["c"], samples[..., None])
+
+        if ll.ndim > 1:
+            sum_ll = numpy.sum(ll, -2)
         else:
-            out["p"] *= numpy.exp(self._distribution.ll(parameters["c"], samples[..., None]))
-        print "out p", out["p"]
-        print "sum out p", numpy.sum(out["p"], -1)[..., None]
+            sum_ll = ll
+
+        out["p"] *= numpy.exp(sum_ll)
         out["p"] /= numpy.sum(out["p"], -1)[..., None]
-        print "out p", out["p"]
 
         # compute posterior mixture components
         self._distribution.given(parameters["c"], samples[..., None], out["c"])
@@ -281,36 +277,68 @@ class FiniteMixture(object):
 
         return self._distribution.sample_dtype
 
-class RestartedEstimator(object):
+class RestartingML(object):
     """
-    Make multiple estimates, and return the best.
+    Wrap a distribution with a restarting ML estimator.
     """
 
-    def __init__(self, estimator, restarts = 2):
+    def __init__(self, distribution, restarts = 8):
         """
         Initialize.
         """
 
-        self._estimator = estimator
-        self._restarts  = restarts
+        self._distribution = distribution
+        self._restarts     = restarts
 
-    def estimate(self, samples, random = numpy.random):
+    def rv(self, parameters, out, random = numpy.random):
         """
-        Make multiple estimates, and return the apparent best.
+        Make a draw from this mixture distribution.
         """
 
-        best_ll       = None
-        best_estimate = None
+        return self._distribution.rv(parameters, out, random)
 
-        for i in xrange(self._restarts):
-            estimated = self._estimator.estimate(samples, random = random)
-            ll        = estimated.total_log_likelihood(samples)
+    def ll(self, parameters, samples, out = None):
+        """
+        Compute finite-mixture log-likelihood.
+        """
 
-            if best_ll is None or ll > best_ll:
-                best_ll       = ll
-                best_estimate = estimated
+        return self._distribution.ll(parameters, samples, out)
 
-            log.info("l-l of estimate is %e (best is %e)", ll, best_ll)
+    def ml(self, samples, weights, out, random = numpy.random):
+        """
+        Use EM to estimate mixture parameters.
+        """
 
-        return best_estimate
+        raise NotImplementedError()
+
+    def given(self, parameters, samples, out = None):
+        """
+        Return the conditional distribution.
+        """
+
+        return self._distribution.given(parameters, samples, out)
+
+    @property
+    def distribution(self):
+        """
+        Return the mixture components.
+        """
+
+        return self._distribution
+
+    @property
+    def parameter_dtype(self):
+        """
+        Return the parameter type.
+        """
+
+        return self._distribution.parameter_dtype
+
+    @property
+    def sample_dtype(self):
+        """
+        Return the sample type.
+        """
+
+        return self._distribution.sample_dtype
 
