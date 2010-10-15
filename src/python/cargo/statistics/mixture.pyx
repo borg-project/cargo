@@ -17,7 +17,22 @@ from numpy cimport (
 
 log = get_logger(__name__)
 
-class FiniteMixture(object):
+cdef void zorro(int i, int j):
+    print i, j
+
+def get_zorro():
+    from llvm.ee   import TargetData
+    from llvm.core import (
+        Type,
+        Constant,
+        )
+
+    uintptr_t = Type.int(TargetData.new("target").pointer_size * 8)
+    zorro_t   = Type.pointer(Type.function(Type.void(), [Type.int(32), Type.int(32)]))
+
+    return Constant.int(uintptr_t, <long>&zorro).inttoptr(zorro_t)
+
+class FiniteMixtureLow(object):
     """
     An arbitrary finite homogeneous mixture distribution.
     """
@@ -31,14 +46,6 @@ class FiniteMixture(object):
         self._K               = K
         self._iterations      = iterations
         self._convergence     = convergence
-        self._parameter_dtype = \
-            numpy.dtype((
-                [
-                    ("p", numpy.float_),
-                    ("c", distribution.parameter_dtype),
-                    ],
-                K,
-                ))
 
     def rv(self, parameters, out, random = numpy.random):
         """

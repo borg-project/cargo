@@ -35,5 +35,5 @@ def semicast(*arrays):
         cast.dtype = a.dtype
 
     # done
-    return casts
+    return (pre_shape, casts)
 
