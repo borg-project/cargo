@@ -11,27 +11,49 @@ from llvm.core import (
     Constant,
     )
 
-#self._parameter_dtype = \
-    #numpy.dtype((
-        #[
-            #("p", numpy.float_),
-            #("c", distribution.parameter_dtype),
-            #],
-        #K,
-        #))
-
-def array_data(array, axis = None):
+def array_data(array):
     """
     Get the array data pointer.
     """
 
     (data, _) = parameters.__array_interface__["data"]
-
     uintptr_t = Type.int(TargetData.new("target").pointer_size * 8)
+    array_t   = strided_array_type(array)
 
-    # FIXME compute the LLVM type for relevant array pointer
+    return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array_t))
 
-    return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array.dtype))
+def dtype_to_type(dtype):
+    """
+    Build an LLVM type matching a numpy dtype.
+    """
+
+    mapping = {
+        'd' : (lambda _ : Type.double()),
+        }
+
+    return mapping[dtype.char](dtype)
+
+def strided_array_type(array, axis = 0):
+    """
+    Build an LLVM type to represent a strided array's structure.
+    """
+
+    if axis == array.ndim:
+        return (array.dtype.itemsize, dtype_to_type(array.dtype))
+    else:
+        (subsize, subtype) = strided_array_type(array, axis + 1)
+
+        count   = array.shape[axis]
+        stride  = array.strides[axis]
+        padding = stride - subsize * count
+
+        return (
+            stride,
+            Type.struct([
+                Type.array(subtype    , count  ),
+                Type.array(Type.int(8), padding),
+                ]),
+            )
 
 class ArrayLoop(object):
     """
@@ -45,35 +67,49 @@ class ArrayLoop(object):
 
         self._function = function
         self._shape    = shape
-        self._exit     = exit
         self._arrays   = arrays
         self._name     = name
 
-        self._entry = self._loop_over(function, 0, exit)
+        data_locations = [Constant.null(Type.pointer(Type.int(8))) for _ in arrays]
 
-    def _loop_over(self, function, axis, outer):
+        (self._entry, _) = self._loop_over(function, 0, exit, {})
+
+    def _loop_over(self, function, axis, exit, indices):
         """
         Build one level of the array loop.
         """
 
-        from llvm.core import ICMP_UGT
-
-        start = function.append_basic_block("%s_a%i_start" % (self._name, axis))
-        check = function.append_basic_block("%s_a%i_check" % (self._name, axis))
-        flesh = function.append_basic_block("%s_a%i_flesh" % (self._name, axis))
+        # prepare the loop structure
+        start = function.append_basic_block("%s_ax%i_start" % (self._name, axis))
+        check = function.append_basic_block("%s_ax%i_check" % (self._name, axis))
+        flesh = function.append_basic_block("%s_ax%i_flesh" % (self._name, axis))
 
         start_builder = Builder.new(start)
         check_builder = Builder.new(check)
         flesh_builder = Builder.new(flesh)
 
+        # move into the iteration guard
         start_builder.branch(check)
 
-        size_t = Type.int(32)
-        index  = check_builder.phi(size_t, "i%i" % axis)
-        jndex  = check_builder.add(index, Constant.int(size_t, 1))
+        # set up the axis index
+        size_t     = Type.int(32)
+        index      = check_builder.phi(size_t, "i%i" % axis)
+        next_index = check_builder.add(index, Constant.int(size_t, 1))
 
         index.add_incoming(Constant.int(size_t, 0), start)
-        index.add_incoming(jndex                  , flesh)
+
+        # set up the strided locations
+        location_t = Type.pointer(Type.int(8))
+        locations  = [check_builder.phi(location_t) for a in self._arrays.values()]
+
+        for (location, outer_location) in zip(locations, outer_locations):
+            location.add_incoming(outer_location, start)
+
+        strides        = [Constant.int(size_t, a.strides[axis]).inttoptr(location_t) for a in self._arrays.values()]
+        next_locations = map(check_builder.add, locations, strides)
+
+        # loop, or not
+        from llvm.core import ICMP_UGT
 
         check_builder.cbranch(
             check_builder.icmp(
@@ -82,23 +118,34 @@ class ArrayLoop(object):
                 index,
                 ),
             flesh,
-            outer,
+            exit,
             )
 
         if axis != len(self._shape) - 1:
-            inner = self._loop_over(function, axis + 1, check)
+            # build the inner loop
+            (inner_start, inner_check) = self._loop_over(function, axis + 1, check, locations)
 
-            flesh_builder.branch(inner)
+            index.add_incoming(next_index, inner_check)
+
+            for (location, next_location) in zip(locations, next_locations):
+                location.add_incoming(next_location, inner_check)
+
+            flesh_builder.branch(inner_start)
+
+            return (start, inner_check)
         else:
-            from cargo.statistics.mixture import get_zorro
+            # we are the innermost loop
+            # FIXME we can move these lines into the common control stream
+            index.add_incoming(next_index, flesh)
 
-            flesh_builder.call(get_zorro(), [index, index])
+            for (location, next_location) in zip(locations, next_locations):
+                location.add_incoming(next_location, flesh)
 
             repeat = flesh_builder.branch(check)
 
             flesh_builder.position_before(repeat)
 
-        return start
+            return (start, check)
 
     @property
     def locations(self):

@@ -26,24 +26,59 @@ def log_add_scalar(x, y):
 
 log_add = numpy.frompyfunc(log_add_scalar, 2, 1)
 
+def dtype_from_integer_type(type_):
+    """
+    Build a numpy dtype from an LLVM integer type.
+    """
+
+    sizes = {
+        8  : numpy.dtype(numpy.int8),
+        16 : numpy.dtype(numpy.int16),
+        32 : numpy.dtype(numpy.int32),
+        64 : numpy.dtype(numpy.int64),
+        }
+
+    return sizes[type_.width]
+
+def dtype_from_struct_type(type_):
+    """
+    Build a numpy dtype from an LLVM struct type.
+    """
+
+    fields = [
+        ("f%i" % i, dtype_from_type(f))
+        for (i, f) in enumerate(type_.elements)
+        ]
+
+    return numpy.dtype(fields)
+
 def dtype_from_type(type_):
     """
     Build a numpy dtype from an LLVM type.
     """
 
-    raise NotImplementedError()
+    import llvm.core as lc
+
+    mapping = {
+        lc.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
+        lc.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
+        lc.TYPE_INTEGER : dtype_from_integer_type,
+        lc.TYPE_STRUCT  : dtype_from_struct_type,
+        }
+
+    return mapping[type_.kind](type_)
 
 class Distribution(object):
     """
     Operations on a distribution.
     """
 
-    def __init__(self, sample_):
+    def __init__(self, core):
         """
         Initialize.
         """
 
-        self._LowDistribution = LowDistribution
+        self._core = core
 
     def rv(self, b, par_p, out_p, prng):
         """
@@ -94,7 +129,7 @@ class Distribution(object):
             )
 
         local = Module.new("distribution_ll")
-        core  = self.core(local)
+        dcore = self._core.for_module(local)
         main  = local.add_function(Type.function(Type.void(), []), "main")
         entry = main.append_basic_block("entry")
         exit  = main.append_basic_block("exit")
@@ -102,7 +137,7 @@ class Distribution(object):
         # build the computation
         loop = ArrayLoop(main, shape, exit, {"p" : parameters, "s" : samples, "o" : out})
 
-        core.ll(loop.builder, loop.locations["p"], loop.locations["s"], loop.locations["o"])
+        dcore.ll(loop.builder, loop.locations["p"], loop.locations["s"], loop.locations["o"])
 
         # build the entry blocks
         entry_builder = Builder.new(entry)
@@ -114,7 +149,7 @@ class Distribution(object):
 
         exit_builder.ret_void()
 
-        # compile and compute
+        # compile and execute
         engine = ExecutionEngine.new(local)
 
         engine.run_function(main, [])
@@ -130,12 +165,12 @@ class Distribution(object):
         raise NotImplementedError()
 
     @property
-    def low(self):
+    def core(self):
         """
-        Return the low-level distribution compiler class.
+        Return the low-level distribution operations.
         """
 
-        return self._LowDistribution
+        return self._core
 
     @property
     def parameter_dtype(self):
@@ -143,7 +178,7 @@ class Distribution(object):
         Type of a distribution parameter.
         """
 
-        return self._parameter_dtype
+        return dtype_from_type(self._core.parameter_type)
 
     @property
     def sample_dtype(self):
@@ -151,5 +186,5 @@ class Distribution(object):
         Type of a sample.
         """
 
-        return self._sample_dtype
+        return dtype_from_type(self._core.sample_type)
 
