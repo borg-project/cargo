@@ -16,9 +16,11 @@ def array_data(array):
     Get the array data pointer.
     """
 
-    (data, _) = parameters.__array_interface__["data"]
-    uintptr_t = Type.int(TargetData.new("target").pointer_size * 8)
-    array_t   = strided_array_type(array)
+    from llvm.ee import TargetData
+
+    (data, _)    = array.__array_interface__["data"]
+    uintptr_t    = Type.int(TargetData.new("target").pointer_size * 8)
+    (array_t, _) = strided_array_type(array)
 
     return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array_t))
 
@@ -27,11 +29,14 @@ def dtype_to_type(dtype):
     Build an LLVM type matching a numpy dtype.
     """
 
-    mapping = {
-        'd' : (lambda _ : Type.double()),
-        }
-
-    return mapping[dtype.char](dtype)
+    if numpy.issubdtype(dtype, numpy.integer):
+        return Type.int(dtype.itemsize * 8)
+    elif dtype == numpy.float64:
+        return Type.double()
+    elif dtype == numpy.float32:
+        return Type.float()
+    else:
+        raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
 
 def strided_array_type(array, axis = 0):
     """
@@ -39,20 +44,23 @@ def strided_array_type(array, axis = 0):
     """
 
     if axis == array.ndim:
-        return (array.dtype.itemsize, dtype_to_type(array.dtype))
+        return (dtype_to_type(array.dtype), array.dtype.itemsize)
     else:
-        (subsize, subtype) = strided_array_type(array, axis + 1)
+        (subtype, subsize) = strided_array_type(array, axis + 1)
 
         count   = array.shape[axis]
         stride  = array.strides[axis]
-        padding = stride - subsize * count
+        padding = stride - subsize
 
         return (
-            stride,
-            Type.struct([
-                Type.array(subtype    , count  ),
-                Type.array(Type.int(8), padding),
-                ]),
+            Type.array(
+                Type.packed_struct([
+                    subtype,
+                    Type.array(Type.int(8), padding),
+                    ]),
+                count,
+                ),
+            stride * count,
             )
 
 class ArrayLoop(object):
@@ -65,16 +73,15 @@ class ArrayLoop(object):
         Initialize.
         """
 
-        self._function = function
-        self._shape    = shape
-        self._arrays   = arrays
-        self._name     = name
+        self._function  = function
+        self._shape     = shape
+        self._arrays    = arrays
+        self._name      = name
+        self._locations = {}
 
-        data_locations = [Constant.null(Type.pointer(Type.int(8))) for _ in arrays]
+        (self._entry, _) = self._build_axis_loop(function, 0, exit, [])
 
-        (self._entry, _) = self._loop_over(function, 0, exit, {})
-
-    def _loop_over(self, function, axis, exit, indices):
+    def _build_axis_loop(self, function, axis, exit, indices):
         """
         Build one level of the array loop.
         """
@@ -88,27 +95,17 @@ class ArrayLoop(object):
         check_builder = Builder.new(check)
         flesh_builder = Builder.new(flesh)
 
-        # move into the iteration guard
+        # set up the axis index
         start_builder.branch(check)
 
-        # set up the axis index
         size_t     = Type.int(32)
-        index      = check_builder.phi(size_t, "i%i" % axis)
+        zero       = Constant.int(size_t, 0)
+        index      = check_builder.phi(size_t, "%s_ax%i_i" % (self._name, axis))
         next_index = check_builder.add(index, Constant.int(size_t, 1))
 
-        index.add_incoming(Constant.int(size_t, 0), start)
+        index.add_incoming(zero, start)
 
-        # set up the strided locations
-        location_t = Type.pointer(Type.int(8))
-        locations  = [check_builder.phi(location_t) for a in self._arrays.values()]
-
-        for (location, outer_location) in zip(locations, outer_locations):
-            location.add_incoming(outer_location, start)
-
-        strides        = [Constant.int(size_t, a.strides[axis]).inttoptr(location_t) for a in self._arrays.values()]
-        next_locations = map(check_builder.add, locations, strides)
-
-        # loop, or not
+        # loop conditionally
         from llvm.core import ICMP_UGT
 
         check_builder.cbranch(
@@ -123,23 +120,33 @@ class ArrayLoop(object):
 
         if axis != len(self._shape) - 1:
             # build the inner loop
-            (inner_start, inner_check) = self._loop_over(function, axis + 1, check, locations)
+            (inner_start, inner_check) = self._build_axis_loop(function, axis + 1, check, indices + [index])
 
             index.add_incoming(next_index, inner_check)
-
-            for (location, next_location) in zip(locations, next_locations):
-                location.add_incoming(next_location, inner_check)
 
             flesh_builder.branch(inner_start)
 
             return (start, inner_check)
         else:
             # we are the innermost loop
-            # FIXME we can move these lines into the common control stream
             index.add_incoming(next_index, flesh)
 
-            for (location, next_location) in zip(locations, next_locations):
-                location.add_incoming(next_location, flesh)
+            for (name, array) in self._arrays.items():
+                offsets = [zero] + sum(([i, zero] for i in indices + [index]), [])
+                gepped  = \
+                    flesh_builder.gep(
+                        array_data(array),
+                        offsets,
+                        "%s_lp" % name,
+                        )
+
+                self._locations[name] = gepped
+
+            from cargo.statistics.mixture import get_zorro
+
+            #flesh_builder.call(get_zorro(), [flesh_builder.ptrtoint(v, Type.int(64)) for v in self._locations.values()])
+            flesh_builder.call(get_zorro(), map(flesh_builder.load, self._locations.values()))
+            #flesh_builder.call(get_zorro(), indices + [index])
 
             repeat = flesh_builder.branch(check)
 
@@ -153,7 +160,7 @@ class ArrayLoop(object):
         Named location pointers.
         """
 
-        raise NotImplementedError()
+        return self._locations
 
     @property
     def entry(self):
@@ -179,7 +186,10 @@ def foo():
     Builder.new(entry).branch(loop.entry)
     Builder.new(exit).ret_void()
 
+    print arrays
     print local
+
+    local.verify()
 
     from llvm.ee   import (
         TargetData,

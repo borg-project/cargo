@@ -13,11 +13,13 @@ from numpy cimport (
     ndarray,
     float_t,
     broadcast,
+    int32_t,
+    int64_t,
     )
 
 log = get_logger(__name__)
 
-cdef void zorro(int i, int j):
+cdef void zorro(int32_t i, int32_t j):
     print i, j
 
 def get_zorro():
