@@ -8,6 +8,7 @@ from base        import *
 from dcm         import *
 from mixture     import *
 from constant    import *
+from binomial    import *
 from discrete    import *
 from functions   import *
 from multinomial import *

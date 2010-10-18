@@ -101,7 +101,7 @@ class Distribution(object):
         if out is None:
             (shape, (parameters, samples)) = \
                 semicast(
-                    (parameters, -len(self.parameters_dtype.shape) or None),
+                    (parameters, -len(self.parameter_dtype.shape) or None),
                     (samples   , -len(self.sample_dtype.shape)     or None),
                     )
 
@@ -109,7 +109,7 @@ class Distribution(object):
         else:
             (shape, (parameters, samples, _)) = \
                 semicast(
-                    (parameters, -len(self.parameters_dtype.shape) or None),
+                    (parameters, -len(self.parameter_dtype.shape) or None),
                     (samples   , -len(self.sample_dtype.shape)     or None),
                     (out       ,                                      None),
                     )
@@ -135,14 +135,23 @@ class Distribution(object):
         exit  = main.append_basic_block("exit")
 
         # build the computation
+        from cargo.statistics.lowloop import ArrayLoop
+
         loop = ArrayLoop(main, shape, exit, {"p" : parameters, "s" : samples, "o" : out})
 
-        dcore.ll(loop.builder, loop.locations["p"], loop.locations["s"], loop.locations["o"])
+        loop.builder.store(
+            dcore.ll(
+                loop.builder,
+                loop.builder.load(loop.locations["p"]),
+                loop.builder.load(loop.locations["s"]),
+                ),
+            loop.locations["o"],
+            )
 
         # build the entry blocks
         entry_builder = Builder.new(entry)
 
-        entry_builder.branch(loop.entry_block)
+        entry_builder.branch(loop.entry)
 
         # build the exit block
         exit_builder = Builder.new(exit)
@@ -150,6 +159,10 @@ class Distribution(object):
         exit_builder.ret_void()
 
         # compile and execute
+        print local
+
+        local.verify()
+
         engine = ExecutionEngine.new(local)
 
         engine.run_function(main, [])

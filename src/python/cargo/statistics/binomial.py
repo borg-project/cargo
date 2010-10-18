@@ -4,6 +4,11 @@
 
 import numpy
 
+from llvm.core import (
+    Type,
+    Constant,
+    )
+
 class Binomial(object):
     """
     Build low-level operations of the binomial distribution.
@@ -18,46 +23,15 @@ class Binomial(object):
         Initialize.
         """
 
-        from llvm.core import Type
-
-        i32_t = Type.int(32)
-        f64_t = Type.double()
-
-        self._parameter_t = Type.packed_struct([f64_t, i32_t])
-        self._sample_t    = i32_t
+        self._parameter_t = Type.packed_struct([Type.double(), Type.int(32)])
+        self._sample_t    = Type.int(32)
 
     def for_module(self, module):
         """
         Return core for use in a specific module.
         """
 
-        return self
-
-    def rv(self, builder, parameter, random):
-        """
-        Return samples from this distribution.
-        """
-
-        raise NotImplementedError()
-
-    def ll(self, builder, parameter, sample):
-        """
-        Compute log probability under this distribution.
-        """
-
-        from llvm.core import (
-            Type,
-            Constant,
-            )
-
-        return Constant.real(Type.double(), 42.0)
-
-    def ml(self, sam_loop, weight_loop, out_p, prng):
-        """
-        Return the estimated maximum-likelihood parameter.
-        """
-
-        raise NotImplementedError()
+        return BinomialBuilder(module)
 
     @property
     def parameter_type(self):
@@ -74,6 +48,82 @@ class Binomial(object):
         """
 
         return self._sample_t
+
+class BinomialBuilder(object):
+    """
+    Build low-level operations of the binomial distribution.
+    """
+
+    def __init__(self, module):
+        """
+        Initialize.
+        """
+
+        print "wtf?"
+
+        # link the GSL
+        import ctypes
+
+        from ctypes      import CDLL
+        from ctypes.util import find_library
+
+        ctypes.CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
+        ctypes.CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
+
+        # set up the builder
+        from ctypes    import sizeof
+
+        self._ln_function = \
+            module.add_function(
+                Type.function(Type.double(), [Type.double()]),
+                "log",
+                )
+        self._ll_function = \
+            module.add_function(
+                Type.function(
+                    Type.double(),
+                    [
+                        Type.int(sizeof(ctypes.c_uint) * 8),
+                        Type.double(),
+                        Type.int(sizeof(ctypes.c_uint) * 8),
+                        ],
+                    ),
+                "gsl_ran_binomial_pdf",
+                )
+
+    def rv(self, builder, parameter, random):
+        """
+        Return samples from this distribution.
+        """
+
+        raise NotImplementedError()
+
+    def ll(self, builder, parameter, sample):
+        """
+        Compute log probability under this distribution.
+        """
+
+        return \
+            builder.call(
+                self._ln_function,
+                [
+                    builder.call(
+                        self._ll_function,
+                        [
+                            sample,
+                            builder.getresult(parameter, 0),
+                            builder.getresult(parameter, 1),
+                            ],
+                        ),
+                    ],
+                )
+
+    def ml(self, sam_loop, weight_loop, out_p, prng):
+        """
+        Return the estimated maximum-likelihood parameter.
+        """
+
+        raise NotImplementedError()
 
 #cdef packed struct MixedBinomialSample:
     #uint_t k
@@ -195,82 +245,82 @@ class Binomial(object):
 
         #return self._sample_dtype
 
-class LowMixedBinomial(object):
-    """
-    Low-level operations of the binomial distribution.
+#class LowMixedBinomial(object):
+    #"""
+    #Low-level operations of the binomial distribution.
 
-    Relevant types:
-    - parameter : f64
-    - sample    : {u32 n; u32 k;}
-    """
+    #Relevant types:
+    #- parameter : f64
+    #- sample    : {u32 n; u32 k;}
+    #"""
 
-    def __init__(self, module):
-        """
-        Initialize.
-        """
+    #def __init__(self, module):
+        #"""
+        #Initialize.
+        #"""
 
-        from llvm.core import Type
+        #from llvm.core import Type
 
-        i32_t = Type.int(32)
-        f64_t = Type.double()
+        #i32_t = Type.int(32)
+        #f64_t = Type.double()
 
-        self._par_t = f64_t
-        self._sam_t = Type.struct([i32_t, i32_t])
+        #self._par_t = f64_t
+        #self._sam_t = Type.struct([i32_t, i32_t])
 
-    def rv(self, b, par_p, out_p, prng):
-        """
-        Return samples from this distribution.
-        """
+    #def rv(self, b, par_p, out_p, prng):
+        #"""
+        #Return samples from this distribution.
+        #"""
 
-        raise NotImplementedError()
+        #raise NotImplementedError()
 
-    def ll(self, b, par_p, sam_p, out_p):
-        """
-        Compute log probability under this distribution.
-        """
+    #def ll(self, b, par_p, sam_p, out_p):
+        #"""
+        #Compute log probability under this distribution.
+        #"""
 
-        from llvm.core import (
-            Type,
-            Constant,
-            )
+        #from llvm.core import (
+            #Type,
+            #Constant,
+            #)
 
-        b.store(Constant.real(Type.double(), 42.0), out_p)
+        #b.store(Constant.real(Type.double(), 42.0), out_p)
 
-    def ml(self, sam_loop, weight_loop, out_p, prng):
-        """
-        Return the estimated maximum-likelihood parameter.
-        """
+    #def ml(self, sam_loop, weight_loop, out_p, prng):
+        #"""
+        #Return the estimated maximum-likelihood parameter.
+        #"""
 
-        raise NotImplementedError()
+        #raise NotImplementedError()
 
-    @property
-    def parameter_type(self):
-        """
-        LLVM type of the distribution parameter.
-        """
+    #@property
+    #def parameter_type(self):
+        #"""
+        #LLVM type of the distribution parameter.
+        #"""
 
-        return self._par_t
+        #return self._par_t
 
-    @property
-    def sample_type(self):
-        """
-        LLVM type of the distribution sample.
-        """
+    #@property
+    #def sample_type(self):
+        #"""
+        #LLVM type of the distribution sample.
+        #"""
 
-        return self._sam_t
+        #return self._sam_t
 
-class MixedBinomial(Distribution):
-    """
-    Operate on multiple binomials with a single common probability parameter.
-    """
+#class MixedBinomial(Distribution):
+    #"""
+    #Operate on multiple binomials with a single common probability parameter.
+    #"""
 
-    _parameter_dtype = numpy.dtype(numpy.float64)
-    _sample_dtype    = numpy.dtype([("n", numpy.uint32), ("k", numpy.uint32)])
+    #_parameter_dtype = numpy.dtype(numpy.float64)
+    #_sample_dtype    = numpy.dtype([("n", numpy.uint32), ("k", numpy.uint32)])
 
-    def __init__(self, epsilon = 1e-3):
-        """
-        Initialize.
-        """
+    #def __init__(self, epsilon = 1e-3):
+        #"""
+        #Initialize.
+        #"""
 
-        Distribution.__init__(self, LowMixedBinomial)
+        #Distribution.__init__(self, LowMixedBinomial)
 

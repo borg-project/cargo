@@ -6,23 +6,27 @@ import numpy
 
 from llvm.core import (
     Type,
-    Module,
     Builder,
     Constant,
     )
 
-def array_data(array):
+def struct_dtype_to_type(dtype):
     """
-    Get the array data pointer.
+    Build an LLVM type matching a numpy struct dtype.
     """
 
-    from llvm.ee import TargetData
+    fields   = sorted(dtype.fields.values(), key = lambda (_, p): p)
+    members  = []
+    position = 0
 
-    (data, _)    = array.__array_interface__["data"]
-    uintptr_t    = Type.int(TargetData.new("target").pointer_size * 8)
-    (array_t, _) = strided_array_type(array)
+    for (field_dtype, offset) in fields:
+        if offset != position:
+            raise NotImplementedError("no support for dtypes with nonstandard packing")
+        else:
+            members  += [dtype_to_type(field_dtype)]
+            position += field_dtype.itemsize
 
-    return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array_t))
+    return Type.packed_struct(members)
 
 def dtype_to_type(dtype):
     """
@@ -35,6 +39,8 @@ def dtype_to_type(dtype):
         return Type.double()
     elif dtype == numpy.float32:
         return Type.float()
+    elif dtype.fields:
+        return struct_dtype_to_type(dtype)
     else:
         raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
 
@@ -63,6 +69,19 @@ def strided_array_type(array, axis = 0):
             stride * count,
             )
 
+def array_data_pointer(array):
+    """
+    Get the array data pointer.
+    """
+
+    from llvm.ee import TargetData
+
+    (data, _)    = array.__array_interface__["data"]
+    uintptr_t    = Type.int(TargetData.new("target").pointer_size * 8)
+    (array_t, _) = strided_array_type(array)
+
+    return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array_t))
+
 class ArrayLoop(object):
     """
     Iterate over strided arrays.
@@ -73,13 +92,15 @@ class ArrayLoop(object):
         Initialize.
         """
 
-        self._function  = function
         self._shape     = shape
         self._arrays    = arrays
         self._name      = name
         self._locations = {}
 
-        (self._entry, _) = self._build_axis_loop(function, 0, exit, [])
+        if len(shape) > 0:
+            (self._entry, _) = self._build_axis_loop(function, 0, exit, [])
+        else:
+            self._build_scalar_no_loop(function, exit)
 
     def _build_axis_loop(self, function, axis, exit, indices):
         """
@@ -132,27 +153,36 @@ class ArrayLoop(object):
             index.add_incoming(next_index, flesh)
 
             for (name, array) in self._arrays.items():
-                offsets = [zero] + sum(([i, zero] for i in indices + [index]), [])
-                gepped  = \
+                self._locations[name] = \
                     flesh_builder.gep(
-                        array_data(array),
-                        offsets,
+                        array_data_pointer(array),
+                        [zero] + sum(([i, zero] for i in indices + [index]), []),
                         "%s_lp" % name,
                         )
-
-                self._locations[name] = gepped
-
-            from cargo.statistics.mixture import get_zorro
-
-            #flesh_builder.call(get_zorro(), [flesh_builder.ptrtoint(v, Type.int(64)) for v in self._locations.values()])
-            flesh_builder.call(get_zorro(), map(flesh_builder.load, self._locations.values()))
-            #flesh_builder.call(get_zorro(), indices + [index])
 
             repeat = flesh_builder.branch(check)
 
             flesh_builder.position_before(repeat)
 
+            self._builder     = flesh_builder
+            self._inner_check = check
+
             return (start, check)
+
+    def _build_scalar_no_loop(self, function, exit):
+        """
+        Build the object for scalar; no loop required.
+        """
+
+        block   = self._entry   = function.append_basic_block("scalar_%s" % self._name)
+        builder = self._builder = Builder.new(block)
+
+        for (name, array) in self._arrays.items():
+            self._locations[name] = array_data_pointer(array)
+
+        leave = builder.branch(exit)
+
+        builder.position_before(leave)
 
     @property
     def locations(self):
@@ -170,36 +200,14 @@ class ArrayLoop(object):
 
         return self._entry
 
-def foo():
-    shape  = (2, 4)
-    arrays = {
-        "foo" : numpy.random.randint(10, size = shape),
-        "bar" : numpy.random.randint(10, size = shape),
-        }
+    @property
+    def builder(self):
+        """
+        Inner loop body builder.
+        """
 
-    local = Module.new("local")
-    main  = local.add_function(Type.function(Type.void(), []), "main")
-    entry = main.append_basic_block("entry")
-    exit  = main.append_basic_block("exit")
-    loop  = ArrayLoop(main, shape, exit, arrays)
+        # FIXME provide builders for *every* loop body?
+        # FIXME (somehow make it possible to thread through phi nodes?)
 
-    Builder.new(entry).branch(loop.entry)
-    Builder.new(exit).ret_void()
-
-    print arrays
-    print local
-
-    local.verify()
-
-    from llvm.ee   import (
-        TargetData,
-        ExecutionEngine,
-        )
-
-    engine = ExecutionEngine.new(local)
-
-    engine.run_function(main, [])
-
-if __name__ == "__main__":
-    foo()
+        return self._builder
 

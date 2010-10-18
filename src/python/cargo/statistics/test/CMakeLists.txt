@@ -9,6 +9,7 @@ install(
         test_mixture.py
 		test_constant.py
 		test_binomial.py
+        test_lowloop.py
     DESTINATION lib/cargo/statistics/test
     )
 
