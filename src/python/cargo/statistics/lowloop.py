@@ -140,7 +140,7 @@ class ArrayLoop(object):
             )
 
         if axis != len(self._shape) - 1:
-            # build the inner loop
+            # build the next-inner loop
             (inner_start, inner_check) = self._build_axis_loop(function, axis + 1, check, indices + [index])
 
             index.add_incoming(next_index, inner_check)
@@ -150,8 +150,6 @@ class ArrayLoop(object):
             return (start, inner_check)
         else:
             # we are the innermost loop
-            index.add_incoming(next_index, flesh)
-
             for (name, array) in self._arrays.items():
                 self._locations[name] = \
                     flesh_builder.gep(
@@ -160,12 +158,12 @@ class ArrayLoop(object):
                         "%s_lp" % name,
                         )
 
-            repeat = flesh_builder.branch(check)
+            self._inner_body = function.append_basic_block("%s_ax%i_inner" % (self._name, axis))
+            self._inner_next = check
 
-            flesh_builder.position_before(repeat)
+            index.add_incoming(next_index, self._inner_body)
 
-            self._builder     = flesh_builder
-            self._inner_check = check
+            flesh_builder.branch(self._inner_body)
 
             return (start, check)
 
@@ -174,15 +172,16 @@ class ArrayLoop(object):
         Build the object for scalar; no loop required.
         """
 
-        block   = self._entry   = function.append_basic_block("scalar_%s" % self._name)
-        builder = self._builder = Builder.new(block)
+        block   = self._entry = function.append_basic_block("scalar_%s" % self._name)
+        builder = Builder.new(block)
 
         for (name, array) in self._arrays.items():
             self._locations[name] = array_data_pointer(array)
 
-        leave = builder.branch(exit)
+        self._inner_body = function.append_basic_block("scalar_%s_body" % self._name)
+        self._inner_next = exit
 
-        builder.position_before(leave)
+        builder.branch(self._inner_body)
 
     @property
     def locations(self):
@@ -201,13 +200,21 @@ class ArrayLoop(object):
         return self._entry
 
     @property
-    def builder(self):
+    def inner_body(self):
         """
-        Inner loop body builder.
+        Inner loop body block.
         """
 
         # FIXME provide builders for *every* loop body?
         # FIXME (somehow make it possible to thread through phi nodes?)
 
-        return self._builder
+        return self._inner_body
+
+    @property
+    def inner_next(self):
+        """
+        Inner loop body block.
+        """
+
+        return self._inner_next
 

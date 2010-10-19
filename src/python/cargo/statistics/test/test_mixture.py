@@ -13,8 +13,11 @@ from nose.tools                import (
     assert_not_equal,
     assert_almost_equal,
     )
-from cargo.statistics.mixture  import FiniteMixture
-from cargo.statistics.constant import Constant
+from cargo.statistics          import (
+    Constant,
+    Distribution,
+    FiniteMixture,
+    )
 
 def assert_finite_mixture_ml_ok(d):
     """
@@ -54,8 +57,8 @@ def test_finite_mixture_ll():
     Test finite-mixture log-likelihood computation.
     """
 
-    d = FiniteMixture(Constant(numpy.float_), 2)
-    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
+    d = Distribution(FiniteMixture(Constant(numpy.float_), 2))
+    p = [[(0.25, 1.0), (0.75, 2.0)]]
 
     assert_almost_equal(d.ll(p,   1.0 ), numpy.log(0.25))
     assert_almost_equal(d.ll(p, [ 2.0]), numpy.log(0.75))

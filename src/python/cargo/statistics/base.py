@@ -137,16 +137,30 @@ class Distribution(object):
         # build the computation
         from cargo.statistics.lowloop import ArrayLoop
 
-        loop = ArrayLoop(main, shape, exit, {"p" : parameters, "s" : samples, "o" : out})
+        loop = \
+            ArrayLoop(
+                main,
+                shape,
+                exit,
+                {
+                    "p" : parameters,
+                    "s" : samples,
+                    "o" : out,
+                    },
+                )
+        inner_builder = Builder.new(loop.inner_body)
 
-        loop.builder.store(
+        inner_builder.store(
             dcore.ll(
-                loop.builder,
-                loop.builder.load(loop.locations["p"]),
-                loop.builder.load(loop.locations["s"]),
+                loop.inner_body,
+                inner_builder.load(loop.locations["p"]),
+                inner_builder.load(loop.locations["s"]),
                 ),
             loop.locations["o"],
             )
+
+        inner_builder.position_at_end(loop.inner_body)
+        inner_builder.branch(loop.inner_next)
 
         # build the entry blocks
         entry_builder = Builder.new(entry)

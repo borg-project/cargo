@@ -4,10 +4,7 @@
 
 import numpy
 
-from numpy                     import (
-    ones,
-    array,
-    )
+from numpy                     import array
 from nose.tools                import assert_almost_equal
 from cargo.testing             import assert_almost_equal_deep
 from cargo.statistics          import (
@@ -65,7 +62,7 @@ def test_mixed_binomial_ml():
         d.ml(
             [[(1, 2), (4, 5)],
              [(3, 4), (8, 8)]],
-            ones((2, 2)),
+            numpy.ones((2, 2)),
             ),
         [5.0 / 7.0, 11.0 / 12.0],
         )

@@ -34,257 +34,245 @@ def get_zorro():
 
     return Constant.int(uintptr_t, <long>&zorro).inttoptr(zorro_t)
 
-class FiniteMixtureLow(object):
-    """
-    An arbitrary finite homogeneous mixture distribution.
-    """
+#class FiniteMixture(object):
+    #"""
+    #An arbitrary finite homogeneous mixture distribution.
+    #"""
 
-    def __init__(self, distribution, K, iterations = 256, convergence = 1e-8):
-        """
-        Initialize.
-        """
+    #def __init__(self, distribution, K, iterations = 256, convergence = 1e-8):
+        #"""
+        #Initialize.
+        #"""
 
-        self._distribution    = distribution
-        self._K               = K
-        self._iterations      = iterations
-        self._convergence     = convergence
+        #self._distribution   = distribution
+        #self._K              = K
+        #self._iterations     = iterations
+        #self._convergence    = convergence
+        #self._parameter_type = \
+            #Type.array(
+                #Type.struct([Type.double(), distribution.parameter_type]),
+                #K,
+                #)
 
-    def rv(self, parameters, out, random = numpy.random):
-        """
-        Make a draw from this mixture distribution.
-        """
+    #def rv(self, parameters, out, random = numpy.random):
+        #"""
+        #Make a draw from this mixture distribution.
+        #"""
 
-        # identify the common prefix
-        if self._distribution.sample_dtype.shape:
-            out_prefix = out.shape[:-len(self._distribution.sample_dtype.shape)]
-        else:
-            out_prefix = out.shape
+        ## identify the common prefix
+        #if self._distribution.sample_dtype.shape:
+            #out_prefix = out.shape[:-len(self._distribution.sample_dtype.shape)]
+        #else:
+            #out_prefix = out.shape
 
-        selected = numpy.empty(out_prefix, dtype = self._distribution.parameter_dtype)
+        #selected = numpy.empty(out_prefix, dtype = self._distribution.parameter_dtype)
 
-        # select the relevant components
-        extension  = (1,) * (len(selected.shape) - len(parameters.shape)) + parameters.shape
-        components = \
-            numpy.reshape(
-                parameters["c"],
-                extension + self._distribution.parameter_dtype.shape,
-                )
-        mixing     = numpy.reshape(parameters["p"], extension)
+        ## select the relevant components
+        #extension  = (1,) * (len(selected.shape) - len(parameters.shape)) + parameters.shape
+        #components = \
+            #numpy.reshape(
+                #parameters["c"],
+                #extension + self._distribution.parameter_dtype.shape,
+                #)
+        #mixing     = numpy.reshape(parameters["p"], extension)
 
-        less   = 1 + len(self._distribution.parameter_dtype.shape)
-        re_max = tuple([s - 1 for s in components.shape[:-less]])
+        #less   = 1 + len(self._distribution.parameter_dtype.shape)
+        #re_max = tuple([s - 1 for s in components.shape[:-less]])
 
-        for i in numpy.ndindex(selected.shape):
-            re_i = tuple(map(min, re_max, i))
-            j    = numpy.nonzero(random.multinomial(1, mixing[re_i]))
+        #for i in numpy.ndindex(selected.shape):
+            #re_i = tuple(map(min, re_max, i))
+            #j    = numpy.nonzero(random.multinomial(1, mixing[re_i]))
 
-            selected[i] = components[re_i + j]
+            #selected[i] = components[re_i + j]
 
-        # generate random variates
-        return self._distribution.rv(selected, out, random)
+        ## generate random variates
+        #return self._distribution.rv(selected, out, random)
 
-    def ll(self, parameters, samples, out = None):
-        """
-        Compute finite-mixture log-likelihood.
-        """
+    ##def ll(self, block, parameter, sample):
+        ##"""
+        ##Compute finite-mixture log-likelihood.
+        ##"""
 
-        # arguments
-        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
-        samples    = numpy.asarray(samples,    self._distribution.sample_dtype)
+        ### computation
+        ##from cargo.statistics.base import log_add
 
-        (parameters, samples) = numpy.broadcast_arrays(parameters, samples)
+        ##ll_out  = self._distribution.ll(parameters["c"], samples)
+        ##ll_out += numpy.log(parameters["p"])
+        ##pre_out = log_add.reduce(ll_out, -1)
 
-        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
-        samples    = numpy.asarray(samples,    self._distribution.sample_dtype)
+        ##numpy.sum(pre_out, -1, out = out)
 
-        if out is None:
-            out = numpy.empty(parameters.shape[:-1])
-        else:
-            if out.shape != parameters.shape[:-1]:
-                raise ValueError("out argument has invalid shape")
-            if out.dtype != numpy.float_:
-                raise ValueError("out argument has invalid dtype")
+        ##return out
 
-        # computation
-        from cargo.statistics.base import log_add
+    #def ml(
+                                   #self,
+        #ndarray                    samples, # ndim = 2
+        #ndarray[float_t, ndim = 2] weights,
+        #ndarray                    out,     # ndim = 1
+                                   #random = numpy.random,
+        #):
+        #"""
+        #Use EM to estimate mixture parameters.
+        #"""
 
-        ll_out  = self._distribution.ll(parameters["c"], samples)
-        ll_out += numpy.log(parameters["p"])
-        pre_out = log_add.reduce(ll_out, -1)
+        ## arguments
+        #assert samples.shape[0] == weights.shape[0]
+        #assert samples.shape[1] == weights.shape[1]
 
-        numpy.sum(pre_out, -1, out = out)
+        #if not numpy.all(weights == 1.0):
+            #raise NotImplementedError("non-unit sample weighting not yet supported")
 
-        return out
+        #if out is None:
+            #out = numpy.empty(samples.shape[0], self._parameter_dtype)
+        #else:
+            #assert samples.shape[0] == out.shape[0]
 
-    def ml(
-                                   self,
-        ndarray                    samples, # ndim = 2
-        ndarray[float_t, ndim = 2] weights,
-        ndarray                    out,     # ndim = 1
-                                   random = numpy.random,
-        ):
-        """
-        Use EM to estimate mixture parameters.
-        """
+        ## computation
+        #log.detail("estimating finite mixture from %i samples" % samples.shape[1])
 
-        # arguments
-        assert samples.shape[0] == weights.shape[0]
-        assert samples.shape[1] == weights.shape[1]
+        #for i in xrange(samples.shape[0]):
+            #out[i] = self._ml(samples[i], weights[i], random)
 
-        if not numpy.all(weights == 1.0):
-            raise NotImplementedError("non-unit sample weighting not yet supported")
+        #return out
 
-        if out is None:
-            out = numpy.empty(samples.shape[0], self._parameter_dtype)
-        else:
-            assert samples.shape[0] == out.shape[0]
+    #def _ml(
+                                   #self,
+        #ndarray                    samples_N,
+        #ndarray[float_t, ndim = 1] weights_N,
+                                   #random = numpy.random,
+        #):
+        #"""
+        #Use EM to estimate mixture parameters.
+        #"""
 
-        # computation
-        log.detail("estimating finite mixture from %i samples" % samples.shape[1])
+        ## mise en place
+        #cdef size_t N = samples_N.shape[0]
+        #cdef size_t K = self._K
 
-        for i in xrange(samples.shape[0]):
-            out[i] = self._ml(samples[i], weights[i], random)
+        #d = self._distribution
+        #p = numpy.empty((), self._parameter_dtype)
 
-        return out
+        ## generate a random initial state
+        #seeds = random.randint(N, size = K)
 
-    def _ml(
-                                   self,
-        ndarray                    samples_N,
-        ndarray[float_t, ndim = 1] weights_N,
-                                   random = numpy.random,
-        ):
-        """
-        Use EM to estimate mixture parameters.
-        """
+        #d.ml(samples_N[seeds][:, None], weights_N[seeds][:, None], p["c"], random)
 
-        # mise en place
-        cdef size_t N = samples_N.shape[0]
-        cdef size_t K = self._K
+        #p["p"]  = random.rand(K)
+        #p["p"] /= numpy.sum(p["p"])
 
-        d = self._distribution
-        p = numpy.empty((), self._parameter_dtype)
+        ## run EM until convergence
+        #last_r_KN = None
+        #r_KN      = numpy.empty((K, N))
 
-        # generate a random initial state
-        seeds = random.randint(N, size = K)
+        #for i in xrange(self._iterations):
+            ## evaluate responsibilities
+            #d.ll(p["c"][:, None], samples_N, r_KN)
 
-        d.ml(samples_N[seeds][:, None], weights_N[seeds][:, None], p["c"], random)
+            #numpy.exp(r_KN, r_KN)
 
-        p["p"]  = random.rand(K)
-        p["p"] /= numpy.sum(p["p"])
+            #r_KN *= p["p"][:, None]
+            #r_KN /= numpy.sum(r_KN, 0)
 
-        # run EM until convergence
-        last_r_KN = None
-        r_KN      = numpy.empty((K, N))
+            ## make maximum-likelihood estimates
+            #d.ml(samples_N, r_KN, p["c"], random)
 
-        for i in xrange(self._iterations):
-            # evaluate responsibilities
-            d.ll(p["c"][:, None], samples_N, r_KN)
+            #p["p"] = numpy.sum(r_KN, 1) / N
 
-            numpy.exp(r_KN, r_KN)
+            ## check for convergence
+            #if last_r_KN is None:
+                #last_r_KN = numpy.empty((K, N))
+            #else:
+                #difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
 
-            r_KN *= p["p"][:, None]
-            r_KN /= numpy.sum(r_KN, 0)
+                #log.detail(
+                    #"iteration %i < %i ; delta %e >? %e",
+                    #i,
+                    #self._iterations,
+                    #difference,
+                    #self._convergence,
+                    #)
 
-            # make maximum-likelihood estimates
-            d.ml(samples_N, r_KN, p["c"], random)
+                #if difference < self._convergence:
+                    #break
 
-            p["p"] = numpy.sum(r_KN, 1) / N
+            #(last_r_KN, r_KN) = (r_KN, last_r_KN)
 
-            # check for convergence
-            if last_r_KN is None:
-                last_r_KN = numpy.empty((K, N))
-            else:
-                difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
+        ## done
+        #return p
 
-                log.detail(
-                    "iteration %i < %i ; delta %e >? %e",
-                    i,
-                    self._iterations,
-                    difference,
-                    self._convergence,
-                    )
+    #def given(self, parameters, samples, out = None):
+        #"""
+        #Return the conditional distribution.
+        #"""
 
-                if difference < self._convergence:
-                    break
+        ## arguments
+        #from cargo.numpy import semicast
 
-            (last_r_KN, r_KN) = (r_KN, last_r_KN)
+        #parameters = numpy.asarray(parameters, self._parameter_dtype.base)
+        #samples    = numpy.asarray(samples   , self.sample_dtype         )
 
-        # done
-        return p
+        #if out is None:
+            #(parameters, samples) = \
+                #semicast(
+                    #(parameters, -1                                   ),
+                    #(samples   , -len(self.sample_dtype.shape) or None),
+                    #)
 
-    def given(self, parameters, samples, out = None):
-        """
-        Return the conditional distribution.
-        """
+            #print parameters.shape, samples.shape
 
-        # arguments
-        from cargo.numpy import semicast
+            #out = numpy.empty_like(parameters)
+        #else:
+            #(parameters, samples, _) = \
+                #semicast(
+                    #(parameters, -1                                   ),
+                    #(samples   , -len(self.sample_dtype.shape) or None),
+                    #(out       , -1                                   ),
+                    #)
 
-        parameters = numpy.asarray(parameters, self._parameter_dtype.base)
-        samples    = numpy.asarray(samples   , self.sample_dtype         )
+            #assert out.shape == parameters.shape
 
-        if out is None:
-            (parameters, samples) = \
-                semicast(
-                    (parameters, -1                                   ),
-                    (samples   , -len(self.sample_dtype.shape) or None),
-                    )
+        ## compute posterior mixture parameters
+        #out["p"]  = parameters["p"]
 
-            print parameters.shape, samples.shape
+        #ll = self._distribution.ll(parameters["c"], samples[..., None])
 
-            out = numpy.empty_like(parameters)
-        else:
-            (parameters, samples, _) = \
-                semicast(
-                    (parameters, -1                                   ),
-                    (samples   , -len(self.sample_dtype.shape) or None),
-                    (out       , -1                                   ),
-                    )
+        #if ll.ndim > 1:
+            #sum_ll = numpy.sum(ll, -2)
+        #else:
+            #sum_ll = ll
 
-            assert out.shape == parameters.shape
+        #out["p"] *= numpy.exp(sum_ll)
+        #out["p"] /= numpy.sum(out["p"], -1)[..., None]
 
-        # compute posterior mixture parameters
-        out["p"]  = parameters["p"]
+        ## compute posterior mixture components
+        #self._distribution.given(parameters["c"], samples[..., None], out["c"])
 
-        ll = self._distribution.ll(parameters["c"], samples[..., None])
+        ## done
+        #return out
 
-        if ll.ndim > 1:
-            sum_ll = numpy.sum(ll, -2)
-        else:
-            sum_ll = ll
+    #@property
+    #def distribution(self):
+        #"""
+        #Return the mixture components.
+        #"""
 
-        out["p"] *= numpy.exp(sum_ll)
-        out["p"] /= numpy.sum(out["p"], -1)[..., None]
+        #return self._distribution
 
-        # compute posterior mixture components
-        self._distribution.given(parameters["c"], samples[..., None], out["c"])
+    #@property
+    #def parameter_type(self):
+        #"""
+        #Return the parameter type.
+        #"""
 
-        # done
-        return out
+        #return self._parameter_type
 
-    @property
-    def distribution(self):
-        """
-        Return the mixture components.
-        """
+    #@property
+    #def sample_type(self):
+        #"""
+        #Return the sample type.
+        #"""
 
-        return self._distribution
-
-    @property
-    def parameter_dtype(self):
-        """
-        Return the parameter type.
-        """
-
-        return self._parameter_dtype
-
-    @property
-    def sample_dtype(self):
-        """
-        Return the sample type.
-        """
-
-        return self._distribution.sample_dtype
+        #return self._distribution.sample_type
 
 class RestartingML(object):
     """

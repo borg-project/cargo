@@ -6,6 +6,7 @@ import numpy
 
 from llvm.core import (
     Type,
+    Builder,
     Constant,
     )
 
@@ -23,8 +24,8 @@ class Binomial(object):
         Initialize.
         """
 
-        self._parameter_t = Type.packed_struct([Type.double(), Type.int(32)])
-        self._sample_t    = Type.int(32)
+        self._parameter_type = Type.packed_struct([Type.double(), Type.int(32)])
+        self._sample_type    = Type.int(32)
 
     def for_module(self, module):
         """
@@ -39,7 +40,7 @@ class Binomial(object):
         LLVM type of the distribution parameter.
         """
 
-        return self._parameter_t
+        return self._parameter_type
 
     @property
     def sample_type(self):
@@ -47,7 +48,7 @@ class Binomial(object):
         LLVM type of the distribution sample.
         """
 
-        return self._sample_t
+        return self._sample_type
 
 class BinomialBuilder(object):
     """
@@ -59,19 +60,17 @@ class BinomialBuilder(object):
         Initialize.
         """
 
-        print "wtf?"
-
         # link the GSL
         import ctypes
 
         from ctypes      import CDLL
         from ctypes.util import find_library
 
-        ctypes.CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
-        ctypes.CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
+        CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
+        CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
 
         # set up the builder
-        from ctypes    import sizeof
+        from ctypes import sizeof
 
         self._ln_function = \
             module.add_function(
@@ -98,10 +97,12 @@ class BinomialBuilder(object):
 
         raise NotImplementedError()
 
-    def ll(self, builder, parameter, sample):
+    def ll(self, block, parameter, sample):
         """
         Compute log probability under this distribution.
         """
+
+        builder = Builder.new(block)
 
         return \
             builder.call(
