@@ -15,8 +15,8 @@ class Binomial(object):
     Build low-level operations of the binomial distribution.
 
     Relevant types:
-    - parameter : {f64 p; u32 n;}
-    - sample    : u32
+    - parameter : {float64 p; uint32 n;}
+    - sample    : uint32
     """
 
     def __init__(self):
@@ -24,33 +24,33 @@ class Binomial(object):
         Initialize.
         """
 
-        self._parameter_type = Type.packed_struct([Type.double(), Type.int(32)])
-        self._sample_type    = Type.int(32)
+        self._parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
+        self._sample_dtype    = numpy.dtype(numpy.int32)
 
-    def for_module(self, module):
+    def get_emitter(self, module):
         """
-        Return core for use in a specific module.
+        Return IR emitter.
         """
 
-        return BinomialBuilder(module)
+        return BinomialEmitter(module)
 
     @property
-    def parameter_type(self):
+    def parameter_dtype(self):
         """
         LLVM type of the distribution parameter.
         """
 
-        return self._parameter_type
+        return self._parameter_dtype
 
     @property
-    def sample_type(self):
+    def sample_dtype(self):
         """
         LLVM type of the distribution sample.
         """
 
-        return self._sample_type
+        return self._sample_dtype
 
-class BinomialBuilder(object):
+class BinomialEmitter(object):
     """
     Build low-level operations of the binomial distribution.
     """
@@ -97,7 +97,7 @@ class BinomialBuilder(object):
 
         raise NotImplementedError()
 
-    def ll(self, builder, parameter, sample):
+    def ll(self, builder, parameter_p, sample_p):
         """
         Compute log probability under this distribution.
         """
@@ -109,9 +109,9 @@ class BinomialBuilder(object):
                     builder.call(
                         self._ll_function,
                         [
-                            sample,
-                            builder.getresult(parameter, 0),
-                            builder.getresult(parameter, 1),
+                            builder.load(sample_p),
+                            builder.getresult(builder.load(parameter_p), 0),
+                            builder.getresult(builder.load(parameter_p), 1),
                             ],
                         ),
                     ],
