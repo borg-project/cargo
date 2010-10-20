@@ -57,28 +57,28 @@ def dtype_from_type(type_):
     Build a numpy dtype from an LLVM type.
     """
 
-    import llvm.core as lc
+    from llvm import core
 
     mapping = {
-        lc.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
-        lc.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
-        lc.TYPE_INTEGER : dtype_from_integer_type,
-        lc.TYPE_STRUCT  : dtype_from_struct_type,
+        core.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
+        core.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
+        core.TYPE_INTEGER : dtype_from_integer_type,
+        core.TYPE_STRUCT  : dtype_from_struct_type,
         }
 
     return mapping[type_.kind](type_)
 
-class Distribution(object):
+class ModelEngine(object):
     """
-    Operations on a distribution.
+    Operations on a model.
     """
 
-    def __init__(self, core):
+    def __init__(self, model):
         """
         Initialize.
         """
 
-        self._core = core
+        self._model = model
 
     def rv(self, b, par_p, out_p, prng):
         """
@@ -95,23 +95,23 @@ class Distribution(object):
         # arguments
         from cargo.numpy import semicast
 
-        parameters = numpy.asarray(parameters, self.parameter_dtype.base)
-        samples    = numpy.asarray(samples   , self.sample_dtype.base   )
+        parameters = numpy.asarray(parameters, self._model.parameter_dtype.base)
+        samples    = numpy.asarray(samples   , self._model.sample_dtype.base   )
 
         if out is None:
             (shape, (parameters, samples)) = \
                 semicast(
-                    (parameters, -len(self.parameter_dtype.shape) or None),
-                    (samples   , -len(self.sample_dtype.shape)    or None),
+                    (parameters, -len(self._model.parameter_dtype.shape) or None),
+                    (samples   , -len(self._model.sample_dtype.shape)    or None),
                     )
 
             out = numpy.empty(shape, numpy.float64)
         else:
             (shape, (parameters, samples, _)) = \
                 semicast(
-                    (parameters, -len(self.parameter_dtype.shape) or None),
-                    (samples   , -len(self.sample_dtype.shape)    or None),
-                    (out       ,                                     None),
+                    (parameters, -len(self._model.parameter_dtype.shape) or None),
+                    (samples   , -len(self._model.sample_dtype.shape)    or None),
+                    (out       ,                                            None),
                     )
 
             assert out.shape == parameters.shape
@@ -129,7 +129,7 @@ class Distribution(object):
             )
 
         local   = Module.new("distribution_ll")
-        emitter = self._core.for_module(local)
+        emitter = self._model.get_emitter(local)
         main    = local.add_function(Type.function(Type.void(), []), "main")
         entry   = main.append_basic_block("entry")
         builder = Builder.new(entry)
@@ -145,8 +145,8 @@ class Distribution(object):
             builder.store(
                 emitter.ll(
                     builder,
-                    builder.load(locations["p"]),
-                    builder.load(locations["s"]),
+                    locations["p"],
+                    locations["s"],
                     ),
                 locations["o"],
                 )
@@ -185,26 +185,10 @@ class Distribution(object):
         raise NotImplementedError()
 
     @property
-    def core(self):
+    def model(self):
         """
-        Return the low-level distribution operations.
-        """
-
-        return self._core
-
-    @property
-    def parameter_dtype(self):
-        """
-        Type of a distribution parameter.
+        Return the model.
         """
 
-        return dtype_from_type(self._core.parameter_type)
-
-    @property
-    def sample_dtype(self):
-        """
-        Type of a sample.
-        """
-
-        return dtype_from_type(self._core.sample_type)
+        return self._model
 

@@ -12,11 +12,11 @@ def test_constant():
     from nose.tools       import assert_equal
     from llvm.core        import Type
     from cargo.statistics import (
-        Constant,
+        Delta,
         Distribution,
         )
 
-    d = Distribution(Constant(Type.double()))
+    d = Distribution(Delta(Type.double()))
 
     #assert_equal(constant.random_variate(), 42.0)
     assert_equal(d.ll(42.0, 42.1), numpy.finfo(float).min)

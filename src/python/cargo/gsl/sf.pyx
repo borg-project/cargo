@@ -35,7 +35,7 @@ cpdef double psi(double x) except? -1:
 
 cpdef double log(double v) except? -1:
     """
-    Compute the natural log of the Pochhammer function.
+    Compute the natural log.
     """
 
     cdef gsl_sf_result result

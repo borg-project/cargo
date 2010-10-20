@@ -3,30 +3,41 @@
 """
 
 import numpy
+import llvm.core
+
+from llvm.core import (
+    Type,
+    Constant,
+    )
 
 # FIXME really shouldn't expose LLVM types in the AST
 
-class Constant(object):
+class Delta(object):
     """
     The trivial fixed constant distribution.
     """
 
-    def __init__(self, type_):
+    def __init__(self, dtype):
         """
         Initialize.
         """
 
-        # we can only support (for now) types with simple equality tests
-        if type_.kind == llvm.core.TYPE_DOUBLE:
-            pass
-        else:
+        from cargo.statistics.lowloop import dtype_to_type
+
+        self._dtype = numpy.dtype(dtype)
+        self._type  = dtype_to_type(self._dtype)
+
+        # we can only support (for now) types that provide simple equality tests
+        supported = set([
+            llvm.core.TYPE_DOUBLE,
+            ])
+
+        if self._type.kind not in supported:
             raise ValueError("unsupported type for constant distribution")
 
-        self._type = type_
-
-    def for_module(self, module):
+    def get_emitter(self, module):
         """
-        Return a specialized builder.
+        Return an IR emitter for this distribution.
         """
 
         return self
@@ -53,7 +64,7 @@ class Constant(object):
 
         return out
 
-    def ll(self, builder, parameter, sample):
+    def ll(self, builder, parameter_p, sample_p):
         """
         Compute constant-distribution log-likelihood.
         """
@@ -62,8 +73,8 @@ class Constant(object):
             builder.select(
                 builder.fcmp(
                     llvm.core.FCMP_OEQ,
-                    parameter,
-                    sample,
+                    builder.load(parameter_p),
+                    builder.load(sample_p),
                     ),
                 Constant.real(Type.double(), 0.0),
                 Constant.real(Type.double(), numpy.finfo(numpy.float_).min),
@@ -102,18 +113,18 @@ class Constant(object):
         return out
 
     @property
-    def sample_type(self):
+    def sample_dtype(self):
         """
         Sample dtype.
         """
 
-        return self._type
+        return self._dtype
 
     @property
-    def parameter_type(self):
+    def parameter_dtype(self):
         """
         Parameter dtype.
         """
 
-        return self._type
+        return self._dtype
 

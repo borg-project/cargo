@@ -31,9 +31,9 @@ install(
     FILES
         __init__.py
 		base.py
+		delta.py
 		tuple.py
 		binomial.py
-		constant.py
 		lowloop.py
     DESTINATION lib/cargo/statistics
     )

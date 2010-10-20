@@ -3,6 +3,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import sys
 import numpy
 import llvm.core
 
@@ -22,24 +23,77 @@ from numpy cimport (
     int64_t,
     )
 
-log = get_logger(__name__)
+cdef extern from "math.h":
+    double log(double)
 
-cdef void zorro(int32_t i, int32_t j):
-    #print i, j
-    pass
+logger = get_logger(__name__)
 
-def get_zorro():
-    from llvm.ee   import TargetData
-    from llvm.core import (
-        Type,
-        Constant,
+cdef double log_add_double(double x, double y):
+    """
+    Return log(x + y) given log(x) and log(y); see [1].
+
+    [1] Digital Filtering Using Logarithmic Arithmetic.
+        Kingsbury and Rayner, 1970.
+    """
+
+    from math import (
+        exp,
+        log1p,
         )
 
-    #uintptr_t = Type.int(TargetData.new("target").pointer_size * 8)
-    uintptr_t = Type.int(32)
-    zorro_t   = Type.pointer(Type.function(Type.void(), [Type.int(32), Type.int(32)]))
+    if x >= y:
+        return x + log1p(exp(y - x))
+    else:
+        return y + log1p(exp(x - y))
 
-    return Constant.int(uintptr_t, <long>&zorro).inttoptr(zorro_t)
+cdef void put_double(double v):
+    sys.stdout.write("%s" % v)
+
+cdef void put_int(int32_t v):
+    sys.stdout.write("%s" % v)
+
+cdef void put_string(char* string):
+    sys.stdout.write(string)
+
+def emit_print_string(builder, string):
+    from cargo.llvm import iptr_type
+
+    print_string_t = Type.pointer(Type.function(Type.void(), [Type.pointer(Type.int(8))]))
+    print_string   = Constant.int(iptr_type, <long>&put_string).inttoptr(print_string_t)
+
+    from llvm.core import GlobalVariable
+
+    module    = builder.basic_block.function.module
+    cstring   = GlobalVariable.new(module, Type.array(Type.int(8), len(string) + 1), "cstring")
+    cstring_p = builder.gep(cstring, [Constant.int(Type.int(32), 0)] * 2)
+
+    cstring.initializer = Constant.stringz(string)
+
+    builder.call(print_string, [cstring_p])
+
+def emit_print(builder, *values):
+    import ctypes
+
+    from ctypes     import sizeof
+    from cargo.llvm import iptr_type
+
+    print_double_t = Type.pointer(Type.function(Type.void(), [Type.double()]))
+    print_int_t    = Type.pointer(Type.function(Type.void(), [Type.int(32)]))
+
+    print_double = Constant.int(iptr_type, <long>&put_double).inttoptr(print_double_t)
+    print_int    = Constant.int(iptr_type, <long>&put_int).inttoptr(print_int_t)
+
+    for value in values:
+        if value.type.kind == llvm.core.TYPE_DOUBLE:
+            builder.call(print_double, [value])
+        elif value.type.kind == llvm.core.TYPE_INTEGER:
+            assert value.type.width == 32
+
+            builder.call(print_double, [value])
+
+        emit_print_string(builder, " ")
+
+    emit_print_string(builder, "\n")
 
 class FiniteMixture(object):
     """
@@ -51,15 +105,75 @@ class FiniteMixture(object):
         Initialize.
         """
 
-        self._distribution   = distribution
-        self._K              = K
-        self._iterations     = iterations
-        self._convergence    = convergence
-        self._parameter_type = \
-            Type.array(
-                Type.struct([Type.double(), distribution.parameter_type]),
+        self._distribution    = distribution
+        self._K               = K
+        self._iterations      = iterations
+        self._convergence     = convergence
+        self._parameter_dtype = \
+            numpy.dtype((
+                [
+                    ("p", numpy.float64),
+                    ("c", distribution.parameter_dtype),
+                    ],
                 K,
-                )
+                ))
+
+    def get_emitter(self, module):
+        """
+        Return an IR emitter for this distribution.
+        """
+
+        return FiniteMixtureEmitter(self, module)
+
+    @property
+    def distribution(self):
+        """
+        Return the mixture components.
+        """
+
+        return self._distribution
+
+    @property
+    def parameter_dtype(self):
+        """
+        Return the parameter type.
+        """
+
+        return self._parameter_dtype
+
+    @property
+    def sample_dtype(self):
+        """
+        Return the sample type.
+        """
+
+        return self._distribution.sample_dtype
+
+class FiniteMixtureEmitter(object):
+    """
+    Emit IR for the FiniteMixture distribution.
+    """
+
+    def __init__(self, model, module):
+        """
+        Initialize.
+        """
+
+        self._model       = model
+        self._module      = module
+        self._sub_emitter = self._model.distribution.get_emitter(module)
+
+        # prepare helper functions
+        import ctypes
+
+        from ctypes import sizeof
+
+        uintptr_t = Type.int(sizeof(ctypes.c_void_p) * 8)
+        log_t     = Type.pointer(Type.function(Type.double(), [Type.double()]))
+        log_add_t = Type.pointer(Type.function(Type.double(), [Type.double(), Type.double()]))
+
+        self._log     = Constant.int(uintptr_t, <long>&log).inttoptr(log_t)
+        self._log_add = Constant.int(uintptr_t, <long>&log_add_double).inttoptr(log_add_t)
 
     def rv(self, parameters, out, random = numpy.random):
         """
@@ -95,21 +209,10 @@ class FiniteMixture(object):
         # generate random variates
         return self._distribution.rv(selected, out, random)
 
-    def ll(self, builder, parameter, sample):
+    def ll(self, builder, parameter_p, sample_p):
         """
         Compute finite-mixture log-likelihood.
         """
-
-        ## computation
-        #from cargo.statistics.base import log_add
-
-        #ll_out  = self._distribution.ll(parameters["c"], samples)
-        #ll_out += numpy.log(parameters["p"])
-        #pre_out = log_add.reduce(ll_out, -1)
-
-        #numpy.sum(pre_out, -1, out = out)
-
-        #return out
 
         # prepare the loop structure
         function = builder.basic_block.function
@@ -126,19 +229,22 @@ class FiniteMixture(object):
 
         index_type = Type.int(32)
         total_type = Type.double()
+        zero_index = Constant.int(index_type, 0)
+        one_index  = Constant.int(index_type, 1)
+        index      = builder.phi(index_type, "index")
+        total      = builder.phi(total_type, "total")
 
-        index = builder.phi(index_type, "index")
-        total = builder.phi(total_type, "total")
-
-        index.add_incoming(Constant.int(index_type, 0), start)
-        index.add_incoming(builder.add(index, Constant.int(index_type, 1)), flesh)
-
-        total.add_incoming(Constant.real(total_type, 0.0), start)
+        index.add_incoming(zero_index, start)
+        index.add_incoming(builder.add(index, one_index), flesh)
+        total.add_incoming(
+            Constant.real(total_type, numpy.finfo(numpy.float64).min),
+            start,
+            )
 
         builder.cbranch(
             builder.icmp(
                 llvm.core.ICMP_UGT,
-                Constant.int(index_type, self._K),
+                Constant.int(index_type, self._model._K),
                 index,
                 ),
             flesh,
@@ -148,14 +254,29 @@ class FiniteMixture(object):
         # build the flesh block
         builder.position_at_end(flesh)
 
-        #ll = builder.getresult()
+        component_p   = builder.gep(parameter_p, [zero_index, index, zero_index])
+        component_sum = \
+            builder.add(
+                builder.call(
+                    self._log,
+                    [builder.load(builder.gep(component_p, [zero_index, zero_index]))],
+                    ),
+                self._sub_emitter.ll(
+                    builder,
+                    builder.gep(component_p, [zero_index, one_index]),
+                    sample_p,
+                    ),
+                )
+        next_total = builder.call(self._log_add, [total, component_sum])
 
-        total.add_incoming(builder.add(total, total), flesh) # should be log_add
+        total.add_incoming(next_total, flesh)
 
         builder.branch(check)
 
         # wrap up the loop
         builder.position_at_end(leave)
+
+        return total
 
     def ml(
                                    self,
@@ -181,7 +302,7 @@ class FiniteMixture(object):
             assert samples.shape[0] == out.shape[0]
 
         # computation
-        log.detail("estimating finite mixture from %i samples" % samples.shape[1])
+        logger.detail("estimating finite mixture from %i samples" % samples.shape[1])
 
         for i in xrange(samples.shape[0]):
             out[i] = self._ml(samples[i], weights[i], random)
@@ -237,7 +358,7 @@ class FiniteMixture(object):
             else:
                 difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
 
-                log.detail(
+                logger.detail(
                     "iteration %i < %i ; delta %e >? %e",
                     i,
                     self._iterations,
@@ -302,30 +423,6 @@ class FiniteMixture(object):
 
         # done
         return out
-
-    @property
-    def distribution(self):
-        """
-        Return the mixture components.
-        """
-
-        return self._distribution
-
-    @property
-    def parameter_type(self):
-        """
-        Return the parameter type.
-        """
-
-        return self._parameter_type
-
-    @property
-    def sample_type(self):
-        """
-        Return the sample type.
-        """
-
-        return self._distribution.sample_type
 
 class RestartingML(object):
     """

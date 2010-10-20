@@ -95,7 +95,9 @@ def strided_array_loop(builder, emit_body, shape, arrays, name = "loop"):
     Iterate over strided arrays.
     """
 
-    assert all(a.shape == shape for a in arrays.values())
+    for array in arrays.values():
+        assert len(array.shape) >= len(shape)
+        assert array.shape[:len(shape)] == shape
 
     def emit_for_axis(axis, indices):
         """
