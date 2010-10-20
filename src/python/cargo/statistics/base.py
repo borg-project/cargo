@@ -102,7 +102,7 @@ class Distribution(object):
             (shape, (parameters, samples)) = \
                 semicast(
                     (parameters, -len(self.parameter_dtype.shape) or None),
-                    (samples   , -len(self.sample_dtype.shape)     or None),
+                    (samples   , -len(self.sample_dtype.shape)    or None),
                     )
 
             out = numpy.empty(shape, numpy.float64)
@@ -110,8 +110,8 @@ class Distribution(object):
             (shape, (parameters, samples, _)) = \
                 semicast(
                     (parameters, -len(self.parameter_dtype.shape) or None),
-                    (samples   , -len(self.sample_dtype.shape)     or None),
-                    (out       ,                                      None),
+                    (samples   , -len(self.sample_dtype.shape)    or None),
+                    (out       ,                                     None),
                     )
 
             assert out.shape == parameters.shape
@@ -128,49 +128,42 @@ class Distribution(object):
             Constant,
             )
 
-        local = Module.new("distribution_ll")
-        dcore = self._core.for_module(local)
-        main  = local.add_function(Type.function(Type.void(), []), "main")
-        entry = main.append_basic_block("entry")
-        exit  = main.append_basic_block("exit")
+        local   = Module.new("distribution_ll")
+        emitter = self._core.for_module(local)
+        main    = local.add_function(Type.function(Type.void(), []), "main")
+        entry   = main.append_basic_block("entry")
+        builder = Builder.new(entry)
 
         # build the computation
-        from cargo.statistics.lowloop import ArrayLoop
+        from cargo.statistics.lowloop import strided_array_loop
 
-        loop = \
-            ArrayLoop(
-                main,
-                shape,
-                exit,
-                {
-                    "p" : parameters,
-                    "s" : samples,
-                    "o" : out,
-                    },
+        def emit_ll_call(builder, locations):
+            """
+            Emit the body of the array loop.
+            """
+
+            builder.store(
+                emitter.ll(
+                    builder,
+                    builder.load(locations["p"]),
+                    builder.load(locations["s"]),
+                    ),
+                locations["o"],
                 )
-        inner_builder = Builder.new(loop.inner_body)
 
-        inner_builder.store(
-            dcore.ll(
-                loop.inner_body,
-                inner_builder.load(loop.locations["p"]),
-                inner_builder.load(loop.locations["s"]),
-                ),
-            loop.locations["o"],
+        strided_array_loop(
+            builder,
+            emit_ll_call,
+            shape,
+            {
+                "p" : parameters,
+                "s" : samples,
+                "o" : out,
+                },
+            "ll_loop",
             )
 
-        inner_builder.position_at_end(loop.inner_body)
-        inner_builder.branch(loop.inner_next)
-
-        # build the entry blocks
-        entry_builder = Builder.new(entry)
-
-        entry_builder.branch(loop.entry)
-
-        # build the exit block
-        exit_builder = Builder.new(exit)
-
-        exit_builder.ret_void()
+        builder.ret_void()
 
         # compile and execute
         print local

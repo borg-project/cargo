@@ -4,17 +4,32 @@
 
 import numpy
 
+# FIXME really shouldn't expose LLVM types in the AST
+
 class Constant(object):
     """
     The trivial fixed constant distribution.
     """
 
-    def __init__(self, dtype):
+    def __init__(self, type_):
         """
         Initialize.
         """
 
-        self._dtype = numpy.dtype(dtype)
+        # we can only support (for now) types with simple equality tests
+        if type_.kind == llvm.core.TYPE_DOUBLE:
+            pass
+        else:
+            raise ValueError("unsupported type for constant distribution")
+
+        self._type = type_
+
+    def for_module(self, module):
+        """
+        Return a specialized builder.
+        """
+
+        return self
 
     def rv(self, parameters, out, random = numpy.random):
         """
@@ -38,30 +53,21 @@ class Constant(object):
 
         return out
 
-    def ll(self, parameters, samples, out = None):
+    def ll(self, builder, parameter, sample):
         """
         Compute constant-distribution log-likelihood.
         """
 
-        # arguments
-        parameters = numpy.asarray(parameters, self._dtype)
-        samples    = numpy.asarray(samples,    self._dtype)
-
-        (parameters, samples) = numpy.broadcast_arrays(parameters, samples)
-
-        if out is None:
-            out = numpy.empty(parameters.shape)
-        else:
-            if out.shape != parameters.shape:
-                raise ValueError("out argument has invalid shape")
-            if out.dtype != numpy.float_:
-                raise ValueError("out argument has invalid dtype")
-
-        # computation
-        out[:] = numpy.finfo(numpy.float_).min
-        out[samples == parameters] = 0.0
-
-        return out
+        return \
+            builder.select(
+                builder.fcmp(
+                    llvm.core.FCMP_OEQ,
+                    parameter,
+                    sample,
+                    ),
+                Constant.real(Type.double(), 0.0),
+                Constant.real(Type.double(), numpy.finfo(numpy.float_).min),
+                )
 
     def given(self, parameters, samples, out = None):
         """
@@ -96,18 +102,18 @@ class Constant(object):
         return out
 
     @property
-    def sample_dtype(self):
+    def sample_type(self):
         """
         Sample dtype.
         """
 
-        return self._dtype
+        return self._type
 
     @property
-    def parameter_dtype(self):
+    def parameter_type(self):
         """
         Parameter dtype.
         """
 
-        return self._dtype
+        return self._type
 

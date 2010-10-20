@@ -97,12 +97,10 @@ class BinomialBuilder(object):
 
         raise NotImplementedError()
 
-    def ll(self, block, parameter, sample):
+    def ll(self, builder, parameter, sample):
         """
         Compute log probability under this distribution.
         """
-
-        builder = Builder.new(block)
 
         return \
             builder.call(

@@ -3,6 +3,7 @@
 """
 
 import numpy
+import llvm.core
 
 from llvm.core import (
     Type,
@@ -54,9 +55,16 @@ def strided_array_type(array, axis = 0):
     else:
         (subtype, subsize) = strided_array_type(array, axis + 1)
 
-        count   = array.shape[axis]
-        stride  = array.strides[axis]
-        padding = stride - subsize
+        stride = array.strides[axis]
+
+        if stride == 0:
+            count    = 1
+            padding  = 0
+            our_size = subsize
+        else:
+            count    = array.shape[axis]
+            padding  = stride - subsize
+            our_size = stride * count
 
         return (
             Type.array(
@@ -66,7 +74,7 @@ def strided_array_type(array, axis = 0):
                     ]),
                 count,
                 ),
-            stride * count,
+            our_size,
             )
 
 def array_data_pointer(array):
@@ -74,147 +82,104 @@ def array_data_pointer(array):
     Get the array data pointer.
     """
 
-    from llvm.ee import TargetData
+    import ctypes
 
     (data, _)    = array.__array_interface__["data"]
-    uintptr_t    = Type.int(TargetData.new("target").pointer_size * 8)
+    uintptr_t    = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
     (array_t, _) = strided_array_type(array)
 
     return Constant.int(uintptr_t, data).inttoptr(Type.pointer(array_t))
 
-class ArrayLoop(object):
+def strided_array_loop(builder, emit_body, shape, arrays, name = "loop"):
     """
     Iterate over strided arrays.
     """
 
-    def __init__(self, function, shape, exit, arrays, name = "loop"):
-        """
-        Initialize.
-        """
+    assert all(a.shape == shape for a in arrays.values())
 
-        self._shape     = shape
-        self._arrays    = arrays
-        self._name      = name
-        self._locations = {}
-
-        if len(shape) > 0:
-            (self._entry, _) = self._build_axis_loop(function, 0, exit, [])
-        else:
-            self._build_scalar_no_loop(function, exit)
-
-    def _build_axis_loop(self, function, axis, exit, indices):
+    def emit_for_axis(axis, indices):
         """
         Build one level of the array loop.
         """
 
         # prepare the loop structure
-        start = function.append_basic_block("%s_ax%i_start" % (self._name, axis))
-        check = function.append_basic_block("%s_ax%i_check" % (self._name, axis))
-        flesh = function.append_basic_block("%s_ax%i_flesh" % (self._name, axis))
+        function = builder.basic_block.function
 
-        start_builder = Builder.new(start)
-        check_builder = Builder.new(check)
-        flesh_builder = Builder.new(flesh)
+        start = builder.basic_block
+        check = function.append_basic_block("%s_ax%i_check" % (name, axis))
+        flesh = function.append_basic_block("%s_ax%i_flesh" % (name, axis))
+        leave = function.append_basic_block("%s_ax%i_leave" % (name, axis))
 
         # set up the axis index
-        start_builder.branch(check)
+        builder.branch(check)
+        builder.position_at_end(check)
 
-        size_t     = Type.int(32)
-        zero       = Constant.int(size_t, 0)
-        index      = check_builder.phi(size_t, "%s_ax%i_i" % (self._name, axis))
-        next_index = check_builder.add(index, Constant.int(size_t, 1))
+        size_type  = Type.int(32)
+        zero       = Constant.int(size_type, 0)
+        index      = builder.phi(size_type, "%s_ax%i_i" % (name, axis))
+        next_index = builder.add(index, Constant.int(size_type, 1))
 
         index.add_incoming(zero, start)
 
         # loop conditionally
-        from llvm.core import ICMP_UGT
-
-        check_builder.cbranch(
-            check_builder.icmp(
-                ICMP_UGT,
-                Constant.int(size_t, self._shape[axis]),
+        builder.cbranch(
+            builder.icmp(
+                llvm.core.ICMP_UGT,
+                Constant.int(size_type, shape[axis]),
                 index,
                 ),
             flesh,
-            exit,
+            leave,
             )
+        builder.position_at_end(flesh)
 
-        if axis != len(self._shape) - 1:
+        if axis != len(shape) - 1:
             # build the next-inner loop
-            (inner_start, inner_check) = self._build_axis_loop(function, axis + 1, check, indices + [index])
-
-            index.add_incoming(next_index, inner_check)
-
-            flesh_builder.branch(inner_start)
-
-            return (start, inner_check)
+            body_value = emit_for_axis(axis + 1, indices + [index])
         else:
             # we are the innermost loop
-            for (name, array) in self._arrays.items():
-                self._locations[name] = \
-                    flesh_builder.gep(
+            locations = {}
+
+            for (array_name, array) in arrays.items():
+                offsets = [zero]
+
+                for (i, offset) in enumerate(indices + [index]):
+                    if array.strides[i] == 0:
+                        offsets += [zero]
+                    else:
+                        offsets += [offset]
+
+                    offsets += [zero]
+
+                locations[array_name] = \
+                    builder.gep(
                         array_data_pointer(array),
-                        [zero] + sum(([i, zero] for i in indices + [index]), []),
-                        "%s_lp" % name,
+                        offsets,
+                        "array_%s_loc" % array_name,
                         )
 
-            self._inner_body = function.append_basic_block("%s_ax%i_inner" % (self._name, axis))
-            self._inner_next = check
+            body_value = emit_body(builder, locations)
 
-            index.add_incoming(next_index, self._inner_body)
+        # complete this loop
+        index.add_incoming(next_index, builder.basic_block)
 
-            flesh_builder.branch(self._inner_body)
+        builder.branch(check)
+        builder.position_at_end(leave)
 
-            return (start, check)
+        return body_value
 
-    def _build_scalar_no_loop(self, function, exit):
+    def emit_for_scalar():
         """
-        Build the object for scalar; no loop required.
-        """
-
-        block   = self._entry = function.append_basic_block("scalar_%s" % self._name)
-        builder = Builder.new(block)
-
-        for (name, array) in self._arrays.items():
-            self._locations[name] = array_data_pointer(array)
-
-        self._inner_body = function.append_basic_block("scalar_%s_body" % self._name)
-        self._inner_next = exit
-
-        builder.branch(self._inner_body)
-
-    @property
-    def locations(self):
-        """
-        Named location pointers.
+        Emit code for a scalar; no loop is required.
         """
 
-        return self._locations
+        locations = dict((n, array_data_pointer(a)) for (n, a) in arrays.items())
 
-    @property
-    def entry(self):
-        """
-        Entry point basic block.
-        """
+        return emit_body(builder, locations)
 
-        return self._entry
-
-    @property
-    def inner_body(self):
-        """
-        Inner loop body block.
-        """
-
-        # FIXME provide builders for *every* loop body?
-        # FIXME (somehow make it possible to thread through phi nodes?)
-
-        return self._inner_body
-
-    @property
-    def inner_next(self):
-        """
-        Inner loop body block.
-        """
-
-        return self._inner_next
+    # generate code
+    if len(shape) > 0:
+        return emit_for_axis(0, [])
+    else:
+        return emit_for_scalar()
 

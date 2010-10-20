@@ -9,13 +9,16 @@ def test_constant():
 
     import numpy
 
-    from nose.tools                import assert_equal
-    from cargo.statistics.constant import Constant
+    from nose.tools       import assert_equal
+    from llvm.core        import Type
+    from cargo.statistics import (
+        Constant,
+        Distribution,
+        )
 
-    constant = Constant(42.0)
+    d = Distribution(Constant(Type.double()))
 
-    assert_equal(constant.random_variate(), 42.0)
-    assert_equal(constant.log_likelihood(42.1), numpy.finfo(float).min)
-    assert_equal(constant.log_likelihood("42"), numpy.finfo(float).min)
-    assert_equal(constant.log_likelihood(42.0), 0.0)
+    #assert_equal(constant.random_variate(), 42.0)
+    assert_equal(d.ll(42.0, 42.1), numpy.finfo(float).min)
+    assert_equal(d.ll(42.0, 42.0), 0.0)
 
