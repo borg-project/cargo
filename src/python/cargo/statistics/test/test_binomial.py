@@ -20,7 +20,7 @@ def test_binomial_ll():
 
     me = ModelEngine(Binomial())
 
-    #assert_almost_equal(d.ll((0.25, 2), 1), -0.98082925)
+    assert_almost_equal(me.ll((0.25, 2), 1), -0.98082925)
     assert_almost_equal_deep(
         me.ll(
             [[(0.25, 2), (0.25, 5)],

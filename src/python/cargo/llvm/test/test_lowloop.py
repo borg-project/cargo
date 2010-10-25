@@ -18,33 +18,24 @@ def assert_copying_ok(in_, out, expected):
     """
 
     # compile array copy via array loop
-    from cargo.statistics.lowloop import strided_array_loop
+    from cargo.llvm         import this_builder
+    from cargo.llvm.lowloop import StridedArrays
 
-    local   = Module.new("local")
-    main    = local.add_function(Type.function(Type.void(), []), "main")
-    entry   = main.append_basic_block("entry")
-    builder = Builder.new(entry)
+    local  = Module.new("local")
+    main   = local.add_function(Type.function(Type.void(), []), "main")
+    entry  = main.append_basic_block("entry")
+    arrays = StridedArrays.from_numpy({"in" : in_, "out" : out})
 
-    def emit_loop_copy(builder, locations):
-        """
-        Copy a single element.
-        """
+    with this_builder(Builder.new(entry)) as builder:
+        @arrays.loop_all()
+        def _(l):
+            l.arrays["out"].store(l.arrays["in"])
 
-        builder.store(
-            builder.load(locations["in"]),
-            locations["out"],
-            )
-
-    strided_array_loop(
-        builder,
-        emit_loop_copy,
-        out.shape,
-        {"in" : in_, "out" : out},
-        )
-
-    builder.ret_void()
+        builder.ret_void()
 
     # execute the loop
+    print local
+
     local.verify()
 
     engine = ExecutionEngine.new(local)
@@ -76,6 +67,24 @@ def test_array_loop_broadcast():
         numpy.broadcast_arrays(
             numpy.random.randint(10, size = (2, 1, 6)),
             numpy.random.randint(10, size = (2, 4, 6)),
+            )
+    baz = numpy.empty(bar.shape, numpy.int)
+
+    baz[:] = foo
+
+    # verify correctness
+    assert_copying_ok(foo, bar, baz)
+
+def test_array_loop_subarrays():
+    """
+    Test strided-array loop compilation with subarrays.
+    """
+
+    # generate some test data
+    (foo, bar) = \
+        numpy.broadcast_arrays(
+            numpy.random.randint(10, size = (10, 10))[2:8:2, 5: 6  ],
+            numpy.random.randint(10, size = (10, 10))[2:8:2, 1:10:3],
             )
     baz = numpy.empty(bar.shape, numpy.int)
 

@@ -34,7 +34,6 @@ install(
 		delta.py
 		tuple.py
 		binomial.py
-		lowloop.py
     DESTINATION lib/cargo/statistics
     )
 

@@ -10,15 +10,14 @@ def test_constant():
     import numpy
 
     from nose.tools       import assert_equal
-    from llvm.core        import Type
     from cargo.statistics import (
         Delta,
-        Distribution,
+        ModelEngine,
         )
 
-    d = Distribution(Delta(Type.double()))
+    me = ModelEngine(Delta(numpy.float64))
 
     #assert_equal(constant.random_variate(), 42.0)
-    assert_equal(d.ll(42.0, 42.1), numpy.finfo(float).min)
-    assert_equal(d.ll(42.0, 42.0), 0.0)
+    assert_equal(me.ll(42.0, 42.1), numpy.finfo(float).min)
+    assert_equal(me.ll(42.0, 42.0), 0.0)
 

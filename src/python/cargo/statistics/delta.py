@@ -9,8 +9,7 @@ from llvm.core import (
     Type,
     Constant,
     )
-
-# FIXME really shouldn't expose LLVM types in the AST
+from cargo.llvm.high_level import high
 
 class Delta(object):
     """
@@ -22,7 +21,7 @@ class Delta(object):
         Initialize.
         """
 
-        from cargo.statistics.lowloop import dtype_to_type
+        from cargo.llvm.lowloop import dtype_to_type
 
         self._dtype = numpy.dtype(dtype)
         self._type  = dtype_to_type(self._dtype)
@@ -64,21 +63,24 @@ class Delta(object):
 
         return out
 
-    def ll(self, builder, parameter_p, sample_p):
+    def ll(self, parameter, sample, out):
         """
         Compute constant-distribution log-likelihood.
         """
 
-        return \
+        builder = high.builder
+
+        out.store(
             builder.select(
                 builder.fcmp(
                     llvm.core.FCMP_OEQ,
-                    builder.load(parameter_p),
-                    builder.load(sample_p),
+                    parameter.load(),
+                    sample.load(),
                     ),
                 Constant.real(Type.double(), 0.0),
                 Constant.real(Type.double(), numpy.finfo(numpy.float_).min),
-                )
+                ),
+            )
 
     def given(self, parameters, samples, out = None):
         """

@@ -9,6 +9,7 @@ from llvm.core import (
     Builder,
     Constant,
     )
+from cargo.llvm.high_level import high
 
 class Binomial(object):
     """
@@ -37,7 +38,7 @@ class Binomial(object):
     @property
     def parameter_dtype(self):
         """
-        LLVM type of the distribution parameter.
+        Type of the distribution parameter.
         """
 
         return self._parameter_dtype
@@ -45,7 +46,7 @@ class Binomial(object):
     @property
     def sample_dtype(self):
         """
-        LLVM type of the distribution sample.
+        Type of the distribution sample.
         """
 
         return self._sample_dtype
@@ -97,25 +98,24 @@ class BinomialEmitter(object):
 
         raise NotImplementedError()
 
-    def ll(self, builder, parameter_p, sample_p):
+    def ll(self, parameter, sample, out):
         """
         Compute log probability under this distribution.
         """
 
-        return \
+        builder    = high.builder
+        p          = parameter.load()
+        likelihood = \
             builder.call(
-                self._ln_function,
+                self._ll_function,
                 [
-                    builder.call(
-                        self._ll_function,
-                        [
-                            builder.load(sample_p),
-                            builder.getresult(builder.load(parameter_p), 0),
-                            builder.getresult(builder.load(parameter_p), 1),
-                            ],
-                        ),
+                    sample.load(),
+                    builder.extract_value(p, 0),
+                    builder.extract_value(p, 1),
                     ],
                 )
+
+        out.store(builder.call(self._ln_function, [likelihood]))
 
     def ml(self, sam_loop, weight_loop, out_p, prng):
         """

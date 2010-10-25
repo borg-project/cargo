@@ -11,7 +11,8 @@ from llvm.core import (
     Type,
     Constant,
     )
-from cargo.log import get_logger
+from cargo.log             import get_logger
+from cargo.llvm.high_level import high
 
 cimport numpy
 
@@ -21,6 +22,7 @@ from numpy cimport (
     broadcast,
     int32_t,
     int64_t,
+    uint8_t,
     )
 
 cdef extern from "math.h":
@@ -149,6 +151,11 @@ class FiniteMixture(object):
 
         return self._distribution.sample_dtype
 
+#cdef struct CFiniteMixture:
+    #uint32_t K
+    #uint32_t iterations
+    #double   convergence
+
 class FiniteMixtureEmitter(object):
     """
     Emit IR for the FiniteMixture distribution.
@@ -164,11 +171,7 @@ class FiniteMixtureEmitter(object):
         self._sub_emitter = self._model.distribution.get_emitter(module)
 
         # prepare helper functions
-        import ctypes
-
-        from ctypes import sizeof
-
-        uintptr_t = Type.int(sizeof(ctypes.c_void_p) * 8)
+        uintptr_t = Type.int(sizeof(void*) * 8)
         log_t     = Type.pointer(Type.function(Type.double(), [Type.double()]))
         log_add_t = Type.pointer(Type.function(Type.double(), [Type.double(), Type.double()]))
 
@@ -195,8 +198,7 @@ class FiniteMixtureEmitter(object):
                 parameters["c"],
                 extension + self._distribution.parameter_dtype.shape,
                 )
-        mixing     = numpy.reshape(parameters["p"], extension)
-
+        mixing = numpy.reshape(parameters["p"], extension)
         less   = 1 + len(self._distribution.parameter_dtype.shape)
         re_max = tuple([s - 1 for s in components.shape[:-less]])
 
@@ -209,170 +211,100 @@ class FiniteMixtureEmitter(object):
         # generate random variates
         return self._distribution.rv(selected, out, random)
 
-    def ll(self, builder, parameter_p, sample_p):
+    def ll(self, parameter, sample, out):
         """
         Compute finite-mixture log-likelihood.
         """
 
-        # prepare the loop structure
-        function = builder.basic_block.function
-
-        start = builder.basic_block
-        check = function.append_basic_block("finite_mixture_ll_loop_check")
-        flesh = function.append_basic_block("finite_mixture_ll_loop_flesh")
-        leave = function.append_basic_block("finite_mixture_ll_loop_leave")
-
-        builder.branch(check)
-
-        # build the check block
-        builder.position_at_end(check)
-
-        index_type = Type.int(32)
+        builder    = high.builder
         total_type = Type.double()
-        zero_index = Constant.int(index_type, 0)
-        one_index  = Constant.int(index_type, 1)
-        index      = builder.phi(index_type, "index")
         total      = builder.phi(total_type, "total")
 
-        index.add_incoming(zero_index, start)
-        index.add_incoming(builder.add(index, one_index), flesh)
         total.add_incoming(
             Constant.real(total_type, numpy.finfo(numpy.float64).min),
             start,
             )
 
-        builder.cbranch(
-            builder.icmp(
-                llvm.core.ICMP_UGT,
-                Constant.int(index_type, self._model._K),
-                index,
-                ),
-            flesh,
-            leave,
-            )
+        @high.for_(self._model._K)
+        def _(index):
+            builder.position_at_end(flesh)
 
-        # build the flesh block
-        builder.position_at_end(flesh)
-
-        component_p   = builder.gep(parameter_p, [zero_index, index, zero_index])
-        component_sum = \
-            builder.add(
-                builder.call(
-                    self._log,
-                    [builder.load(builder.gep(component_p, [zero_index, zero_index]))],
-                    ),
-                self._sub_emitter.ll(
-                    builder,
-                    builder.gep(component_p, [zero_index, one_index]),
-                    sample_p,
-                    ),
-                )
-        next_total = builder.call(self._log_add, [total, component_sum])
-
-        total.add_incoming(next_total, flesh)
-
-        builder.branch(check)
-
-        # wrap up the loop
-        builder.position_at_end(leave)
-
-        return total
-
-    def ml(
-                                   self,
-        ndarray                    samples, # ndim = 2
-        ndarray[float_t, ndim = 2] weights,
-        ndarray                    out,     # ndim = 1
-                                   random = numpy.random,
-        ):
-        """
-        Use EM to estimate mixture parameters.
-        """
-
-        # arguments
-        assert samples.shape[0] == weights.shape[0]
-        assert samples.shape[1] == weights.shape[1]
-
-        if not numpy.all(weights == 1.0):
-            raise NotImplementedError("non-unit sample weighting not yet supported")
-
-        if out is None:
-            out = numpy.empty(samples.shape[0], self._parameter_dtype)
-        else:
-            assert samples.shape[0] == out.shape[0]
-
-        # computation
-        logger.detail("estimating finite mixture from %i samples" % samples.shape[1])
-
-        for i in xrange(samples.shape[0]):
-            out[i] = self._ml(samples[i], weights[i], random)
-
-        return out
-
-    def _ml(
-                                   self,
-        ndarray                    samples_N,
-        ndarray[float_t, ndim = 1] weights_N,
-                                   random = numpy.random,
-        ):
-        """
-        Use EM to estimate mixture parameters.
-        """
-
-        # mise en place
-        cdef size_t N = samples_N.shape[0]
-        cdef size_t K = self._K
-
-        d = self._distribution
-        p = numpy.empty((), self._parameter_dtype)
-
-        # generate a random initial state
-        seeds = random.randint(N, size = K)
-
-        d.ml(samples_N[seeds][:, None], weights_N[seeds][:, None], p["c"], random)
-
-        p["p"]  = random.rand(K)
-        p["p"] /= numpy.sum(p["p"])
-
-        # run EM until convergence
-        last_r_KN = None
-        r_KN      = numpy.empty((K, N))
-
-        for i in xrange(self._iterations):
-            # evaluate responsibilities
-            d.ll(p["c"][:, None], samples_N, r_KN)
-
-            numpy.exp(r_KN, r_KN)
-
-            r_KN *= p["p"][:, None]
-            r_KN /= numpy.sum(r_KN, 0)
-
-            # make maximum-likelihood estimates
-            d.ml(samples_N, r_KN, p["c"], random)
-
-            p["p"] = numpy.sum(r_KN, 1) / N
-
-            # check for convergence
-            if last_r_KN is None:
-                last_r_KN = numpy.empty((K, N))
-            else:
-                difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
-
-                logger.detail(
-                    "iteration %i < %i ; delta %e >? %e",
-                    i,
-                    self._iterations,
-                    difference,
-                    self._convergence,
+            component     = parameter.at(index)
+            component_sum = \
+                builder.add(
+                    builder.call(self._log, [builder.extract_value(component, 0)]), # XXX gep
+                    self._sub_emitter.ll(
+                        builder.extract_value(component, 1), # XXX StridedArray
+                        sample,
+                        ),
                     )
 
-                if difference < self._convergence:
-                    break
+            total.add_incoming(
+                builder.call(self._log_add, [total, component_sum]),
+                builder.basic_block,
+                )
 
-            (last_r_KN, r_KN) = (r_KN, last_r_KN)
+        out.store(total)
 
-        # done
-        return p
+    def ml(self, builder, N, samples_p, weights_p):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
+        ## mise en place
+        #cdef size_t K = self._K
+
+        #d = self._distribution
+
+        ## generate a random initial state
+        #seeds = random.randint(N, size = K)
+
+        #for i in xrange(...):
+            #n = random.randint(N)
+            #inner.ml(sample + n * stride, weight + n * stride, out["c"])
+
+        #p["p"]  = random.rand(K)
+        #p["p"] /= numpy.sum(p["p"])
+
+        ## run EM until convergence
+        #last_r_KN = None
+        #r_KN      = numpy.empty((K, N))
+
+        #for i in xrange(self._iterations):
+            ## evaluate responsibilities
+            #d.ll(p["c"][:, None], samples_N, r_KN)
+
+            #numpy.exp(r_KN, r_KN)
+
+            #r_KN *= p["p"][:, None]
+            #r_KN /= numpy.sum(r_KN, 0)
+
+            ## make maximum-likelihood estimates
+            #d.ml(samples_N, r_KN, p["c"], random)
+
+            #p["p"] = numpy.sum(r_KN, 1) / N
+
+            ## check for convergence
+            #if last_r_KN is None:
+                #last_r_KN = numpy.empty((K, N))
+            #else:
+                #difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
+
+                #logger.detail(
+                    #"iteration %i < %i ; delta %e >? %e",
+                    #i,
+                    #self._iterations,
+                    #difference,
+                    #self._convergence,
+                    #)
+
+                #if difference < self._convergence:
+                    #break
+
+            #(last_r_KN, r_KN) = (r_KN, last_r_KN)
+
+        ## done
+        #return p
 
     def given(self, parameters, samples, out = None):
         """
@@ -423,6 +355,85 @@ class FiniteMixtureEmitter(object):
 
         # done
         return out
+
+#cdef struct StridedAxis:
+    #uint8_t* data
+    #uint32_t dimensionality
+    #uint32_t stride
+
+#cdef void ml_springboard(
+    #PyObject* settings,
+    #uint32_t        N       ,
+    #StridedAxis     samples ,
+    #StridedAxis     weights ,
+    #StridedAxis     outs    ,
+    #):
+
+#cdef void estimate_ml_parameter(
+    #CFiniteMixture* settings,
+    #uint32_t        N       ,
+    #StridedAxis     samples ,
+    #StridedAxis     weights ,
+    #StridedAxis     outs    ,
+    #):
+    #"""
+    #Use EM to estimate mixture parameters.
+    #"""
+
+    ### mise en place
+    #cdef size_t K = self._K
+
+    #d = self._distribution
+
+    ## generate a random initial state
+    #seeds = random.randint(N, size = K)
+
+    #for i in xrange(...):
+        #n = random.randint(N)
+        #inner.ml(sample + n * stride, weight + n * stride, out["c"])
+
+    #p["p"]  = random.rand(K)
+    #p["p"] /= numpy.sum(p["p"])
+
+    ## run EM until convergence
+    #last_r_KN = None
+    #r_KN      = numpy.empty((K, N))
+
+    #for i in xrange(self._iterations):
+        ## evaluate responsibilities
+        #d.ll(p["c"][:, None], samples_N, r_KN)
+
+        #numpy.exp(r_KN, r_KN)
+
+        #r_KN *= p["p"][:, None]
+        #r_KN /= numpy.sum(r_KN, 0)
+
+        ## make maximum-likelihood estimates
+        #d.ml(samples_N, r_KN, p["c"], random)
+
+        #p["p"] = numpy.sum(r_KN, 1) / N
+
+        ## check for convergence
+        #if last_r_KN is None:
+            #last_r_KN = numpy.empty((K, N))
+        #else:
+            #difference = numpy.sum(numpy.abs(r_KN - last_r_KN))
+
+            #logger.detail(
+                #"iteration %i < %i ; delta %e >? %e",
+                #i,
+                #self._iterations,
+                #difference,
+                #self._convergence,
+                #)
+
+            #if difference < self._convergence:
+                #break
+
+        #(last_r_KN, r_KN) = (r_KN, last_r_KN)
+
+    ## done
+    #return p
 
 class RestartingML(object):
     """

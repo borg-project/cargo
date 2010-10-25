@@ -4,6 +4,13 @@
 
 import numpy
 
+from llvm.core import (
+    Type,
+    Module,
+    Builder,
+    Constant,
+    )
+
 numpy.seterr(divide = "raise", invalid = "raise", over = "warn", under = "warn") # FIXME hack
 
 def log_add_scalar(x, y):
@@ -68,9 +75,60 @@ def dtype_from_type(type_):
 
     return mapping[type_.kind](type_)
 
+def semicast_arguments((out, out_dtype), *pairs):
+    """
+    Appropriately broadcast arguments and an output array.
+    """
+
+    from cargo.numpy import semicast
+
+    array_pairs   = [(numpy.asarray(v, d.base), d) for (v, d) in pairs]
+    pairs_to_cast = [(a, -len(d.shape) or None) for (a, d) in array_pairs]
+
+    if out is None:
+        (shape, cast_arrays) = semicast(*pairs_to_cast)
+
+        return (shape, cast_arrays + [numpy.empty(shape, out_dtype)])
+    else:
+        (shape, cast_arrays) = semicast(*(pairs_to_cast + (out, out_dtype)))
+
+        assert out.shape == shape
+
+        return (shape, cast_arrays)
+
+def emit_and_execute(module):
+    """
+    Prepare for, emit, and run some LLVM IR.
+    """
+
+    from cargo.llvm import this_builder
+
+    def decorator(emitter):
+        # emit some IR
+        main    = module.add_function(Type.function(Type.void(), []), "main")
+        entry   = main.append_basic_block("entry")
+
+        with this_builder(Builder.new(entry)) as builder:
+            emitter()
+
+            builder.ret_void()
+
+        # then compile and execute it
+        from llvm.ee import ExecutionEngine
+
+        print module
+
+        module.verify()
+
+        engine = ExecutionEngine.new(module)
+
+        engine.run_function(main, [])
+
+    return decorator
+
 class ModelEngine(object):
     """
-    Operations on a model.
+    Vectorized operations on a model.
     """
 
     def __init__(self, model):
@@ -93,96 +151,60 @@ class ModelEngine(object):
         """
 
         # arguments
-        from cargo.numpy import semicast
-
-        parameters = numpy.asarray(parameters, self._model.parameter_dtype.base)
-        samples    = numpy.asarray(samples   , self._model.sample_dtype.base   )
-
-        if out is None:
-            (shape, (parameters, samples)) = \
-                semicast(
-                    (parameters, -len(self._model.parameter_dtype.shape) or None),
-                    (samples   , -len(self._model.sample_dtype.shape)    or None),
-                    )
-
-            out = numpy.empty(shape, numpy.float64)
-        else:
-            (shape, (parameters, samples, _)) = \
-                semicast(
-                    (parameters, -len(self._model.parameter_dtype.shape) or None),
-                    (samples   , -len(self._model.sample_dtype.shape)    or None),
-                    (out       ,                                            None),
-                    )
-
-            assert out.shape == parameters.shape
-
-        # prepare for code generation
-        from llvm.ee   import (
-            TargetData,
-            ExecutionEngine,
-            )
-        from llvm.core import (
-            Type,
-            Module,
-            Builder,
-            Constant,
-            )
-
-        local   = Module.new("distribution_ll")
-        emitter = self._model.get_emitter(local)
-        main    = local.add_function(Type.function(Type.void(), []), "main")
-        entry   = main.append_basic_block("entry")
-        builder = Builder.new(entry)
-
-        # build the computation
-        from cargo.statistics.lowloop import strided_array_loop
-
-        def emit_ll_call(builder, locations):
-            """
-            Emit the body of the array loop.
-            """
-
-            builder.store(
-                emitter.ll(
-                    builder,
-                    locations["p"],
-                    locations["s"],
-                    ),
-                locations["o"],
+        (shape, (parameters, samples, out)) = \
+            semicast_arguments(
+                (out       , numpy.dtype(numpy.float64) ),
+                (parameters, self._model.parameter_dtype),
+                (samples   , self._model.sample_dtype   ),
                 )
 
-        strided_array_loop(
-            builder,
-            emit_ll_call,
-            shape,
-            {
-                "p" : parameters,
-                "s" : samples,
-                "o" : out,
-                },
-            "ll_loop",
-            )
+        # computation
+        module  = Module.new("local")
+        emitter = self._model.get_emitter(module)
 
-        builder.ret_void()
+        @emit_and_execute(module)
+        def _():
+            """
+            Emit the log-likelihood computation.
+            """
 
-        # compile and execute
-        print local
+            from cargo.llvm.lowloop import StridedArrays
 
-        local.verify()
+            arrays = \
+                StridedArrays.from_numpy({
+                    "p" : parameters,
+                    "s" : samples,
+                    "o" : out,
+                    })
 
-        engine = ExecutionEngine.new(local)
-
-        engine.run_function(main, [])
+            @arrays.loop_all(len(shape))
+            def _(l):
+                emitter.ll(l.arrays["p"], l.arrays["s"], l.arrays["o"])
 
         # done
         return out
 
-    def ml(self, sam_loop, weight_loop, out_p, prng):
+    def ml(self, samples, weights, out = None, axis = -1, random = numpy.random):
         """
         Return the estimated maximum-likelihood parameter.
         """
 
-        raise NotImplementedError()
+        ## arguments
+        #sample_shape = self._model.sample_dtype.shape
+        #real_axis    = if axis >= 0 then axis else axis - len(sample_shape)
+        #samples_axis_dtype = numpy.dtype(self._model.parameter_dtype, 
+
+        #(shape, (parameters, samples)) = \
+            #semicast_arguments(
+                #(out       , self._model.parameter_dtype),
+                #(samples   , self._model.sample_dtype   ),
+                #)
+        #(shape, (parameters, samples, out)) = \
+            #semicast_arguments(
+                #(out       , numpy.dtype(numpy.float64) ),
+                #(parameters, self._model.parameter_dtype),
+                #(samples   , self._model.sample_dtype   ),
+                #)
 
     @property
     def model(self):

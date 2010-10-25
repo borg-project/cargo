@@ -4,23 +4,57 @@
 
 import ctypes
 
-from llvm.core import Type
+from llvm.core  import Type
+from contextlib import contextmanager
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
 
-def for_(function, exit, low_or_high, high = None, name = "for"):
+class BuilderStack(object):
     """
-    Generate a simple ranged for loop.
+    A stack of IR builders.
     """
 
-    if high is None:
-        low  = 0
-        high = low_or_high
-    else:
-        low = low_or_high
+    def __init__(self):
+        """
+        Initialize.
+        """
 
-def constant_stringz_p(string):
+        self._builders = []
+
+    def top(self):
+        """
+        Return the current IR builder.
+        """
+
+        return self._builders[-1]
+
+    def push(self, builder):
+        """
+        Push an IR builder onto the builder stack.
+        """
+
+        self._builders.append(builder)
+
+        return builder
+
+    def pop(self):
+        """
+        Pop an IR builder off of the builder stack.
+        """
+
+        return self._builders.pop()
+
+BuilderStack.local = BuilderStack()
+
+@contextmanager
+def this_builder(builder):
     """
-    Return a pointer to the beginning of a constant string.
+    Change the current IR builder for a managed duration.
     """
+
+    BuilderStack.local.push(builder)
+
+    yield builder
+
+    BuilderStack.local.pop()
 
