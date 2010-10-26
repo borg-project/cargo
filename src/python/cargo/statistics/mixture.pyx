@@ -12,7 +12,10 @@ from llvm.core import (
     Constant,
     )
 from cargo.log             import get_logger
-from cargo.llvm.high_level import high
+from cargo.llvm.high_level import (
+    high,
+    HighFunction,
+    )
 
 cimport numpy
 
@@ -30,7 +33,7 @@ cdef extern from "math.h":
 
 logger = get_logger(__name__)
 
-cdef double log_add_double(double x, double y):
+def log_add_double(x, y):
     """
     Return log(x + y) given log(x) and log(y); see [1].
 
@@ -38,15 +41,15 @@ cdef double log_add_double(double x, double y):
         Kingsbury and Rayner, 1970.
     """
 
-    from math import (
-        exp,
-        log1p,
-        )
+    exp   = HighFunction("exp"  , float, [float])
+    log1p = HighFunction("log1p", float, [float])
 
-    if x >= y:
-        return x + log1p(exp(y - x))
-    else:
-        return y + log1p(exp(x - y))
+    return \
+        high.select(
+            x >= y,
+            x + log1p(exp(y - x)),
+            y + log1p(exp(x - y)),
+            )
 
 cdef void put_double(double v):
     sys.stdout.write("%s" % v)
@@ -170,14 +173,6 @@ class FiniteMixtureEmitter(object):
         self._module      = module
         self._sub_emitter = self._model.distribution.get_emitter(module)
 
-        # prepare helper functions
-        uintptr_t = Type.int(sizeof(void*) * 8)
-        log_t     = Type.pointer(Type.function(Type.double(), [Type.double()]))
-        log_add_t = Type.pointer(Type.function(Type.double(), [Type.double(), Type.double()]))
-
-        self._log     = Constant.int(uintptr_t, <long>&log).inttoptr(log_t)
-        self._log_add = Constant.int(uintptr_t, <long>&log_add_double).inttoptr(log_add_t)
-
     def rv(self, parameters, out, random = numpy.random):
         """
         Make a draw from this mixture distribution.
@@ -216,57 +211,55 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        builder    = high.builder
-        total_type = Type.double()
-        total      = builder.phi(total_type, "total")
+        log = HighFunction("log", float, [float])
 
-        total.add_incoming(
-            Constant.real(total_type, numpy.finfo(numpy.float64).min),
-            start,
-            )
+        total        = high.stack_allocate(Type.double())
+        component_ll = high.stack_allocate(Type.double())
+
+        high.value(numpy.finfo(float).min).store(total)
 
         @high.for_(self._model._K)
         def _(index):
-            builder.position_at_end(flesh)
+            component = parameter.at(index)
 
-            component     = parameter.at(index)
-            component_sum = \
-                builder.add(
-                    builder.call(self._log, [builder.extract_value(component, 0)]), # XXX gep
-                    self._sub_emitter.ll(
-                        builder.extract_value(component, 1), # XXX StridedArray
-                        sample,
-                        ),
-                    )
+            self._sub_emitter.ll(component.gep(0, 1), sample, component_ll)
 
-            total.add_incoming(
-                builder.call(self._log_add, [total, component_sum]),
-                builder.basic_block,
-                )
+            log_add_double(
+                total.load(),
+                log(component.gep(0, 0).load()) + component_ll.load(),
+                ) \
+                .store(total)
 
-        out.store(total)
+        total.load().store(out)
 
-    def ml(self, builder, N, samples_p, weights_p):
-        """
-        Emit computation of the estimated maximum-likelihood parameter.
-        """
-
-        ## mise en place
-        #cdef size_t K = self._K
-
-        #d = self._distribution
+    #def ml(self, samples, weights, out):
+        #"""
+        #Emit computation of the estimated maximum-likelihood parameter.
+        #"""
 
         ## generate a random initial state
-        #seeds = random.randint(N, size = K)
+        #builder = high.builder
+        #p_total = builder.alloca(Type.double())
 
-        #for i in xrange(...):
-            #n = random.randint(N)
-            #inner.ml(sample + n * stride, weight + n * stride, out["c"])
+        #p_total.store_value(0)
 
-        #p["p"]  = random.rand(K)
-        #p["p"] /= numpy.sum(p["p"])
+        #@high.for_(self._K)
+        #def _(k):
+            ##n = random.randint(N)
+            #n = 0
+            #self._sub_emitter.ml(sample.at(n), weight.at(n), out.at(k).gep(0, 1))
 
-        ## run EM until convergence
+            ##p["p"]  = random.rand(K)
+            #out.at(k).gep(0, 0).store_value(0.1)
+            #(p_total.load() + 0.1).store(p_total)
+
+        #@high.for_(self._K)
+        #def _(k):
+            #p = out.at(k).gep(0, 0)
+
+            #(p.load() / p_total.load()).store(p)
+
+        # run EM until convergence
         #last_r_KN = None
         #r_KN      = numpy.empty((K, N))
 

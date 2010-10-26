@@ -11,51 +11,25 @@ from llvm.core import (
     Constant,
     )
 from cargo.llvm            import iptr_type
-from cargo.llvm.high_level import high
+from cargo.llvm.high_level import (
+    high,
+    HighValue,
+    )
 
-def struct_dtype_to_type(dtype):
-    """
-    Build an LLVM type matching a numpy struct dtype.
-    """
-
-    fields   = sorted(dtype.fields.values(), key = lambda (_, p): p)
-    members  = []
-    position = 0
-
-    for (field_dtype, offset) in fields:
-        if offset != position:
-            raise NotImplementedError("no support for dtypes with nonstandard packing")
-        else:
-            members  += [dtype_to_type(field_dtype)]
-            position += field_dtype.itemsize
-
-    return Type.packed_struct(members)
-
-def dtype_to_type(dtype):
-    """
-    Build an LLVM type matching a numpy dtype.
-    """
-
-    if numpy.issubdtype(dtype, numpy.integer):
-        return Type.int(dtype.itemsize * 8)
-    elif dtype == numpy.float64:
-        return Type.double()
-    elif dtype == numpy.float32:
-        return Type.float()
-    elif dtype.fields:
-        return struct_dtype_to_type(dtype)
-    else:
-        raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
-
-def get_ndarray_type(array, axis = 0):
+def ndarray_type_to_type(array, axis = 0):
     """
     Build an LLVM type to represent a strided array's structure.
     """
 
+    from cargo.llvm import (
+        dtype_to_type,
+        strided_array_type,
+        )
+
     if axis == array.ndim:
         return (dtype_to_type(array.dtype), array.dtype.itemsize)
     else:
-        (subtype, subsize) = strided_array_type(array, axis + 1)
+        (subtype, subsize) = ndarray_type_to_type(array, axis + 1)
 
         stride = array.strides[axis]
 
@@ -85,7 +59,7 @@ def get_ndarray_data_pointer(array):
     """
 
     (data, _)       = array.__array_interface__["data"]
-    (array_type, _) = strided_array_type(array)
+    (array_type, _) = ndarray_type_to_type(array)
 
     return Constant.int(iptr_type, data).inttoptr(Type.pointer(array_type))
 
@@ -189,17 +163,31 @@ class StridedArray(object):
     Emit IR for interaction with a strided array.
     """
 
-    def __init__(self, data, type_, shape, strides = None):
+    def __init__(self, data, shape, strides = None):
         """
         Initialize.
         """
 
-        # XXX support calculation of contiguous-array strides
+        from llvm.core import PointerType
 
-        self._data    = data
-        self._type    = type_
-        self._shape   = shape
-        self._strides = strides
+        if not isinstance(data.type, PointerType):
+            raise ValueError("array data must be of some pointer type")
+
+        self._data  = data
+        self._type  = data.type.pointee
+        self._shape = shape
+
+        if strides is None:
+            self._strides = []
+
+            axis_size = get_type_size(self._type)
+
+            for d in reversed(shape):
+                self._strides.prepend(axis_size)
+
+                axis_size *= d
+        else:
+            self._strides = strides
 
     @staticmethod
     def from_numpy(ndarray):
@@ -209,6 +197,8 @@ class StridedArray(object):
 
         # XXX maintain reference to array in module; decref in destructor
 
+        from cargo.llvm import dtype_to_type
+
         type_         = dtype_to_type(ndarray.dtype)
         (location, _) = ndarray.__array_interface__["data"]
         data          = Constant.int(iptr_type, location).inttoptr(Type.pointer(type_))
@@ -216,18 +206,9 @@ class StridedArray(object):
         return \
             StridedArray(
                 data,
-                type_,
                 [Constant.int(Type.int(32), d) for d in ndarray.shape],
                 [Constant.int(Type.int(32), v) for v in ndarray.strides],
                 )
-
-    @staticmethod
-    def on_stack(type_, shape):
-        """
-        Allocate and return a contiguous stack-allocated array.
-        """
-
-        # XXX
 
     def at(self, *indices):
         """
@@ -243,13 +224,17 @@ class StridedArray(object):
             if stride > 0:
                 location = high.builder.add(location, high.builder.mul(index, stride))
 
-        return \
-            StridedArray(
-                high.builder.inttoptr(location, Type.pointer(self._type)),
-                self._type,
-                self._shape[len(indices):],
-                self._strides[len(indices):],
-                )
+        pointer = high.builder.inttoptr(location, Type.pointer(self._type))
+
+        if len(indices) < len(self._shape):
+            return \
+                StridedArray(
+                    pointer,
+                    self._shape[len(indices):],
+                    self._strides[len(indices):],
+                    )
+        else:
+            return high.value(pointer)
 
     def load(self, name = ""):
         """
@@ -259,7 +244,7 @@ class StridedArray(object):
         if len(self._shape) > 0:
             raise ValueError("cannot load non-scalar array")
 
-        return high.builder.load(self._data, name = name)
+        return HighValue.from_low(high.builder.load(self._data, name = name))
 
     def store(self, rhs):
         """
@@ -294,15 +279,4 @@ class StridedArray(object):
         """
 
         return self._strides
-
-    @property
-    def pointer(self):
-        """
-        The pointer associated with a scalar array.
-        """
-
-        if len(self._shape) > 0:
-            raise ValueError("no unique pointer for non-scalar array")
-
-        return self._data
 

@@ -2,7 +2,7 @@
 # build
 #
 
-add_cython_module(cargo_llvm_high_level high_level)
+add_cython_module(cargo_llvm__high_level _high_level)
 
 #
 # install
@@ -10,7 +10,7 @@ add_cython_module(cargo_llvm_high_level high_level)
 
 install(
     TARGETS
-        cargo_llvm_high_level
+        cargo_llvm__high_level
     DESTINATION lib/cargo/llvm
     )
 install(
@@ -18,6 +18,7 @@ install(
         __init__.py
 		constructs.py
 		lowloop.py
+		high_level.py
     DESTINATION lib/cargo/llvm
     )
 

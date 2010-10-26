@@ -21,7 +21,7 @@ class Delta(object):
         Initialize.
         """
 
-        from cargo.llvm.lowloop import dtype_to_type
+        from cargo.llvm import dtype_to_type
 
         self._dtype = numpy.dtype(dtype)
         self._type  = dtype_to_type(self._dtype)
@@ -68,19 +68,12 @@ class Delta(object):
         Compute constant-distribution log-likelihood.
         """
 
-        builder = high.builder
-
-        out.store(
-            builder.select(
-                builder.fcmp(
-                    llvm.core.FCMP_OEQ,
-                    parameter.load(),
-                    sample.load(),
-                    ),
-                Constant.real(Type.double(), 0.0),
-                Constant.real(Type.double(), numpy.finfo(numpy.float_).min),
-                ),
-            )
+        high.select(
+            parameter.load() == sample.load(),
+            high.value(0.0),
+            high.value(numpy.finfo(float).min),
+            ) \
+        .store(out)
 
     def given(self, parameters, samples, out = None):
         """

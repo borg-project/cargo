@@ -33,48 +33,6 @@ def log_add_scalar(x, y):
 
 log_add = numpy.frompyfunc(log_add_scalar, 2, 1)
 
-def dtype_from_integer_type(type_):
-    """
-    Build a numpy dtype from an LLVM integer type.
-    """
-
-    sizes = {
-        8  : numpy.dtype(numpy.int8),
-        16 : numpy.dtype(numpy.int16),
-        32 : numpy.dtype(numpy.int32),
-        64 : numpy.dtype(numpy.int64),
-        }
-
-    return sizes[type_.width]
-
-def dtype_from_struct_type(type_):
-    """
-    Build a numpy dtype from an LLVM struct type.
-    """
-
-    fields = [
-        ("f%i" % i, dtype_from_type(f))
-        for (i, f) in enumerate(type_.elements)
-        ]
-
-    return numpy.dtype(fields)
-
-def dtype_from_type(type_):
-    """
-    Build a numpy dtype from an LLVM type.
-    """
-
-    from llvm import core
-
-    mapping = {
-        core.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
-        core.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
-        core.TYPE_INTEGER : dtype_from_integer_type,
-        core.TYPE_STRUCT  : dtype_from_struct_type,
-        }
-
-    return mapping[type_.kind](type_)
-
 def semicast_arguments((out, out_dtype), *pairs):
     """
     Appropriately broadcast arguments and an output array.
