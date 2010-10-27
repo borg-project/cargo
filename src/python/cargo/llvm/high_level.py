@@ -34,7 +34,36 @@ class HighLLVM(object):
         Return an LLVM type from some kind of type.
         """
 
+        # XXX support for other ctypes
+
+        import ctypes
+
+        from ctypes     import sizeof
         from cargo.llvm import dtype_to_type
+
+        ctype_integer_types = \
+            set([
+                ctypes.c_bool,
+                ctypes.c_byte,
+                ctypes.c_ubyte,
+                ctypes.c_char,
+                ctypes.c_wchar,
+                ctypes.c_short,
+                ctypes.c_ushort,
+                ctypes.c_long,
+                ctypes.c_longlong,
+                ctypes.c_ulong,
+                ctypes.c_ulonglong,
+                ctypes.c_int8,
+                ctypes.c_int16,
+                ctypes.c_int32,
+                ctypes.c_int64,
+                ctypes.c_uint8,
+                ctypes.c_uint16,
+                ctypes.c_uint32,
+                ctypes.c_uint64,
+                ctypes.c_size_t,
+                ])
 
         if isinstance(some_type, type):
             return dtype_to_type(numpy.dtype(some_type))
@@ -42,8 +71,12 @@ class HighLLVM(object):
             return dtype_to_type(some_type)
         elif isinstance(some_type, Type):
             return some_type
+        elif some_type in ctype_integer_types:
+            return Type.int(sizeof(some_type) * 8)
         else:
             raise TypeError("cannot build type from \"%s\" instance" % type(some_type))
+
+    type_from_any = type_
 
     def for_(self, count):
         """
@@ -52,10 +85,7 @@ class HighLLVM(object):
 
         index_type = Type.int(32)
 
-        if isinstance(count, Value):
-            count_value = count
-        else:
-            count_value = Constant.int(index_type, count)
+        count = self.value(count)
 
         def decorator(emit_body):
             """
@@ -82,7 +112,7 @@ class HighLLVM(object):
             builder.cbranch(
                 builder.icmp(
                     llvm.core.ICMP_UGT,
-                    count_value,
+                    count.low,
                     this_index,
                     ),
                 flesh,
@@ -112,7 +142,7 @@ class HighLLVM(object):
         """
 
         return \
-            high.value(
+            self.value(
                 self.builder.select(
                     boolean._value,
                     if_true._value,
@@ -129,12 +159,26 @@ class HighLLVM(object):
 
         return CallPythonDecorator(self.builder)
 
-    def stack_allocate(self, type_):
+    def heap_allocate(self, type_, count = 1):
         """
         Stack-allocate and return a value.
         """
 
-        return HighValue.from_low(self.builder.alloca(type_))
+        malloc = HighFunction("malloc", Type.pointer(Type.struct()), [long])
+
+        return malloc(get_type_size(high.type_(type_)) * high.value(count))
+
+    def stack_allocate(self, type_, initial = None):
+        """
+        Stack-allocate and return a value.
+        """
+
+        allocated = HighValue.from_low(self.builder.alloca(high.type_(type_)))
+
+        if initial is not None:
+            self.value(initial).store(allocated)
+
+        return allocated
 
     @property
     def builder(self):
@@ -170,7 +214,7 @@ class HighValue(object):
                 high.builder.fcmp(
                     llvm.core.FCMP_OEQ,
                     self._value,
-                    other._value,
+                    high.value(other)._value,
                     ),
                 )
 
@@ -186,7 +230,7 @@ class HighValue(object):
                 high.builder.fcmp(
                     llvm.core.FCMP_OGE,
                     self._value,
-                    other._value,
+                    high.value(other)._value,
                     ),
                 )
 
@@ -195,18 +239,82 @@ class HighValue(object):
         Return the result of an addition.
         """
 
-        # XXX support non-floating-point additions
+        other    = high.value(other)
+        lhs_kind = self._value.type.kind
+        rhs_kind = other._value.type.kind
 
-        return high.value(high.builder.fadd(self._value, other._value))
+        if lhs_kind != rhs_kind:
+            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
+        elif lhs_kind == llvm.core.TYPE_INTEGER:
+            low_value = high.builder.add(self._value, other._value)
+        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
+            low_value = high.builder.fadd(self._value, other._value)
+        else:
+            raise TypeError("unsupported argument types for addition")
+
+        return high.value(low_value)
 
     def __sub__(self, other):
         """
-        Return the result of an addition.
+        Return the result of a subtraction.
         """
 
-        # XXX support non-floating-point subtractions
+        return high.value(high.builder.fdiv(self._value, high.value(other)._value))
 
-        return high.value(high.builder.fsub(self._value, other._value))
+        other    = high.value(other)
+        lhs_kind = self._value.type.kind
+        rhs_kind = other._value.type.kind
+
+        if lhs_kind != rhs_kind:
+            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
+        elif lhs_kind == llvm.core.TYPE_INTEGER:
+            low_value = high.builder.sub(self._value, other._value)
+        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
+            low_value = high.builder.fsub(self._value, other._value)
+        else:
+            raise TypeError("unsupported argument types for subtraction")
+
+        return high.value(low_value)
+
+    def __mul__(self, other):
+        """
+        Return the result of a multiplication.
+        """
+
+        other    = high.value(other)
+        lhs_kind = self._value.type.kind
+        rhs_kind = other._value.type.kind
+
+        if lhs_kind != rhs_kind:
+            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
+        elif lhs_kind == llvm.core.TYPE_INTEGER:
+            low_value = high.builder.mul(self._value, other._value)
+        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
+            low_value = high.builder.fmul(self._value, other._value)
+        else:
+            raise TypeError("unsupported argument types for multiplication")
+
+        return high.value(low_value)
+
+    def __div__(self, other):
+        """
+        Return the result of a division.
+        """
+
+        other    = high.value(other)
+        lhs_kind = self._value.type.kind
+        rhs_kind = other._value.type.kind
+
+        if lhs_kind != rhs_kind:
+            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
+        elif lhs_kind == llvm.core.TYPE_INTEGER:
+            low_value = high.builder.sdiv(self._value, other._value)
+        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
+            low_value = high.builder.fdiv(self._value, other._value)
+        else:
+            raise TypeError("unsupported argument types for division")
+
+        return high.value(low_value)
 
     def load(self, name = ""):
         """
@@ -237,6 +345,53 @@ class HighValue(object):
                     [HighValue.from_any(i)._value for i in indices],
                     ),
                 )
+
+    def cast_to(self, type_, name = ""):
+        """
+        Cast this value to the specified type.
+        """
+
+        # XXX support more casts
+        # XXX move this complexity into the type hierarchy?
+        # XXX cleanly handle signedness somehow (explicit "signed" highvalue?)
+
+        type_ = high.type_from_any(type_)
+
+        if self.type_.kind == llvm.core.TYPE_DOUBLE:
+            if type_.kind == llvm.core.TYPE_INTEGER:
+                low_value = high.builder.fptosi(self._value, type_, name)
+            else:
+                raise TypeError("don't know how to perform this conversion")
+        elif self.type_.kind == llvm.core.TYPE_INTEGER:
+            if type_.kind == llvm.core.TYPE_DOUBLE:
+                low_value = high.builder.sitofp(self._value, type_, name)
+            else:
+                raise TypeError("don't know how to perform this conversion")
+        elif self.type_.kind == llvm.core.TYPE_POINTER:
+            if type_.kind == llvm.core.TYPE_POINTER:
+                low_value = high.builder.bitcast(self._value, type_, name)
+            else:
+                raise TypeError("don't know how to perform this conversion")
+        else:
+            raise TypeError("don't know how to perform this conversion")
+
+        return high.value(low_value)
+
+    @property
+    def low(self):
+        """
+        Return the associated LLVM value.
+        """
+
+        return self._value
+
+    @property
+    def type_(self):
+        """
+        Return the type of the associated LLVM value.
+        """
+
+        return self._value.type
 
     @staticmethod
     def from_any(value):
@@ -284,22 +439,6 @@ class HighValue(object):
             raise TypeError("value is not an LLVM value")
 
         return HighValue(value)
-
-    @property
-    def low(self):
-        """
-        Return the associated LLVM value.
-        """
-
-        return self._value
-
-    @property
-    def type_(self):
-        """
-        Return the type of the associated LLVM value.
-        """
-
-        return self.type_
 
 class HighPointer(HighValue):
     """

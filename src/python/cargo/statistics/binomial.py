@@ -9,7 +9,10 @@ from llvm.core import (
     Builder,
     Constant,
     )
-from cargo.llvm.high_level import high
+from cargo.llvm.high_level import (
+    high,
+    HighFunction,
+    )
 
 class Binomial(object):
     """
@@ -70,256 +73,128 @@ class BinomialEmitter(object):
         CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
         CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
 
-        # set up the builder
-        from ctypes import sizeof
-
-        self._ln_function = \
-            module.add_function(
-                Type.function(Type.double(), [Type.double()]),
-                "log",
-                )
-        self._ll_function = \
-            module.add_function(
-                Type.function(
-                    Type.double(),
-                    [
-                        Type.int(sizeof(ctypes.c_uint) * 8),
-                        Type.double(),
-                        Type.int(sizeof(ctypes.c_uint) * 8),
-                        ],
-                    ),
-                "gsl_ran_binomial_pdf",
-                )
-
-    def rv(self, builder, parameter, random):
+    def ll(self, parameter, sample, out):
         """
-        Return samples from this distribution.
+        Compute log probability under this distribution.
         """
 
-        raise NotImplementedError()
+        from ctypes import c_uint
+
+        log = HighFunction("log"                 , float, [float                ])
+        pdf = HighFunction("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
+
+        log(
+            pdf(
+                sample.load(),
+                parameter.gep(0, 0).load(),
+                parameter.gep(0, 1).load(),
+                ),
+            ) \
+            .store(out)
+
+class MixedBinomial(object):
+    """
+    The "mixed binomial" distribution.
+
+    Relevant types:
+    - parameter : float64 p
+    - sample    : {uint32 k; uint32 n;}
+    """
+
+    def __init__(self, epsilon = 0.0):
+        """
+        Initialize.
+        """
+
+        self._epsilon         = epsilon
+        self._parameter_dtype = numpy.dtype(numpy.float64)
+        self._sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
+
+    def get_emitter(self, module):
+        """
+        Return IR emitter.
+        """
+
+        return MixedBinomialEmitter(self, module)
+
+    @property
+    def parameter_dtype(self):
+        """
+        Type of the distribution parameter.
+        """
+
+        return self._parameter_dtype
+
+    @property
+    def sample_dtype(self):
+        """
+        Type of the distribution sample.
+        """
+
+        return self._sample_dtype
+
+class MixedBinomialEmitter(object):
+    """
+    Build low-level operations of the binomial distribution.
+    """
+
+    def __init__(self, model, module):
+        """
+        Initialize.
+        """
+
+        self._model  = model
+        self._module = module
+
+        # link the GSL
+        import ctypes
+
+        from ctypes      import CDLL
+        from ctypes.util import find_library
+
+        CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
+        CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
 
     def ll(self, parameter, sample, out):
         """
         Compute log probability under this distribution.
         """
 
-        builder    = high.builder
-        p          = parameter.load()
-        likelihood = \
-            builder.call(
-                self._ll_function,
-                [
-                    sample.load(),
-                    builder.extract_value(p, 0),
-                    builder.extract_value(p, 1),
-                    ],
-                )
+        from ctypes import c_uint
 
-        out.store(builder.call(self._ln_function, [likelihood]))
+        log = HighFunction("log"                 , float, [float                ])
+        pdf = HighFunction("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
-    def ml(self, sam_loop, weight_loop, out_p, prng):
+        log(
+            pdf(
+                sample.gep(0, 0).load(),
+                parameter.load(),
+                sample.gep(0, 1).load(),
+                ),
+            ) \
+            .store(out)
+
+    def ml(self, samples, weights, out):
         """
-        Return the estimated maximum-likelihood parameter.
+        Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        raise NotImplementedError()
+        # XXX eeek leaking stack space
+        total_k = high.stack_allocate(float, 0.0)
+        total_n = high.stack_allocate(float, 0.0)
 
-#cdef packed struct MixedBinomialSample:
-    #uint_t k
-    #uint_t n
+        @high.for_(samples.shape[0])
+        def _(n):
+            weight   = weights.at(n).load()
+            sample_k = samples.at(n).gep(0, 0).load().cast_to(float)
+            sample_n = samples.at(n).gep(0, 1).load().cast_to(float)
 
-#class MixedBinomial(object):
-    #"""
-    #Operate on multiple binomials with a single common probability parameter.
-    #"""
+            (total_k.load() + sample_k * weight).store(total_k)
+            (total_n.load() + sample_n * weight).store(total_n)
 
-    #_parameter_dtype = numpy.dtype(numpy.float_)
-    #_sample_dtype    = numpy.dtype([("k", numpy.uint), ("n", numpy.uint)])
+        final_ratio = \
+              (total_k.load() + self._model._epsilon) \
+            / (total_n.load() + self._model._epsilon)
 
-    #def __init__(self, epsilon = 1e-3):
-        #"""
-        #Initialize.
-        #"""
-
-        #if epsilon is None:
-            #self._epsilon = 0.0
-        #else:
-            #self._epsilon = epsilon
-
-    #def ll(self, parameters, samples, out = None):
-        #"""
-        #Compute binomial log-likelihood.
-        #"""
-
-        ## arguments
-        #parameters = numpy.asarray(parameters, self._parameter_dtype)
-        #samples    = numpy.asarray(samples, self._sample_dtype)
-
-        #cdef broadcast i = broadcast(parameters, samples)
-
-        #if out is None:
-            #out = numpy.empty(i.shape)
-        #else:
-            #if out.shape != i.shape:
-                #raise ValueError("out argument has invalid shape")
-            #if out.dtype != numpy.float_:
-                #raise ValueError("out argument has invalid dtype")
-
-        ## computation
-        #i = broadcast(parameters, samples, out)
-
-        #cdef double              p
-        #cdef double              v
-        #cdef MixedBinomialSample s
-
-        #while PyArray_MultiIter_NOTDONE(i):
-            #p = (<double*>PyArray_MultiIter_DATA(i, 0))[0]
-            #s = (<MixedBinomialSample*>PyArray_MultiIter_DATA(i, 1))[0]
-            #v = log(binomial_pdf(s.k, p, s.n))
-
-            #(<double*>PyArray_MultiIter_DATA(i, 2))[0] = v
-
-            #PyArray_MultiIter_NEXT(i)
-
-        #return out
-
-    #def ml(self, samples, weights, out = None, random = numpy.random):
-        #"""
-        #Return the estimated maximum-likelihood parameter.
-        #"""
-
-        ## arguments
-        #(broad_samples, broad_weights) = \
-            #numpy.broadcast_arrays(
-                #numpy.asarray(samples, self._sample_dtype),
-                #numpy.asarray(weights),
-                #)
-
-        ## restore the dtype (broadcast_arrays partially strips it)
-        #cdef ndarray[MixedBinomialSample, ndim = 2] samples_ = numpy.asarray(broad_samples, self._sample_dtype)
-        #cdef ndarray[float_t            , ndim = 2] weights_ = broad_weights
-        #cdef ndarray[float_t            , ndim = 1] out_
-
-        #if out is None:
-            #out_ = numpy.empty(samples_.shape[0], numpy.float_)
-        #else:
-            #out_ = out
-
-            #assert out_.ndim == 1
-            #assert samples_.shape[0] == out_.shape[0]
-
-        ## computation
-        #cdef uint_t              i
-        #cdef uint_t              j
-        #cdef float_t             k
-        #cdef float_t             n
-        #cdef MixedBinomialSample s
-
-        #for i in xrange(samples_.shape[0]):
-            #k = 0.0
-            #n = 0.0
-
-            #for j in xrange(samples_.shape[1]):
-                #s  = samples_[i, j]
-                #k += s.k * weights_[i, j]
-                #n += s.n * weights_[i, j]
-
-            #out_[i] = (k + self._epsilon) / (n + self._epsilon)
-
-        #return out_
-
-    #@property
-    #def parameter_dtype(self):
-        #"""
-        #Type of a distribution parameter.
-        #"""
-
-        #return self._parameter_dtype
-
-    #@property
-    #def sample_dtype(self):
-        #"""
-        #Type of a sample.
-        #"""
-
-        #return self._sample_dtype
-
-#class LowMixedBinomial(object):
-    #"""
-    #Low-level operations of the binomial distribution.
-
-    #Relevant types:
-    #- parameter : f64
-    #- sample    : {u32 n; u32 k;}
-    #"""
-
-    #def __init__(self, module):
-        #"""
-        #Initialize.
-        #"""
-
-        #from llvm.core import Type
-
-        #i32_t = Type.int(32)
-        #f64_t = Type.double()
-
-        #self._par_t = f64_t
-        #self._sam_t = Type.struct([i32_t, i32_t])
-
-    #def rv(self, b, par_p, out_p, prng):
-        #"""
-        #Return samples from this distribution.
-        #"""
-
-        #raise NotImplementedError()
-
-    #def ll(self, b, par_p, sam_p, out_p):
-        #"""
-        #Compute log probability under this distribution.
-        #"""
-
-        #from llvm.core import (
-            #Type,
-            #Constant,
-            #)
-
-        #b.store(Constant.real(Type.double(), 42.0), out_p)
-
-    #def ml(self, sam_loop, weight_loop, out_p, prng):
-        #"""
-        #Return the estimated maximum-likelihood parameter.
-        #"""
-
-        #raise NotImplementedError()
-
-    #@property
-    #def parameter_type(self):
-        #"""
-        #LLVM type of the distribution parameter.
-        #"""
-
-        #return self._par_t
-
-    #@property
-    #def sample_type(self):
-        #"""
-        #LLVM type of the distribution sample.
-        #"""
-
-        #return self._sam_t
-
-#class MixedBinomial(Distribution):
-    #"""
-    #Operate on multiple binomials with a single common probability parameter.
-    #"""
-
-    #_parameter_dtype = numpy.dtype(numpy.float64)
-    #_sample_dtype    = numpy.dtype([("n", numpy.uint32), ("k", numpy.uint32)])
-
-    #def __init__(self, epsilon = 1e-3):
-        #"""
-        #Initialize.
-        #"""
-
-        #Distribution.__init__(self, LowMixedBinomial)
+        final_ratio.store(out)
 

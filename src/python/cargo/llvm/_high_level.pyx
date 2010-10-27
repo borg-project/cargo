@@ -75,3 +75,52 @@ class CallPythonDecorator(object):
                 ],
             )
 
+#cdef void put_double(double v):
+    #sys.stdout.write("%s" % v)
+
+#cdef void put_int(int32_t v):
+    #sys.stdout.write("%s" % v)
+
+#cdef void put_string(char* string):
+    #sys.stdout.write(string)
+
+#def emit_print_string(builder, string):
+    #from cargo.llvm import iptr_type
+
+    #print_string_t = Type.pointer(Type.function(Type.void(), [Type.pointer(Type.int(8))]))
+    #print_string   = Constant.int(iptr_type, <long>&put_string).inttoptr(print_string_t)
+
+    #from llvm.core import GlobalVariable
+
+    #module    = builder.basic_block.function.module
+    #cstring   = GlobalVariable.new(module, Type.array(Type.int(8), len(string) + 1), "cstring")
+    #cstring_p = builder.gep(cstring, [Constant.int(Type.int(32), 0)] * 2)
+
+    #cstring.initializer = Constant.stringz(string)
+
+    #builder.call(print_string, [cstring_p])
+
+#def emit_print(builder, *values):
+    #import ctypes
+
+    #from ctypes     import sizeof
+    #from cargo.llvm import iptr_type
+
+    #print_double_t = Type.pointer(Type.function(Type.void(), [Type.double()]))
+    #print_int_t    = Type.pointer(Type.function(Type.void(), [Type.int(32)]))
+
+    #print_double = Constant.int(iptr_type, <long>&put_double).inttoptr(print_double_t)
+    #print_int    = Constant.int(iptr_type, <long>&put_int).inttoptr(print_int_t)
+
+    #for value in values:
+        #if value.type.kind == llvm.core.TYPE_DOUBLE:
+            #builder.call(print_double, [value])
+        #elif value.type.kind == llvm.core.TYPE_INTEGER:
+            #assert value.type.width == 32
+
+            #builder.call(print_double, [value])
+
+        #emit_print_string(builder, " ")
+
+    #emit_print_string(builder, "\n")
+

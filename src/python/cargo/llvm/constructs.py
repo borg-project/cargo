@@ -10,6 +10,41 @@ from contextlib import contextmanager
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
 
+def emit_and_execute(module_name = ""):
+    """
+    Prepare for, emit, and run some LLVM IR.
+    """
+
+    def decorator(emit):
+        # emit some IR
+        from llvm.core  import (
+            Module,
+            Builder,
+            )
+        from cargo.llvm import this_builder
+
+        module = Module.new(module_name)
+        main   = module.add_function(Type.function(Type.void(), []), "main")
+        entry  = main.append_basic_block("entry")
+
+        with this_builder(Builder.new(entry)) as builder:
+            emit(module)
+
+            builder.ret_void()
+
+        # then compile and execute it
+        from llvm.ee import ExecutionEngine
+
+        print module
+
+        module.verify()
+
+        engine = ExecutionEngine.new(module)
+
+        engine.run_function(main, [])
+
+    return decorator
+
 def get_type_size(type_):
     """
     Return the size of an instance of a type, in bytes.
@@ -17,6 +52,9 @@ def get_type_size(type_):
 
     return dtype_from_type(type_).itemsize
 
+sizeof_type = get_type_size
+
+# XXX type_from_struct_dtype, etc?
 def struct_dtype_to_type(dtype):
     """
     Build an LLVM type matching a numpy struct dtype.
@@ -50,6 +88,8 @@ def dtype_to_type(dtype):
         return struct_dtype_to_type(dtype)
     else:
         raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
+
+type_from_dtype = dtype_to_type
 
 def dtype_from_integer_type(type_):
     """

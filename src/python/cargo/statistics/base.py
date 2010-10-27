@@ -10,33 +10,25 @@ from llvm.core import (
     Builder,
     Constant,
     )
+from cargo.llvm import (
+    emit_and_execute,
+    StridedArrays,
+    )
 
 numpy.seterr(divide = "raise", invalid = "raise", over = "warn", under = "warn") # FIXME hack
 
-def log_add_scalar(x, y):
-    """
-    Return log(x + y) given log(x) and log(y); see [1].
-
-    [1] Digital Filtering Using Logarithmic Arithmetic.
-        Kingsbury and Rayner, 1970.
-    """
-
-    from math import (
-        exp,
-        log1p,
-        )
-
-    if x >= y:
-        return x + log1p(exp(y - x))
-    else:
-        return y + log1p(exp(x - y))
-
-log_add = numpy.frompyfunc(log_add_scalar, 2, 1)
-
-def semicast_arguments((out, out_dtype), *pairs):
+def semicast_arguments(out_options, *pairs):
     """
     Appropriately broadcast arguments and an output array.
     """
+
+    if len(out_options) == 2:
+        (out, out_dtype) = out_options
+        out_shrink       = None
+    elif len(out_options) == 3:
+        (out, out_dtype, out_shrink) = out_options
+    else:
+        raise ValueError("bad out options")
 
     from cargo.numpy import semicast
 
@@ -46,43 +38,13 @@ def semicast_arguments((out, out_dtype), *pairs):
     if out is None:
         (shape, cast_arrays) = semicast(*pairs_to_cast)
 
-        return (shape, cast_arrays + [numpy.empty(shape, out_dtype)])
+        return (shape, [numpy.empty(shape[:out_shrink], out_dtype)] + cast_arrays)
     else:
-        (shape, cast_arrays) = semicast(*(pairs_to_cast + (out, out_dtype)))
+        (shape, cast_arrays) = semicast(*((out, out_dtype) + pairs_to_cast))
 
-        assert out.shape == shape
+        assert out.shape == shape[:out_shrink]
 
         return (shape, cast_arrays)
-
-def emit_and_execute(module):
-    """
-    Prepare for, emit, and run some LLVM IR.
-    """
-
-    from cargo.llvm import this_builder
-
-    def decorator(emitter):
-        # emit some IR
-        main    = module.add_function(Type.function(Type.void(), []), "main")
-        entry   = main.append_basic_block("entry")
-
-        with this_builder(Builder.new(entry)) as builder:
-            emitter()
-
-            builder.ret_void()
-
-        # then compile and execute it
-        from llvm.ee import ExecutionEngine
-
-        print module
-
-        module.verify()
-
-        engine = ExecutionEngine.new(module)
-
-        engine.run_function(main, [])
-
-    return decorator
 
 class ModelEngine(object):
     """
@@ -109,7 +71,7 @@ class ModelEngine(object):
         """
 
         # arguments
-        (shape, (parameters, samples, out)) = \
+        (shape, (out, parameters, samples)) = \
             semicast_arguments(
                 (out       , numpy.dtype(numpy.float64) ),
                 (parameters, self._model.parameter_dtype),
@@ -117,16 +79,11 @@ class ModelEngine(object):
                 )
 
         # computation
-        module  = Module.new("local")
-        emitter = self._model.get_emitter(module)
-
-        @emit_and_execute(module)
-        def _():
+        @emit_and_execute("local")
+        def _(module):
             """
             Emit the log-likelihood computation.
             """
-
-            from cargo.llvm.lowloop import StridedArrays
 
             arrays = \
                 StridedArrays.from_numpy({
@@ -137,32 +94,48 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
+                emitter = self._model.get_emitter(module)
+
                 emitter.ll(l.arrays["p"], l.arrays["s"], l.arrays["o"])
 
         # done
         return out
 
-    def ml(self, samples, weights, out = None, axis = -1, random = numpy.random):
+    def ml(self, samples, weights, out = None, random = numpy.random):
         """
         Return the estimated maximum-likelihood parameter.
         """
 
-        ## arguments
-        #sample_shape = self._model.sample_dtype.shape
-        #real_axis    = if axis >= 0 then axis else axis - len(sample_shape)
-        #samples_axis_dtype = numpy.dtype(self._model.parameter_dtype, 
+        # arguments
+        (shape, (out, samples, weights)) = \
+            semicast_arguments(
+                (out    , self._model.parameter_dtype, -1),
+                (samples, self._model.sample_dtype       ),
+                (weights, numpy.dtype(numpy.float64)     ),
+                )
 
-        #(shape, (parameters, samples)) = \
-            #semicast_arguments(
-                #(out       , self._model.parameter_dtype),
-                #(samples   , self._model.sample_dtype   ),
-                #)
-        #(shape, (parameters, samples, out)) = \
-            #semicast_arguments(
-                #(out       , numpy.dtype(numpy.float64) ),
-                #(parameters, self._model.parameter_dtype),
-                #(samples   , self._model.sample_dtype   ),
-                #)
+        # computation
+        @emit_and_execute("local")
+        def _(module):
+            """
+            Emit the log-likelihood computation.
+            """
+
+            arrays = \
+                StridedArrays.from_numpy({
+                    "s" : samples,
+                    "w" : weights,
+                    "o" : out,
+                    })
+
+            @arrays.loop_all(len(shape) - 1)
+            def _(l):
+                emitter = self._model.get_emitter(module)
+
+                emitter.ml(l.arrays["s"], l.arrays["w"], l.arrays["o"])
+
+        # done
+        return out
 
     @property
     def model(self):

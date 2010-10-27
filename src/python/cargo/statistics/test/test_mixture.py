@@ -17,9 +17,10 @@ from cargo.statistics          import (
     Delta,
     ModelEngine,
     FiniteMixture,
+    MixedBinomial,
     )
 
-def assert_finite_mixture_ml_ok(d):
+def assert_finite_mixture_ml_ok(me):
     """
     Verify EM estimation of finite mixture distributions.
     """
@@ -27,11 +28,9 @@ def assert_finite_mixture_ml_ok(d):
     from cargo.testing import assert_almost_equal_deep
 
     (e,) = \
-        d.ml(
-            array([[(7, 8)] * 100 + [(1, 8)] * 200], d.sample_dtype),
+        me.ml(
+            [[(7, 8)] * 100 + [(1, 8)] * 200],
             ones((1, 300)),
-            None,
-            RandomState(41),
             )
 
     assert_almost_equal_deep(
@@ -46,11 +45,9 @@ def test_finite_mixture_ml():
     Test EM estimation of finite mixture distributions.
     """
 
-    from cargo.statistics.binomial import MixedBinomial
+    me = ModelEngine(FiniteMixture(MixedBinomial(epsilon = 0.0), 2))
 
-    d = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
-
-    assert_finite_mixture_ml_ok(d)
+    assert_finite_mixture_ml_ok(me)
 
 def test_finite_mixture_ll():
     """

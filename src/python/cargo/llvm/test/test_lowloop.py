@@ -17,32 +17,19 @@ def assert_copying_ok(in_, out, expected):
     Assert that the array loop can make a correct array copy.
     """
 
-    # compile array copy via array loop
-    from cargo.llvm         import this_builder
-    from cargo.llvm.lowloop import StridedArrays
+    from cargo.llvm import (
+        emit_and_execute,
+        StridedArrays,
+        )
 
-    local  = Module.new("local")
-    main   = local.add_function(Type.function(Type.void(), []), "main")
-    entry  = main.append_basic_block("entry")
-    arrays = StridedArrays.from_numpy({"in" : in_, "out" : out})
+    @emit_and_execute()
+    def _(_):
+        arrays = StridedArrays.from_numpy({"in" : in_, "out" : out})
 
-    with this_builder(Builder.new(entry)) as builder:
         @arrays.loop_all()
         def _(l):
-            l.arrays["out"].store(l.arrays["in"])
+            l.arrays["in"].load().store(l.arrays["out"])
 
-        builder.ret_void()
-
-    # execute the loop
-    print local
-
-    local.verify()
-
-    engine = ExecutionEngine.new(local)
-
-    engine.run_function(main, [])
-
-    # verify correctness
     assert_equal(expected.tolist(), out.tolist())
 
 def test_array_loop_simple():
@@ -75,9 +62,9 @@ def test_array_loop_broadcast():
     # verify correctness
     assert_copying_ok(foo, bar, baz)
 
-def test_array_loop_subarrays():
+def test_array_loop_views():
     """
-    Test strided-array loop compilation with subarrays.
+    Test strided-array loop compilation on numpy views.
     """
 
     # generate some test data
@@ -92,4 +79,40 @@ def test_array_loop_subarrays():
 
     # verify correctness
     assert_copying_ok(foo, bar, baz)
+
+def test_array_loop_subarrays():
+    """
+    Test strided-array loop compilation on subarrays.
+    """
+
+    # generate some test data
+    (foo, bar) = \
+        numpy.broadcast_arrays(
+            numpy.random.randint(10, size = (2, 2, 4, 6)),
+            numpy.random.randint(10, size = (2, 2, 4, 6)),
+            )
+    baz = numpy.empty(bar.shape[1:], numpy.int)
+
+    baz[:] = foo[0]
+
+    # verify correctness
+    from cargo.llvm import (
+        emit_and_execute,
+        StridedArray,
+        StridedArrays,
+        )
+
+    @emit_and_execute()
+    def _(_):
+        arrays = \
+            StridedArrays({
+                "in"  : StridedArray.from_numpy(foo).at(0),
+                "out" : StridedArray.from_numpy(bar).at(1),
+                })
+
+        @arrays.loop_all()
+        def _(l):
+            l.arrays["in"].load().store(l.arrays["out"])
+
+    assert_equal(bar[1].tolist(), baz.tolist())
 
