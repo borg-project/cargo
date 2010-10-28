@@ -11,6 +11,7 @@ from llvm.core import (
     Constant,
     )
 from cargo.log             import get_logger
+from cargo.llvm            import StridedArray
 from cargo.llvm.high_level import (
     high,
     HighFunction,
@@ -264,6 +265,7 @@ class FiniteMixtureEmitter(object):
         K   = self._model._K
         N   = samples.shape[0]
         exp = HighFunction("exp", float, [float])
+        log = HighFunction("log", float, [float])
 
         # compute posterior mixture parameters
         # XXX eeek leaking stack space
@@ -279,11 +281,15 @@ class FiniteMixtureEmitter(object):
 
             # XXX clean up above, out / parameter distinction
 
-            @high.for(N)
+            @high.for_(N)
             def _(n):
                 previous = component_pi.load()
 
-                self._sub_emitter.ll(component_parameter, samples, component_pi)
+                self._sub_emitter.ll(
+                    StridedArray.from_typed_pointer(component_parameter),
+                    samples.at(n),
+                    component_pi,
+                    )
 
                 (component_pi.load() + previous).store(component_pi)
 

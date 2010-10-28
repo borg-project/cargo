@@ -69,43 +69,18 @@ class Delta(object):
         """
 
         high.select(
-            parameter.load() == sample.load(),
-            high.value(0.0),
-            high.value(numpy.finfo(float).min),
+            parameter.data.load() == sample.data.load(),
+            0.0,
+            numpy.finfo(float).min,
             ) \
         .store(out)
 
-    def given(self, parameters, samples, out = None):
+    def given(self, parameter, samples, out):
         """
-        Return the conditional distribution.
+        Compute the posterior distribution.
         """
 
-        from cargo.numpy import semicast
-
-        parameters = numpy.asarray(parameters, self._dtype)
-        samples    = numpy.asarray(samples   , self._dtype)
-
-        if out is None:
-            (parameters, samples) = \
-                semicast(
-                    (parameters, None),
-                    (samples   , None),
-                    )
-
-            out = numpy.empty(samples.shape, dtype = self._parameter_dtype)
-        else:
-            (parameters, samples, _) = \
-                semicast(
-                    (parameters, None),
-                    (samples   , None),
-                    (out       , None),
-                    )
-
-            assert out.shape == parameters.shape
-
-        out[:] = parameters
-
-        return out
+        parameter.data.load().store(out.data)
 
     @property
     def sample_dtype(self):

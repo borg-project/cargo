@@ -56,19 +56,19 @@ def test_finite_mixture_ll():
     Test finite-mixture log-likelihood computation.
     """
 
-    d = ModelEngine(FiniteMixture(Delta(numpy.float_), 2))
+    engine = ModelEngine(FiniteMixture(Delta(float), 2))
     p = [[(0.25, 1.0), (0.75, 2.0)]]
 
-    assert_almost_equal(d.ll(p,   1.0 ), numpy.log(0.25))
-    assert_almost_equal(d.ll(p, [ 2.0]), numpy.log(0.75))
-    assert_almost_equal(d.ll(p, [42.0]), numpy.finfo(float).min)
+    assert_almost_equal(engine.ll(p,   1.0 ), numpy.log(0.25))
+    assert_almost_equal(engine.ll(p, [ 2.0]), numpy.log(0.75))
+    assert_almost_equal(engine.ll(p, [42.0]), numpy.finfo(float).min)
 
 def test_finite_mixture_rv():
     """
     Test finite-mixture random-variate generation.
     """
 
-    d = FiniteMixture(Constant(numpy.float_), 2)
+    d = FiniteMixture(Delta(float), 2)
     p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
     s = numpy.empty(32768)
 
@@ -82,12 +82,12 @@ def test_finite_mixture_given():
     Test finite-mixture posterior-parameter computation.
     """
 
-    d = FiniteMixture(Constant(numpy.float_), 2)
-    p = numpy.array([(0.25, 1.0), (0.75, 2.0)], d.parameter_dtype.base)
-    c = d.given(p, 2.0)
+    model  = FiniteMixture(Delta(float), 2)
+    engine = ModelEngine(model)
+    out    = engine.given([(0.25, 1.0), (0.75, 2.0)], [2.0])
 
-    assert_almost_equal(c["p"][0], 0.0)
-    assert_almost_equal(c["p"][1], 1.0)
+    assert_almost_equal(out["p"][0], 0.0)
+    assert_almost_equal(out["p"][1], 1.0)
 
 def test_restarting_ml():
     """

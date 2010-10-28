@@ -150,9 +150,9 @@ class HighStandard(object):
         return \
             self.value(
                 self.builder.select(
-                    boolean._value,
-                    if_true._value,
-                    if_false._value,
+                    self.value(boolean)._value,
+                    self.value(if_true)._value,
+                    self.value(if_false)._value,
                     ),
                 )
 
