@@ -28,7 +28,7 @@ def assert_copying_ok(in_, out, expected):
 
         @arrays.loop_all()
         def _(l):
-            l.arrays["in"].load().store(l.arrays["out"])
+            l.arrays["in"].data.load().store(l.arrays["out"].data)
 
     assert_equal(expected.tolist(), out.tolist())
 
@@ -112,7 +112,7 @@ def test_array_loop_subarrays():
 
         @arrays.loop_all()
         def _(l):
-            l.arrays["in"].load().store(l.arrays["out"])
+            l.arrays["in"].data.load().store(l.arrays["out"].data)
 
     assert_equal(bar[1].tolist(), baz.tolist())
 

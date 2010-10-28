@@ -144,7 +144,7 @@ class FiniteMixtureEmitter(object):
 
         log = HighFunction("log", float, [float])
 
-        # XXX eeek leaking stack memory
+        # XXX eeek leaking stack space
         total        = high.stack_allocate(Type.double())
         component_ll = high.stack_allocate(Type.double())
 
@@ -172,77 +172,92 @@ class FiniteMixtureEmitter(object):
         from cargo.llvm import StridedArray
 
         # mise en place
-        K    = self._model._K
-        (N,) = samples.shape
-        exp  = HighFunction("exp", float, [float])
+        K   = self._model._K
+        N   = samples.shape[0]
+        exp = HighFunction("exp", float, [float])
 
         # generate a random initial state
-        # XXX eeek leaking stack memory
+        # XXX eeek leaking stack space
         total = high.stack_allocate(float, 0.0)
 
         @high.for_(K)
         def _(k):
-            #n = random.randint(N)
-            n = 0
+            n = high.random_int(N)
 
             self._sub_emitter.ml(
-                StridedArray(samples.at(n).low, (1,)),
-                StridedArray(weights.at(n).low, (1,)),
-                out.at(k).gep(0, 1),
+                samples.at(n).envelop(),
+                weights.at(n).envelop(),
+                StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
                 )
 
-            #p["p"]  = random.rand(K)
-            high.value(0.1).store(out.at(k).gep(0, 0))
-            (total.load() + 0.1).store(total)
+            r = high.random()
+
+            r.store(out.at(k).data.gep(0, 0))
+
+            (total.load() + r).store(total)
+
+            @high.python(k, r)
+            def _(k_py, r_py):
+                print k_py, r_py
 
         @high.for_(K)
         def _(k):
-            p = out.at(k).gep(0, 0)
+            p = out.at(k).data.gep(0, 0)
 
             (p.load() / total.load()).store(p)
 
-        ## run EM until convergence
-        #r_KN = StridedArray.heap_allocated(float, (K, N))
+        # run EM until convergence
+        r_KN = StridedArray.heap_allocated(float, (K, N)) # XXX never deallocated
 
-        #@high.for_(self._model._iterations)
-        #def _(i):
-            ## compute responsibilities
-            #@high.for_(N)
-            #def _(n):
-                #sample = samples.at(n)
+        @high.for_(self._model._iterations)
+        def _(i):
+            # compute responsibilities
+            @high.for_(N)
+            def _(n):
+                sample = samples.at(n)
 
-                #high.value(0.0).store(total)
+                high.value(0.0).store(total)
 
-                #@high.for_(K)
-                #def _(k):
-                    #responsibility = r_KN.at(k, n)
+                @high.for_(K)
+                def _(k):
+                    responsibility = r_KN.at(k, n).data
 
-                    #self._sub_emitter.ll(out.at(k).gep(0, 1), sample, responsibility)
+                    self._sub_emitter.ll(out.at(k).data.gep(0, 1), sample.data, responsibility)
 
-                    #(total.load() + responsibility).store(total)
+                    exp(responsibility.load()).store(responsibility)
 
-                #total_value = total.load()
+                    (total.load() + responsibility.load()).store(total)
 
-                #@high.for_(K)
-                #def _(k):
-                    #responsibility = r_KN.at(k, n)
+                total_value = total.load()
 
-                    #exp(responsibility.load() / total_value).store(responsibility)
+                @high.for_(K)
+                def _(k):
+                    responsibility = r_KN.at(k, n).data
 
-            ## make maximum-likelihood estimates
-            #@high.for_(K)
-            #def _(k):
-                #component = out.at(k)
+                    (responsibility.load() / total_value).store(responsibility)
 
-                #d.ml(samples, r_KN.at(k), component.gep(0, 1))
+                    #@high.python(n, k, responsibility.load())
+                    #def _(n_py, k_py, r_py):
+                        #print "responsibility of %s for %s is %s" % (k_py, n_py, r_py)
 
-                #high.value(0.0).store(total)
+            # make maximum-likelihood estimates
+            @high.for_(K)
+            def _(k):
+                component = out.at(k).data
 
-                #@high.for_(samples.shape[0])
-                #def _(n):
-                    #(total.load() + r_KN.at(k, n).load()).store(total)
+                self._sub_emitter.ml(
+                    samples,
+                    r_KN.at(k),
+                    StridedArray.from_typed_pointer(component.gep(0, 1)),
+                    )
 
-                #(total.load() / N).store(component.gep(0, 0))
+                high.value(0.0).store(total)
+
+                @high.for_(samples.shape[0])
+                def _(n):
+                    (total.load() + r_KN.at(k, n).data.load()).store(total)
+
+                (total.load() / float(N)).store(component.gep(0, 0))
 
     #def given(self, parameters, samples, out = None):
         #"""

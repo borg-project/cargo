@@ -5,10 +5,29 @@
 import ctypes
 import numpy
 
-from llvm.core  import Type
+from llvm.core  import (
+    Type,
+    Constant,
+    )
 from contextlib import contextmanager
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
+
+def constant_pointer(address, type_):
+    """
+    Return an LLVM pointer constant from an address.
+    """
+
+    return Constant.int(iptr_type, address).inttoptr(type_)
+
+def constant_pointer_to(object_, type_):
+    """
+    Return an LLVM pointer constant to a Python object.
+    """
+
+    # XXX do this without calling id (ctypes?)
+
+    return constant_pointer(id(object_), type_)
 
 def emit_and_execute(module_name = ""):
     """

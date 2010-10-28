@@ -2,6 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import ctypes
 import numpy
 import llvm.core
 
@@ -10,9 +11,15 @@ from llvm.core  import (
     Value,
     Constant,
     )
-from cargo.llvm import BuilderStack
+from cargo.llvm import (
+    iptr_type,
+    BuilderStack,
+    )
 
-class HighLLVM(object):
+object_type     = Type.struct([])
+object_ptr_type = Type.pointer(object_type)
+
+class HighStandard(object):
     """
     Provide a simple higher-level Python-embedded language on top of LLVM.
     """
@@ -29,14 +36,14 @@ class HighLLVM(object):
 
         return HighValue.from_any(value)
 
+    value_from_any = value
+
     def type_(self, some_type):
         """
         Return an LLVM type from some kind of type.
         """
 
         # XXX support for other ctypes
-
-        import ctypes
 
         from ctypes     import sizeof
         from cargo.llvm import dtype_to_type
@@ -94,12 +101,11 @@ class HighLLVM(object):
 
             # prepare the loop structure
             builder  = self.builder
-            function = builder.basic_block.function
-
-            start = builder.basic_block
-            check = function.append_basic_block("for_loop_check")
-            flesh = function.append_basic_block("for_loop_flesh")
-            leave = function.append_basic_block("for_loop_leave")
+            function = self.function
+            start    = self.basic_block
+            check    = function.append_basic_block("for_loop_check")
+            flesh    = function.append_basic_block("for_loop_flesh")
+            leave    = function.append_basic_block("for_loop_leave")
 
             # build the check block
             builder.branch(check)
@@ -122,7 +128,7 @@ class HighLLVM(object):
             # build the flesh block
             builder.position_at_end(flesh)
 
-            emit_body(this_index)
+            emit_body(high.value(this_index))
 
             this_index.add_incoming(
                 builder.add(this_index, Constant.int(index_type, 1)),
@@ -150,30 +156,50 @@ class HighLLVM(object):
                     ),
                 )
 
-    def python(self):
+    def random(self):
+        """
+        Emit a PRNG invocation.
+        """
+
+        from cargo.llvm.support import emit_random_real_unit
+
+        return emit_random_real_unit(self)
+
+    def random_int(self, upper, width = 32):
+        """
+        Emit a PRNG invocation.
+        """
+
+        from cargo.llvm.support import emit_random_int
+
+        return emit_random_int(self, upper, width)
+
+    def python(self, *arguments):
         """
         Emit a call to a Python callable.
         """
 
-        from cargo.llvm._high_level import CallPythonDecorator
-
-        return CallPythonDecorator(self.builder)
+        return CallPythonDecorator(arguments)
 
     def heap_allocate(self, type_, count = 1):
         """
         Stack-allocate and return a value.
         """
 
-        malloc = HighFunction("malloc", Type.pointer(Type.struct()), [long])
+        from cargo.llvm import sizeof_type
 
-        return malloc(get_type_size(high.type_(type_)) * high.value(count))
+        type_  = self.type_from_any(type_)
+        malloc = HighFunction("malloc", Type.pointer(Type.int(8)), [long])
+        bytes_ = (self.value(count) * sizeof_type(type_)).cast_to(long)
+
+        return malloc(bytes_).cast_to(Type.pointer(type_))
 
     def stack_allocate(self, type_, initial = None):
         """
         Stack-allocate and return a value.
         """
 
-        allocated = HighValue.from_low(self.builder.alloca(high.type_(type_)))
+        allocated = HighValue.from_low(self.builder.alloca(self.type_from_any(type_)))
 
         if initial is not None:
             self.value(initial).store(allocated)
@@ -188,7 +214,31 @@ class HighLLVM(object):
 
         return BuilderStack.local.top()
 
-high = HighLLVM()
+    @property
+    def basic_block(self):
+        """
+        Return the current basic block.
+        """
+
+        return self.builder.basic_block
+
+    @property
+    def function(self):
+        """
+        Return the current function.
+        """
+
+        return self.basic_block.function
+
+    @property
+    def module(self):
+        """
+        Return the current module.
+        """
+
+        return self.function.module
+
+high = HighStandard()
 
 class HighValue(object):
     """
@@ -355,27 +405,26 @@ class HighValue(object):
         # XXX move this complexity into the type hierarchy?
         # XXX cleanly handle signedness somehow (explicit "signed" highvalue?)
 
-        type_ = high.type_from_any(type_)
+        type_     = high.type_from_any(type_)
+        low_value = None
 
-        if self.type_.kind == llvm.core.TYPE_DOUBLE:
-            if type_.kind == llvm.core.TYPE_INTEGER:
-                low_value = high.builder.fptosi(self._value, type_, name)
-            else:
-                raise TypeError("don't know how to perform this conversion")
-        elif self.type_.kind == llvm.core.TYPE_INTEGER:
+        if self.type_.kind == llvm.core.TYPE_INTEGER:
             if type_.kind == llvm.core.TYPE_DOUBLE:
                 low_value = high.builder.sitofp(self._value, type_, name)
-            else:
-                raise TypeError("don't know how to perform this conversion")
+            if type_.kind == llvm.core.TYPE_INTEGER:
+                if self.type_.width < type_.width:
+                    low_value = high.builder.sext(self._value, type_, name)
+        elif self.type_.kind == llvm.core.TYPE_DOUBLE:
+            if type_.kind == llvm.core.TYPE_INTEGER:
+                low_value = high.builder.fptosi(self._value, type_, name)
         elif self.type_.kind == llvm.core.TYPE_POINTER:
             if type_.kind == llvm.core.TYPE_POINTER:
                 low_value = high.builder.bitcast(self._value, type_, name)
-            else:
-                raise TypeError("don't know how to perform this conversion")
-        else:
-            raise TypeError("don't know how to perform this conversion")
 
-        return high.value(low_value)
+        if low_value is None:
+            raise TypeError("don't know how to perform this conversion")
+        else:
+            return high.value(low_value)
 
     @property
     def low(self):
@@ -408,7 +457,7 @@ class HighValue(object):
                 HighValue.from_low(
                     Constant.int(
                         Type.int(numpy.dtype(int).itemsize * 8),
-                        value,
+                        int(value),
                         ),
                     )
         elif isinstance(value, long):
@@ -416,7 +465,7 @@ class HighValue(object):
                 HighValue.from_low(
                     Constant.int(
                         Type.int(numpy.dtype(long).itemsize * 8),
-                        value,
+                        long(value),
                         ),
                     )
         elif isinstance(value, float):
@@ -433,12 +482,45 @@ class HighValue(object):
         Build a high-level wrapped value from an LLVM value.
         """
 
-        from llvm.core import Value
-
+        # sanity
         if not isinstance(value, Value):
             raise TypeError("value is not an LLVM value")
 
-        return HighValue(value)
+        # generate an appropriate value type
+        if value.type.kind == llvm.core.TYPE_INTEGER:
+            return HighIntegerValue(value)
+        elif value.type.kind == llvm.core.TYPE_DOUBLE:
+            return HighRealValue(value)
+        else:
+            return HighValue(value)
+
+class HighIntegerValue(HighValue):
+    """
+    Integer value in the wrapper language.
+    """
+
+    def to_python(self):
+        """
+        Emit conversion of this value to a Python object.
+        """
+
+        int_from_long = HighFunction("PyInt_FromLong", object_ptr_type, [ctypes.c_long])
+
+        return int_from_long(self._value)
+
+class HighRealValue(HighValue):
+    """
+    Integer value in the wrapper language.
+    """
+
+    def to_python(self):
+        """
+        Emit conversion of this value to a Python object.
+        """
+
+        float_from_double = HighFunction("PyFloat_FromDouble", object_ptr_type, [float])
+
+        return float_from_double(self._value)
 
 class HighPointer(HighValue):
     """
@@ -455,23 +537,26 @@ class HighFunction(HighValue):
     Function in the wrapper language.
     """
 
-    def __init__(self, name, return_type, argument_types):
+    def __init__(self, name, return_type, argument_types, new = False):
         """
         Initialize.
         """
 
-        module = high.builder.basic_block.function.module
+        type_ = \
+            Type.function(
+                high.type_from_any(return_type),
+                map(high.type_from_any, argument_types),
+                )
 
-        HighValue.__init__(
-            self,
-            module.get_or_insert_function(
-                Type.function(
-                    high.type_(return_type),
-                    map(high.type_, argument_types),
-                    ),
-                name,
-                ),
-            )
+        if isinstance(name, int):
+            low_value = Constant.int(iptr_type, name).inttoptr(Type.pointer(type_))
+        else:
+            if new:
+                low_value = high.module.add_function(type_, name)
+            else:
+                low_value = high.module.get_or_insert_function(type_, name)
+
+        HighValue.__init__(self, low_value)
 
     def __call__(self, *arguments):
         """
@@ -485,4 +570,70 @@ class HighFunction(HighValue):
                     [high.value(v).low for v in arguments],
                     ),
                 )
+
+    @property
+    def arguments(self):
+        """
+        Return the function argument values.
+        """
+
+        return map(high.value_from_any, self._value.args)
+
+class CallPythonDecorator(object):
+    """
+    Emit calls to Python in LLVM.
+    """
+
+    __whatever = []
+
+    def __init__(self, arguments = ()):
+        """
+        Initialize.
+        """
+
+        self._arguments = arguments
+
+    def __call__(self, callable_):
+        """
+        Emit IR for a particular callable.
+        """
+
+        # XXX instead maintain module-level reference to the callable
+
+        CallPythonDecorator.__whatever += [callable_]
+
+        # convert the arguments to Python objects
+        from cargo.llvm import (
+            constant_pointer,
+            constant_pointer_to,
+            )
+
+        call_object = \
+            HighFunction(
+                "PyObject_CallObject",
+                object_ptr_type,
+                [object_ptr_type, object_ptr_type],
+                )
+        dec_ref        = HighFunction("Py_DecRef"  , Type.void()    , [object_ptr_type])
+        tuple_new      = HighFunction("PyTuple_New", object_ptr_type, [ctypes.c_int   ])
+        tuple_set_item = \
+            HighFunction(
+                "PyTuple_SetItem",
+                ctypes.c_int,
+                [object_ptr_type, ctypes.c_size_t, object_ptr_type],
+                )
+
+        argument_tuple = tuple_new(len(self._arguments))
+
+        for (i, argument) in enumerate(self._arguments):
+            tuple_set_item(argument_tuple, i, argument.to_python())
+
+        call_result = \
+            call_object(
+                constant_pointer_to(callable_, object_ptr_type),
+                #constant_pointer(0, object_ptr_type),
+                argument_tuple,
+                )
+
+        # XXX decrement arguments, return value, etc.
 

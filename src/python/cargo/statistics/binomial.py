@@ -179,15 +179,41 @@ class MixedBinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        # XXX eeek leaking stack space
+        from cargo.llvm import this_builder
+
+        compute = \
+            HighFunction(
+                "mixed_binomial_ml",
+                Type.void(),
+                [samples.data.type_, weights.data.type_, out.data.type_],
+                new = True,
+                )
+        entry = compute.low.append_basic_block("entry")
+
+        with this_builder(Builder.new(entry)) as builder:
+            self._ml(
+                samples.using(compute.arguments[0]),
+                weights.using(compute.arguments[1]),
+                out.using(compute.arguments[2]),
+                )
+
+            builder.ret_void()
+
+        compute(samples.data, weights.data, out.data)
+
+    def _ml(self, samples, weights, out):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
         total_k = high.stack_allocate(float, 0.0)
         total_n = high.stack_allocate(float, 0.0)
 
         @high.for_(samples.shape[0])
         def _(n):
-            weight   = weights.at(n).load()
-            sample_k = samples.at(n).gep(0, 0).load().cast_to(float)
-            sample_n = samples.at(n).gep(0, 1).load().cast_to(float)
+            weight   = weights.at(n).data.load()
+            sample_k = samples.at(n).data.gep(0, 0).load().cast_to(float)
+            sample_n = samples.at(n).data.gep(0, 1).load().cast_to(float)
 
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
@@ -196,5 +222,5 @@ class MixedBinomialEmitter(object):
               (total_k.load() + self._model._epsilon) \
             / (total_n.load() + self._model._epsilon)
 
-        final_ratio.store(out)
+        final_ratio.store(out.data)
 

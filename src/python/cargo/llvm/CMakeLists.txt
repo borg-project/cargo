@@ -2,7 +2,9 @@
 # build
 #
 
-add_cython_module(cargo_llvm__high_level _high_level)
+add_cython_module(cargo_llvm_support support)
+
+target_link_libraries(cargo_llvm_support ${GSL_LIBRARIES})
 
 #
 # install
@@ -10,7 +12,7 @@ add_cython_module(cargo_llvm__high_level _high_level)
 
 install(
     TARGETS
-        cargo_llvm__high_level
+        cargo_llvm_support
     DESTINATION lib/cargo/llvm
     )
 install(

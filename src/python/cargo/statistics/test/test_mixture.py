@@ -33,6 +33,8 @@ def assert_finite_mixture_ml_ok(me):
             ones((1, 300)),
             )
 
+    print e
+
     assert_almost_equal_deep(
         e[numpy.argsort(e["p"])].tolist(),
         [(1.0 / 3.0, 7.0 / 8.0),

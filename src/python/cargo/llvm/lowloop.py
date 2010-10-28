@@ -40,8 +40,6 @@ class StridedArrays(object):
         Iterate over strided arrays.
         """
 
-        print "looping over...", axes
-
         # argument sanity
         shape = None
 
@@ -51,17 +49,14 @@ class StridedArrays(object):
                     axes = len(array.shape)
 
                 shape = array.shape[:axes]
-            #elif array.shape[:axes] != shape:
-                #raise ValueError("incompatible array shape")
-
-        print "shape", shape
+            elif array.shape[:axes] != shape:
+                raise ValueError("incompatible array shape")
 
         def decorator(emit_inner):
             """
             Emit IR for a particular inner loop body.
             """
 
-            # prepare to emit IR
             def emit_for_axis(d, indices):
                 """
                 Build one level of the array loop.
@@ -69,10 +64,12 @@ class StridedArrays(object):
 
                 if d == axes:
                     emit_inner(self.at_all(*indices))
-                else:
+                elif shape[d] > 1:
                     @high.for_(shape[d])
                     def _(index):
                         emit_for_axis(d + 1, indices + [index])
+                else:
+                    emit_for_axis(d + 1, indices + [0])
 
             emit_for_axis(0, [])
 
@@ -174,18 +171,40 @@ class StridedArray(object):
 
         offsets += [0]
 
-        # return the indexed value
-        pointer = self._strided_data.gep(*offsets)
+        # index into the array
+        return \
+            StridedArray(
+                self._strided_data.gep(*offsets),
+                self._shape[len(indices):],
+                self._strides[len(indices):],
+                )
 
-        if len(indices) < len(self._shape):
-            return \
-                StridedArray(
-                    pointer,
-                    self._shape[len(indices):],
-                    self._strides[len(indices):],
-                    )
-        else:
-            return pointer
+    def envelop(self, axes = 1):
+        """
+        Add new unit dimensions.
+        """
+
+        return \
+            StridedArray(
+                self._strided_data,
+                [1] + self._shape,
+                [0] + self._strides,
+                )
+
+    def using(self, strided_data):
+        """
+        Return an equivalent array using a different data pointer.
+        """
+
+        return StridedArray(strided_data, self._shape, self._strides)
+
+    @property
+    def data(self):
+        """
+        The strided pointer associated with this array.
+        """
+
+        return self._strided_data
 
     @property
     def shape(self):
@@ -204,7 +223,7 @@ class StridedArray(object):
         return self._strides
 
     @staticmethod
-    def from_data_pointer(data, shape, strides = None):
+    def from_raw(data, shape, strides = None):
         """
         Build an array from a typical data pointer.
 
@@ -235,16 +254,6 @@ class StridedArray(object):
         return StridedArray(strided_data, shape, strides)
 
     @staticmethod
-    def heap_allocated(type_, shape):
-        """
-        Heap-allocate and return a (contiguous) array.
-        """
-
-        data = high.heap_allocate(type_, numpy.product(shape))
-
-        return StridedArray.from_data_pointer(data, shape)
-
-    @staticmethod
     def from_numpy(ndarray):
         """
         Build an array from a particular numpy array.
@@ -258,5 +267,28 @@ class StridedArray(object):
         (location, _) = ndarray.__array_interface__["data"]
         data          = Constant.int(iptr_type, location).inttoptr(Type.pointer(type_))
 
-        return StridedArray.from_data_pointer(high.value(data), ndarray.shape, ndarray.strides)
+        return StridedArray.from_raw(high.value(data), ndarray.shape, ndarray.strides)
+
+    @staticmethod
+    def from_typed_pointer(data):
+        """
+        Build an array from a typical array pointer.
+        """
+
+        if data.type_.kind != llvm.core.TYPE_POINTER:
+            raise TypeError("pointer value required")
+        elif data.type_.kind != llvm.core.TYPE_ARRAY:
+            return StridedArray(data, (), ())
+        else:
+            raise NotImplementedError()
+
+    @staticmethod
+    def heap_allocated(type_, shape):
+        """
+        Heap-allocate and return a (contiguous) array.
+        """
+
+        data = high.heap_allocate(type_, numpy.product(shape))
+
+        return StridedArray.from_raw(data, shape)
 
