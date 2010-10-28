@@ -23,13 +23,14 @@ class Binomial(object):
     - sample    : uint32
     """
 
-    def __init__(self):
+    def __init__(self, estimation_n = None):
         """
         Initialize.
         """
 
         self._parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
         self._sample_dtype    = numpy.dtype(numpy.int32)
+        self._estimation_n    = estimation_n # XXX MASSIVE HACK; needs to go away
 
     def get_emitter(self, module):
         """
@@ -85,12 +86,62 @@ class BinomialEmitter(object):
 
         log(
             pdf(
-                sample.load(),
-                parameter.gep(0, 0).load(),
-                parameter.gep(0, 1).load(),
+                sample.data.load(),
+                parameter.data.gep(0, 0).load(),
+                parameter.data.gep(0, 1).load(),
                 ),
             ) \
             .store(out)
+
+    def ml(self, samples, weights, out):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
+        from cargo.llvm import this_builder
+
+        compute = \
+            HighFunction(
+                "binomial_ml",
+                Type.void(),
+                [samples.data.type_, weights.data.type_, out.data.type_],
+                new = True,
+                )
+        entry = compute.low.append_basic_block("entry")
+
+        with this_builder(Builder.new(entry)) as builder:
+            self._ml(
+                samples.using(compute.arguments[0]),
+                weights.using(compute.arguments[1]),
+                out.using(compute.arguments[2]),
+                )
+
+            builder.ret_void()
+
+        compute(samples.data, weights.data, out.data)
+
+    def _ml(self, samples, weights, out):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
+        total_k = high.stack_allocate(float, 0.0)
+        total_w = high.stack_allocate(float, 0.0)
+
+        @high.for_(samples.shape[0])
+        def _(n):
+            weight = weights.at(n).data.load()
+            sample = samples.at(n).data.load().cast_to(float)
+
+            (total_k.load() + sample * weight).store(total_k)
+            (total_w.load() + weight).store(total_w)
+
+        final_ratio = \
+              (total_k.load() + self._model._epsilon) \
+            / (total_w.load() * self._model._estimation_n * samples.shape[0] + self._model._epsilon)
+
+        final_ratio.store(out.data.gep(0, 0))
+        high.value(self._model._estimation_n).store(out.data.gep(0, 1))
 
 class MixedBinomial(object):
     """
@@ -167,9 +218,9 @@ class MixedBinomialEmitter(object):
 
         log(
             pdf(
-                sample.gep(0, 0).load(),
-                parameter.load(),
-                sample.gep(0, 1).load(),
+                sample.data.gep(0, 0).load(),
+                parameter.data.load(),
+                sample.data.gep(0, 1).load(),
                 ),
             ) \
             .store(out)

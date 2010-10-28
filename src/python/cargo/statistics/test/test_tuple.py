@@ -4,22 +4,17 @@
 
 import numpy
 
-from numpy.random           import RandomState
-from nose.tools             import assert_almost_equal
-from cargo.statistics.tuple import TupleDistribution
+from nose.tools       import assert_almost_equal
+from cargo.statistics import (
+    Tuple,
+    Binomial,
+    ModelEngine,
+    )
 
 def test_tuple_rv():
     """
     Test random variate generation under the tuple distribution.
     """
-
-    from cargo.statistics.discrete import Discrete
-
-    def assert_samples_ok(samples):
-        """
-        Assert that the generated samples look reasonable.
-        """
-
 
     r = RandomState(42)
     d = TupleDistribution((Discrete([0.1, 0.9]), Discrete([0.9, 0.1])))
@@ -32,42 +27,44 @@ def test_tuple_rv():
 
 def test_tuple_ll():
     """
-    Test log likelihood computation under the tuple distribution.
+    Test log-likelihood computation under the tuple distribution.
     """
+
+    model  = Tuple([(Binomial(), 2), (Binomial(), 1)])
+    engine = ModelEngine(model)
 
     assert_almost_equal(
-        distribution.log_likelihood((1, 1)),
-        numpy.log(0.1 * 0.9),
+        engine.ll(
+            ([(0.25, 1), (0.75, 1)], [(0.5, 1)]),
+            ([1, 1], [0]),
+            ),
+        numpy.log(0.25 * 0.75 * 0.5),
         )
     assert_almost_equal(
-        distribution.total_log_likelihood([(1, 1), (0, 0)]),
-        numpy.log((0.1 * 0.9)**2),
+        engine.ll(
+            ([(0.25, 1), (0.75, 1)], [(0.5, 1)]),
+            ([0, 1], [0]),
+            ),
+        numpy.log(0.75 * 0.75 * 0.5),
         )
 
-def test_tuple_estimator():
+def test_tuple_ml():
     """
-    Test estimation of the tuple distribution.
+    Test parameter estimation under the tuple distribution.
     """
 
-    import numpy
+    model  = Tuple([(Binomial(), 2), (Binomial(), 1)])
+    engine = ModelEngine(model)
 
-    from nose.tools                import assert_almost_equal
-    from cargo.statistics.tuple    import TupleEstimator
-    from cargo.statistics.discrete import DiscreteEstimator
-
-    estimator = TupleEstimator((DiscreteEstimator(2), DiscreteEstimator(2)))
-    samples   = [(0, 1)] * 2500 + [(1, 0)] * 7500
-    estimated = estimator.estimate(samples)
-
-    assert_almost_equal(estimated.inner[0].beta[0], 0.25)
-    assert_almost_equal(estimated.inner[0].beta[1], 0.75)
-    assert_almost_equal(estimated.inner[1].beta[0], 0.75)
-    assert_almost_equal(estimated.inner[1].beta[1], 0.25)
-
-    estimated = estimator.estimate([(0, 1), (1, 0)], weights = numpy.array([0.25, 0.75]))
-
-    assert_almost_equal(estimated.inner[0].beta[0], 0.25)
-    assert_almost_equal(estimated.inner[0].beta[1], 0.75)
-    assert_almost_equal(estimated.inner[1].beta[0], 0.75)
-    assert_almost_equal(estimated.inner[1].beta[1], 0.25)
+    assert_almost_equal(
+        engine.ml([([0, 1], [0])] * 2500 + [([1, 0], [1])] * 7500),
+        ([(0.75, 1), (0.25, 1)], [(0.75, 1)]),
+        )
+    assert_almost_equal(
+        engine.ml(
+            [([0, 1], [0])] * 1000 + [([1, 0], [1])] * 1000,
+            [0.25] * 1000 + [1.00] * 1000,
+            ),
+        ([(0.75, 1), (0.25, 1)], [(0.75, 1)]),
+        )
 

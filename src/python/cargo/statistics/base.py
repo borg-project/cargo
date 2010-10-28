@@ -34,6 +34,10 @@ def semicast_arguments(out_argument, *in_arguments):
     Appropriately broadcast arguments and an output array.
     """
 
+    # XXX semicasting isn't quite right---needs to be slightly rethought
+    # XXX to handle the "extra" parameters correctly; perhaps what we're
+    # XXX truly doing is semicasting individual regions across arrays?
+
     # semicast arrays
     from cargo.numpy import semicast
 
@@ -108,7 +112,7 @@ class ModelEngine(object):
         # done
         return out
 
-    def ml(self, samples, weights, out = None, random = numpy.random):
+    def ml(self, samples, weights, out = None):
         """
         Compute the estimated maximum-likelihood parameter.
         """
@@ -173,10 +177,6 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
-                print "parameter array shape", l.arrays["p"].shape
-                print "samples array shape", l.arrays["s"].shape
-                print "out array shape", l.arrays["o"].shape
-
                 emitter.given(l.arrays["p"], l.arrays["s"], l.arrays["o"])
 
         # done

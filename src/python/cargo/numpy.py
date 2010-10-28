@@ -4,6 +4,24 @@
 
 from __future__ import absolute_import
 
+import numpy
+
+def normalize_dtype(dtype):
+    """
+    Construct an equivalent normal-form dtype.
+
+    Normal-form dtypes are guaranteed to satisfy, in particular, the property
+    of "shape greediness": the dtype's base property, if non-None, refers to a
+    type with empty shape.
+    """
+
+    if dtype.shape:
+        normal_base = normalize_dtype(dtype.base)
+
+        return numpy.dtype((normal_base.base, dtype.shape + normal_base.shape))
+    else:
+        return dtype
+
 def semicast(*arrays):
     """
     Broadcast compatible ndarray shape prefixes.

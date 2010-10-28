@@ -33,6 +33,22 @@ def test_binomial_ll():
          [-0.86304622, -2.30145658]],
         )
 
+def test_binomial_ml():
+    """
+    Test log-probability computation in the binomial distribution.
+    """
+
+    me = ModelEngine(Binomial(estimation_n = 2))
+
+    assert_almost_equal_deep(
+        me.ml(
+            [[(1, 2), (4, 5)],
+             [(3, 4), (8, 8)]],
+            numpy.ones((2, 2)),
+            ),
+        [5.0 / 7.0, 11.0 / 12.0],
+        )
+
 def test_mixed_binomial_ll():
     """
     Test log-probability computation in the mixed binomial distribution.

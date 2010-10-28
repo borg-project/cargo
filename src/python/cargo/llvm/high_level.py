@@ -46,7 +46,7 @@ class HighStandard(object):
         # XXX support for other ctypes
 
         from ctypes     import sizeof
-        from cargo.llvm import dtype_to_type
+        from cargo.llvm import type_from_dtype
 
         ctype_integer_types = \
             set([
@@ -73,9 +73,9 @@ class HighStandard(object):
                 ])
 
         if isinstance(some_type, type):
-            return dtype_to_type(numpy.dtype(some_type))
+            return type_from_dtype(numpy.dtype(some_type))
         elif isinstance(some_type, numpy.dtype):
-            return dtype_to_type(some_type)
+            return type_from_dtype(some_type)
         elif isinstance(some_type, Type):
             return some_type
         elif some_type in ctype_integer_types:
@@ -251,6 +251,20 @@ class HighValue(object):
         """
 
         self._value = value
+
+    def __str__(self):
+        """
+        Return a readable string representation of this value.
+        """
+
+        return str(self._value)
+
+    def __repr__(self):
+        """
+        Return a parseable string representation of this value.
+        """
+
+        return "HighValue(%s)" % repr(self._value)
 
     def __eq__(self, other):
         """

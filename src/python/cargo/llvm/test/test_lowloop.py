@@ -11,6 +11,7 @@ from llvm.core  import (
     Builder,
     )
 from llvm.ee    import ExecutionEngine
+from cargo.llvm import high
 
 def assert_copying_ok(in_, out, expected):
     """
@@ -115,4 +116,37 @@ def test_array_loop_subarrays():
             l.arrays["in"].data.load().store(l.arrays["out"].data)
 
     assert_equal(bar[1].tolist(), baz.tolist())
+
+def test_array_loop_extracted():
+    """
+    Test strided-array loop compilation on extracted member arrays.
+    """
+
+    # generate some test data
+    foo = numpy.empty((2, 4), [("x", int), ("y", float)])
+    bar = numpy.empty((2, 4))
+    baz = numpy.random.rand(2, 4)
+
+    foo["y"] = baz
+
+    # verify correctness
+    from cargo.llvm import (
+        emit_and_execute,
+        StridedArray,
+        StridedArrays,
+        )
+
+    @emit_and_execute()
+    def _(_):
+        arrays = \
+            StridedArrays({
+                "in"  : StridedArray.from_numpy(foo).extract(0, 1),
+                "out" : StridedArray.from_numpy(bar),
+                })
+
+        @arrays.loop_all()
+        def _(l):
+            l.arrays["in"].data.load().store(l.arrays["out"].data)
+
+    assert_equal(bar.tolist(), baz.tolist())
 

@@ -4,90 +4,124 @@
 
 import numpy
 
-#class TupleIR(object):
-    #"""
-    #Low-level operations of the tuple distribution.
-    #"""
+from cargo.llvm import (
+    high,
+    StridedArray,
+    )
 
-    #def __init__(self, module, distributions):
-        #"""
-        #Initialize.
-        #"""
+class Tuple(object):
+    """
+    A tuple of independent distributions.
+    """
 
-        #self._distributions  = distributions
-        #self._parameter_type = Type.packed_struct([d.parameter_type for d in distributions])
-        #self._sample_type    = Type.packed_struct([d.sample_type for d in distributions])
+    def __init__(self, distributions):
+        """
+        Initialize.
+        """
 
-    #def ll(self, b, parameter, sample):
-        #"""
-        #Compute log probability under this distribution.
-        #"""
+        # sanitize arguments
+        def normalize(distribution):
+            """
+            The canonical distribution argument is (model, count).
+            """
 
-        #from llvm.core import (
-            #Type,
-            #Constant,
-            #)
+            if isinstance(distribution, tuple):
+                return distribution
+            else:
+                return (distribution, 1)
 
-        #o = Constant.real(Type.double(), 0.0)
+        self._distributions = map(normalize, distributions)
 
-        #for (i, d) in enumerate(self._distributions):
-            #l = d.ll(
-                    #b,
-                    #b.extract_element(parameter, [i]),
-                    #b.extract_element(sample   , [i]),
-                    #)
-            #o = b.add(o, l)
+        # parameter and sample types
+        parameter_fields = []
+        sample_fields    = []
 
-        #return o
+        for (i, (distribution, count)) in enumerate(self._distributions):
+            field_name        = "d%i" % i
+            parameter_fields += [(field_name, distribution.parameter_dtype, (count,))]
+            sample_fields    += [(field_name, distribution.sample_dtype   , (count,))]
 
-    #@property
-    #def distributions(self):
-        #"""
-        #Return the inner distributions.
-        #"""
+        self._parameter_dtype = numpy.dtype(parameter_fields)
+        self._sample_dtype    = numpy.dtype(sample_fields)
 
-        #return self._distributions
+    def get_emitter(self, module):
+        """
+        Return an IR emitter.
+        """
 
-    #@property
-    #def parameter_type(self):
-        #"""
-        #Type of distribution parameter(s).
-        #"""
+        return TupleEmitter(self, module)
 
-        #return self._parameter_type
+    @property
+    def distributions(self):
+        """
+        Return the inner distributions.
+        """
 
-    #@property
-    #def sample_type(self):
-        #"""
-        #Type of distribution parameter(s).
-        #"""
+        return self._distributions
 
-        #return self._sample_type
+    @property
+    def parameter_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
 
-#class Tuple(object):
-    #"""
-    #A tuple of independent distributions.
-    #"""
+        return self._parameter_dtype
 
-    #def __init__(self, distributions):
-        #"""
-        #Initialize.
-        #"""
+    @property
+    def sample_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
 
-        #self._distributions   = distributions
-        #self._names           = ["d%i" % i for i in xrange(len(distributions))]
-        #self._parameter_dtype = \
-            #numpy.dtype([
-                #(n, d.parameter_dtype)
-                #for n in self._names
-                #for d in distributions
-                #])
-        #self._sample_dtype    = \
-            #numpy.dtype([
-                #(n, d.sample_dtype)
-                #for n in self._names
-                #for d in distributions
-                #])
+        return self._sample_dtype
+
+class TupleEmitter(object):
+    """
+    Emitter for the tuple distribution.
+    """
+
+    def __init__(self, model, module):
+        """
+        Initialize.
+        """
+
+        self._model    = model
+        self._module   = module
+        self._emitters = [d.get_emitter(module) for (d, _) in model._distributions]
+
+    def ll(self, parameter, sample, out):
+        """
+        Compute log likelihood under this distribution.
+        """
+
+        high.value(0.0).store(out)
+
+        for (i, (_, count)) in enumerate(self._model._distributions):
+            @high.for_(count)
+            def _(j):
+                previous_total = out.load()
+
+                self._emitters[i].ll(
+                    StridedArray.from_typed_pointer(parameter.data.gep(0, i, j)),
+                    StridedArray.from_typed_pointer(sample.data.gep(0, i, j)),
+                    out,
+                    )
+
+                (out.load() + previous_total).store(out)
+
+    def ml(self, samples, weights, out):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
+        for (i, (_, count)) in enumerate(self._model._distributions):
+            @high.for_(count)
+            def _(j):
+                self._emitters[i].ml(
+                    samples.extract(0, i, j),
+                    weights,
+                    StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
+                    )
 
     #def rv(
                           #self,
@@ -112,102 +146,4 @@ import numpy
             ##out[i, :] = random.binomial(p.n, p.p, out.shape[1])
 
         #return out
-
-    #def ll(
-                          #self,
-        #ndarray           parameters, # ndim = 1
-        #ndarray           samples,    # ndim = 2
-        #ndarray           out = None, # ndim = 2
-        #):
-        #"""
-        #Return the log probability of samples under this distribution.
-        #"""
-
-        ## arguments
-        #assert len(parameters.dtype.names) == len(self._distributions)
-        #assert samples.shape[0] == parameters.shape[0]
-
-        #if out is None:
-            #out = numpy.empty((samples.shape[0], samples.shape[1]), numpy.float_)
-        #else:
-            #assert samples.shape[0] == out.shape[0]
-            #assert samples.shape[1] == out.shape[1]
-
-        ## computation
-        #for (name, distribution) in zip(self._names, self._distributions):
-            #distribution.ll(parameters[name], samples[name], out[name])
-
-        #return out
-
-    #def ml(
-                                   #self,
-        #ndarray                    samples, # ndim = 1
-        #ndarray[float_t, ndim = 1] weights,
-                                   #random = numpy.random,
-        #):
-        #"""
-        #Return the estimated maximum-likelihood parameter.
-        #"""
-
-        ##parameters = numpy.
-
-    #@property
-    #def distributions(self):
-        #"""
-        #Return the inner distributions.
-        #"""
-
-        #return self._distributions
-
-    #@property
-    #def parameter_dtype(self):
-        #"""
-        #Type of distribution parameter(s).
-        #"""
-
-        #return self._parameter_dtype
-
-    #@property
-    #def sample_dtype(self):
-        #"""
-        #Type of distribution parameter(s).
-        #"""
-
-        #return self._sample_dtype
-
-#class Tuple(Distribution):
-    #"""
-    #A tuple of independent distributions.
-    #"""
-
-    #def __init__(self, distributions):
-        #"""
-        #Initialize.
-        #"""
-
-        ## members
-        #self._distributions   = distributions
-        #self._names           = ["d%i" % i for i in xrange(len(distributions))]
-        ##self._parameter_dtype = \
-            ##numpy.dtype([
-                ##(n, d.parameter_dtype)
-                ##for n in self._names
-                ##for d in distributions
-                ##])
-        ##self._sample_dtype    = \
-            ##numpy.dtype([
-                ##(n, d.sample_dtype)
-                ##for n in self._names
-                ##for d in distributions
-                ##])
-
-        ## base
-        #Distribution.__init__(self)
-
-    #def core(self, module):
-        #"""
-        #Build LLVM operations for this distribution.
-        #"""
-
-        #LowTuple.__init__(self, module, [d.core(module) for d in distributions])
 

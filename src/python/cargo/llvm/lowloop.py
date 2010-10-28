@@ -75,23 +75,6 @@ class StridedArrays(object):
 
         return decorator
 
-    def load_all(self):
-        """
-        Emit IR to load each array into an SSA register.
-        """
-
-        load_array = lambda (k, v): (k, v.load())
-
-        return dict(map(load_array, self._arrays.items()))
-
-    def store_all(self, rhs):
-        """
-        Emit IR to copy other arrays into these.
-        """
-
-        for (k, v) in self._arrays.items():
-            v.store(rhs.arrays[k])
-
     @property
     def arrays(self):
         """
@@ -144,7 +127,7 @@ class StridedArray(object):
     Emit IR for interaction with a strided array.
     """
 
-    def __init__(self, strided_data, shape, strides):
+    def __init__(self, strided_data, shape, strides, element_type):
         """
         Initialize.
         """
@@ -152,6 +135,7 @@ class StridedArray(object):
         self._strided_data = strided_data
         self._shape        = shape
         self._strides      = strides
+        self._element_type = element_type
 
     def at(self, *indices):
         """
@@ -177,11 +161,12 @@ class StridedArray(object):
                 self._strided_data.gep(*offsets),
                 self._shape[len(indices):],
                 self._strides[len(indices):],
+                self._element_type,
                 )
 
     def envelop(self, axes = 1):
         """
-        Add new unit dimensions.
+        Add preceding unit dimensions.
         """
 
         return \
@@ -189,14 +174,28 @@ class StridedArray(object):
                 self._strided_data,
                 [1] + self._shape,
                 [0] + self._strides,
+                self._element_type,
                 )
+
+    def extract(self, *indices):
+        """
+        Build an array over an aggregate member.
+        """
+
+        # XXX need to include axes which may have emerged
+        # XXX need some general clarification of the StridedArray model?
+
+        simple_data = self._strided_data.cast_to(Type.pointer(self._element_type))
+        inner_data  = simple_data.gep(*indices)
+
+        return StridedArray.from_raw(inner_data, self._shape, self._strides)
 
     def using(self, strided_data):
         """
         Return an equivalent array using a different data pointer.
         """
 
-        return StridedArray(strided_data, self._shape, self._strides)
+        return StridedArray(strided_data, self._shape, self._strides, self._element_type)
 
     @property
     def data(self):
@@ -251,7 +250,7 @@ class StridedArray(object):
         (strided_type, _) = get_strided_type(data.type_.pointee, shape, strides)
         strided_data      = data.cast_to(Type.pointer(strided_type))
 
-        return StridedArray(strided_data, shape, strides)
+        return StridedArray(strided_data, shape, strides, data.type_.pointee)
 
     @staticmethod
     def from_numpy(ndarray):
@@ -261,9 +260,9 @@ class StridedArray(object):
 
         # XXX maintain reference to array in module; decref in destructor
 
-        from cargo.llvm import dtype_to_type
+        from cargo.llvm import type_from_dtype
 
-        type_         = dtype_to_type(ndarray.dtype)
+        type_         = type_from_dtype(ndarray.dtype)
         (location, _) = ndarray.__array_interface__["data"]
         data          = Constant.int(iptr_type, location).inttoptr(Type.pointer(type_))
 
@@ -278,7 +277,7 @@ class StridedArray(object):
         if data.type_.kind != llvm.core.TYPE_POINTER:
             raise TypeError("pointer value required")
         elif data.type_.kind != llvm.core.TYPE_ARRAY:
-            return StridedArray(data, (), ())
+            return StridedArray(data, (), (), data.type_)
         else:
             raise NotImplementedError()
 

@@ -4,6 +4,7 @@
 
 import ctypes
 import numpy
+import llvm.core
 
 from llvm.core  import (
     Type,
@@ -74,7 +75,7 @@ def get_type_size(type_):
 sizeof_type = get_type_size
 
 # XXX type_from_struct_dtype, etc?
-def struct_dtype_to_type(dtype):
+def type_from_struct_type(dtype):
     """
     Build an LLVM type matching a numpy struct dtype.
     """
@@ -87,28 +88,38 @@ def struct_dtype_to_type(dtype):
         if offset != position:
             raise NotImplementedError("no support for dtypes with nonstandard packing")
         else:
-            members  += [dtype_to_type(field_dtype)]
+            members  += [type_from_dtype(field_dtype)]
             position += field_dtype.itemsize
 
     return Type.packed_struct(members)
 
-def dtype_to_type(dtype):
+def type_from_shaped_dtype(base, shape):
+    """
+    Build an LLVM type matching a shaped numpy dtype.
+    """
+
+    if shape:
+        return Type.array(type_from_shaped_dtype(base, shape[1:]), shape[0])
+    else:
+        return type_from_dtype(base)
+
+def type_from_dtype(dtype):
     """
     Build an LLVM type matching a numpy dtype.
     """
 
-    if numpy.issubdtype(dtype, numpy.integer):
+    if dtype.shape:
+        return type_from_shaped_dtype(dtype.base, dtype.shape)
+    elif numpy.issubdtype(dtype, numpy.integer):
         return Type.int(dtype.itemsize * 8)
     elif dtype == numpy.float64:
         return Type.double()
     elif dtype == numpy.float32:
         return Type.float()
     elif dtype.fields:
-        return struct_dtype_to_type(dtype)
+        return type_from_struct_type(dtype)
     else:
         raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
-
-type_from_dtype = dtype_to_type
 
 def dtype_from_integer_type(type_):
     """
@@ -123,6 +134,17 @@ def dtype_from_integer_type(type_):
         }
 
     return sizes[type_.width]
+
+def dtype_from_array_type(type_):
+    """
+    Build a numpy dtype from an LLVM array type.
+    """
+
+    from cargo.numpy import normalize_dtype
+
+    raw_dtype = numpy.dtype(dtype_from_type(type_.element), (type_.count))
+
+    return normalize_dtype(raw_dtype)
 
 def dtype_from_struct_type(type_):
     """
@@ -141,13 +163,12 @@ def dtype_from_type(type_):
     Build a numpy dtype from an LLVM type.
     """
 
-    from llvm import core
-
     mapping = {
-        core.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
-        core.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
-        core.TYPE_INTEGER : dtype_from_integer_type,
-        core.TYPE_STRUCT  : dtype_from_struct_type,
+        llvm.core.TYPE_FLOAT   : (lambda _ : numpy.dtype(numpy.float32)),
+        llvm.core.TYPE_DOUBLE  : (lambda _ : numpy.dtype(numpy.float64)),
+        llvm.core.TYPE_INTEGER : dtype_from_integer_type,
+        llvm.core.TYPE_STRUCT  : dtype_from_struct_type,
+        llvm.core.TYPE_ARRAY   : dtype_from_array_type,
         }
 
     return mapping[type_.kind](type_)
