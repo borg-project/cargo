@@ -236,10 +236,6 @@ class FiniteMixtureEmitter(object):
 
                     (responsibility.load() / total_value).store(responsibility)
 
-                    #@high.python(n, k, responsibility.load())
-                    #def _(n_py, k_py, r_py):
-                        #print "responsibility of %s for %s is %s" % (k_py, n_py, r_py)
-
             # make maximum-likelihood estimates
             @high.for_(K)
             def _(k):
@@ -259,55 +255,57 @@ class FiniteMixtureEmitter(object):
 
                 (total.load() / float(N)).store(component.gep(0, 0))
 
-    #def given(self, parameters, samples, out = None):
-        #"""
-        #Return the conditional distribution.
-        #"""
+    def given(self, parameter, samples, out):
+        """
+        Return the conditional distribution.
+        """
 
-        ## arguments
-        #from cargo.numpy import semicast
+        # mise en place
+        K   = self._model._K
+        N   = samples.shape[0]
+        exp = HighFunction("exp", float, [float])
 
-        #parameters = numpy.asarray(parameters, self._parameter_dtype.base)
-        #samples    = numpy.asarray(samples   , self.sample_dtype         )
+        # compute posterior mixture parameters
+        # XXX eeek leaking stack space
+        total = high.stack_allocate(float, 0.0)
 
-        #if out is None:
-            #(parameters, samples) = \
-                #semicast(
-                    #(parameters, -1                                   ),
-                    #(samples   , -len(self.sample_dtype.shape) or None),
-                    #)
+        @high.for_(K)
+        def _(k):
+            component           = out.at(k).data
+            component_pi        = component.gep(0, 0)
+            component_parameter = parameter.at(k).data.gep(0, 1)
 
-            #print parameters.shape, samples.shape
+            log(parameter.at(k).data.gep(0, 0).load()).store(component_pi)
 
-            #out = numpy.empty_like(parameters)
-        #else:
-            #(parameters, samples, _) = \
-                #semicast(
-                    #(parameters, -1                                   ),
-                    #(samples   , -len(self.sample_dtype.shape) or None),
-                    #(out       , -1                                   ),
-                    #)
+            # XXX clean up above, out / parameter distinction
 
-            #assert out.shape == parameters.shape
+            @high.for(N)
+            def _(n):
+                previous = component_pi.load()
 
-        ## compute posterior mixture parameters
-        #out["p"]  = parameters["p"]
+                self._sub_emitter.ll(component_parameter, samples, component_pi)
 
-        #ll = self._distribution.ll(parameters["c"], samples[..., None])
+                (component_pi.load() + previous).store(component_pi)
 
-        #if ll.ndim > 1:
-            #sum_ll = numpy.sum(ll, -2)
-        #else:
-            #sum_ll = ll
+            exped = exp(component_pi.load())
 
-        #out["p"] *= numpy.exp(sum_ll)
-        #out["p"] /= numpy.sum(out["p"], -1)[..., None]
+            exped.store(component_pi)
 
-        ## compute posterior mixture components
-        #self._distribution.given(parameters["c"], samples[..., None], out["c"])
+            (total.load() + exped).store(total)
 
-        ## done
-        #return out
+        @high.for_(K)
+        def _(k):
+            component_pi = out.at(k).data.gep(0, 0)
+
+            (component_pi.load() / total.load()).store(component_pi)
+
+        @high.for_(K)
+        def _(k):
+            self._sub_emitter.given(
+                StridedArray.from_typed_pointer(parameter.at(k).data.gep(0, 1)),
+                samples,
+                StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
+                )
 
 #class RestartingML(object):
     #"""
