@@ -35,18 +35,19 @@ def test_binomial_ll():
 
 def test_binomial_ml():
     """
-    Test log-probability computation in the binomial distribution.
+    Test max-likelihood estimation under the binomial distribution.
     """
 
     me = ModelEngine(Binomial(estimation_n = 2))
 
     assert_almost_equal_deep(
         me.ml(
-            [[(1, 2), (4, 5)],
-             [(3, 4), (8, 8)]],
+            [[1, 2],
+             [2, 0]],
             numpy.ones((2, 2)),
-            ),
-        [5.0 / 7.0, 11.0 / 12.0],
+            ) \
+            .tolist(),
+        [(0.75, 2), (0.50, 2)],
         )
 
 def test_mixed_binomial_ll():
@@ -70,7 +71,7 @@ def test_mixed_binomial_ll():
 
 def test_mixed_binomial_ml():
     """
-    Test log-probability computation in the mixed binomial distribution.
+    Test max-likelihood estimation under the mixed binomial distribution.
     """
 
     me = ModelEngine(MixedBinomial())

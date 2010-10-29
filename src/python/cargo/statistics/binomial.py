@@ -23,7 +23,7 @@ class Binomial(object):
     - sample    : uint32
     """
 
-    def __init__(self, estimation_n = None):
+    def __init__(self, estimation_n = None, epsilon = 0.0):
         """
         Initialize.
         """
@@ -31,13 +31,14 @@ class Binomial(object):
         self._parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
         self._sample_dtype    = numpy.dtype(numpy.int32)
         self._estimation_n    = estimation_n # XXX MASSIVE HACK; needs to go away
+        self._epsilon         = epsilon
 
     def get_emitter(self, module):
         """
         Return IR emitter.
         """
 
-        return BinomialEmitter(module)
+        return BinomialEmitter(self, module)
 
     @property
     def parameter_dtype(self):
@@ -60,10 +61,14 @@ class BinomialEmitter(object):
     Build low-level operations of the binomial distribution.
     """
 
-    def __init__(self, module):
+    def __init__(self, model, module):
         """
         Initialize.
         """
+
+        # members
+        self._model  = model
+        self._module = module
 
         # link the GSL
         import ctypes
@@ -134,11 +139,11 @@ class BinomialEmitter(object):
             sample = samples.at(n).data.load().cast_to(float)
 
             (total_k.load() + sample * weight).store(total_k)
-            (total_w.load() + weight).store(total_w)
+            (total_w.load() + weight * float(self._model._estimation_n)).store(total_w)
 
         final_ratio = \
               (total_k.load() + self._model._epsilon) \
-            / (total_w.load() * self._model._estimation_n * samples.shape[0] + self._model._epsilon)
+            / (total_w.load() + self._model._epsilon)
 
         final_ratio.store(out.data.gep(0, 0))
         high.value(self._model._estimation_n).store(out.data.gep(0, 1))

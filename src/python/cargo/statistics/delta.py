@@ -21,10 +21,10 @@ class Delta(object):
         Initialize.
         """
 
-        from cargo.llvm import dtype_to_type
+        from cargo.llvm import type_from_dtype
 
         self._dtype = numpy.dtype(dtype)
-        self._type  = dtype_to_type(self._dtype)
+        self._type  = type_from_dtype(self._dtype)
 
         # we can only support (for now) types that provide simple equality tests
         supported = set([

@@ -5,6 +5,7 @@
 install(
     FILES
         __init__.py
+		triggered.py
     DESTINATION lib/cargo/tools
     )
 

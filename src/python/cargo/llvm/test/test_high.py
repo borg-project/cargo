@@ -123,3 +123,23 @@ def test_high_random_int():
     assert_true(len(filter(None, values)) > 8)
     assert_true(len(filter(None, values)) < 24)
 
+def test_high_select():
+    """
+    Test the select() LLVM construct without arguments.
+    """
+
+    result = [None, None]
+
+    @emit_and_execute()
+    def _(_):
+        v0 = high.select(True, 3, 4)
+        v1 = high.select(False, 3, 4)
+
+        @high.python(v0, v1)
+        def _(v0_py, v1_py):
+            result[0] = v0_py
+            result[1] = v1_py
+
+    assert_equal(result[0], 3)
+    assert_equal(result[1], 4)
+

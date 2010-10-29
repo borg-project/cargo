@@ -30,12 +30,11 @@ def log_add_double(x, y):
     exp   = HighFunction("exp"  , float, [float])
     log1p = HighFunction("log1p", float, [float])
 
-    return \
-        high.select(
-            x >= y,
-            x + log1p(exp(y - x)),
-            y + log1p(exp(x - y)),
-            )
+    condition = x >= y
+    chosen_x  = high.select(condition, x, y)
+    chosen_y  = high.select(condition, y, x)
+
+    return chosen_x + log1p(exp(chosen_y - chosen_x))
 
 class FiniteMixture(object):
     """
@@ -146,22 +145,34 @@ class FiniteMixtureEmitter(object):
         log = HighFunction("log", float, [float])
 
         # XXX eeek leaking stack space
-        total        = high.stack_allocate(Type.double())
+        total        = high.stack_allocate(Type.double(), numpy.finfo(float).min)
         component_ll = high.stack_allocate(Type.double())
-
-        high.value(numpy.finfo(float).min).store(total)
 
         @high.for_(self._model._K)
         def _(index):
             component = parameter.at(index)
 
-            self._sub_emitter.ll(component.gep(0, 1), sample, component_ll)
+            self._sub_emitter.ll(
+                StridedArray.from_typed_pointer(component.data.gep(0, 1)),
+                sample,
+                component_ll,
+                )
+
+            @high.python(total.load(), component_ll.load())
+            def _(ll_py, cl_py):
+                print "total ll", ll_py
+                print "component ll", cl_py
 
             log_add_double(
                 total.load(),
-                log(component.gep(0, 0).load()) + component_ll.load(),
+                log(component.data.gep(0, 0).load()) + component_ll.load(),
                 ) \
                 .store(total)
+
+            @high.python(component.data.gep(0, 0).load(), total.load())
+            def _(pi_py, ll_py):
+                print "log pi", pi_py
+                print "total ll", ll_py
 
         total.load().store(out)
 
@@ -223,7 +234,11 @@ class FiniteMixtureEmitter(object):
                 def _(k):
                     responsibility = r_KN.at(k, n).data
 
-                    self._sub_emitter.ll(out.at(k).data.gep(0, 1), sample.data, responsibility)
+                    self._sub_emitter.ll(
+                        StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
+                        StridedArray.from_typed_pointer(sample.data),
+                        responsibility,
+                        )
 
                     exp(responsibility.load()).store(responsibility)
 

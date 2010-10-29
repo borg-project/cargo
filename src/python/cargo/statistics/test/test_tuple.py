@@ -57,7 +57,10 @@ def test_tuple_ml():
     engine = ModelEngine(model)
 
     assert_almost_equal(
-        engine.ml([([0, 1], [0])] * 2500 + [([1, 0], [1])] * 7500),
+        engine.ml(
+            [([0, 1], [0])] * 2500 + [([1, 0], [1])] * 7500,
+            numpy.ones(10000),
+            ),
         ([(0.75, 1), (0.25, 1)], [(0.75, 1)]),
         )
     assert_almost_equal(

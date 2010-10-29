@@ -148,11 +148,11 @@ class HighStandard(object):
         """
 
         return \
-            self.value(
+            self.value_from_any(
                 self.builder.select(
-                    self.value(boolean)._value,
-                    self.value(if_true)._value,
-                    self.value(if_false)._value,
+                    self.value_from_any(boolean)._value,
+                    self.value_from_any(if_true)._value,
+                    self.value_from_any(if_false)._value,
                     ),
                 )
 
@@ -202,7 +202,7 @@ class HighStandard(object):
         allocated = HighValue.from_low(self.builder.alloca(self.type_from_any(type_)))
 
         if initial is not None:
-            self.value(initial).store(allocated)
+            self.value_from_any(initial).store(allocated)
 
         return allocated
 
@@ -322,8 +322,6 @@ class HighValue(object):
         """
         Return the result of a subtraction.
         """
-
-        return high.value(high.builder.fdiv(self._value, high.value(other)._value))
 
         other    = high.value(other)
         lhs_kind = self._value.type.kind
@@ -487,6 +485,8 @@ class HighValue(object):
                 HighValue.from_low(
                     Constant.real(Type.double(), value),
                     )
+        elif isinstance(value, bool):
+            return HighValue.from_low(Constant.int(Type.int(1), int(value)))
         else:
             raise TypeError("cannot build value from \"%s\" instance" % type(value))
 
@@ -505,6 +505,8 @@ class HighValue(object):
             return HighIntegerValue(value)
         elif value.type.kind == llvm.core.TYPE_DOUBLE:
             return HighRealValue(value)
+        elif value.type.kind == llvm.core.TYPE_POINTER:
+            return HighPointerValue(value)
         else:
             return HighValue(value)
 
@@ -536,12 +538,12 @@ class HighRealValue(HighValue):
 
         return float_from_double(self._value)
 
-class HighPointer(HighValue):
+class HighPointerValue(HighValue):
     """
     Pointer value in the wrapper language.
     """
 
-class HighStruct(HighValue):
+class HighStructValue(HighValue):
     """
     Struct value in the wrapper language.
     """
