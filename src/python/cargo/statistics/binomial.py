@@ -157,7 +157,7 @@ class MixedBinomial(object):
     - sample    : {uint32 k; uint32 n;}
     """
 
-    def __init__(self, epsilon = 0.0):
+    def __init__(self, epsilon = 1e-3):
         """
         Initialize.
         """
@@ -262,6 +262,8 @@ class MixedBinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
+        import math
+
         total_k = high.stack_allocate(float, 0.0)
         total_n = high.stack_allocate(float, 0.0)
 
@@ -273,6 +275,11 @@ class MixedBinomialEmitter(object):
 
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
+
+            @high.python(total_k.load(), total_n.load())
+            def _(k_py, n_py):
+                if isnan(k_py) or isnan(n_py):
+                    print "k", k_py, "n", n_py
 
         final_ratio = \
               (total_k.load() + self._model._epsilon) \

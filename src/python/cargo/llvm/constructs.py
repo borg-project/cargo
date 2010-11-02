@@ -11,8 +11,10 @@ from llvm.core  import (
     Constant,
     )
 from contextlib import contextmanager
+from cargo.log  import get_logger
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
+logger    = get_logger(__name__, level = "DEBUG")
 
 def constant_pointer(address, type_):
     """
@@ -26,7 +28,7 @@ def constant_pointer_to(object_, type_):
     Return an LLVM pointer constant to a Python object.
     """
 
-    # XXX do this without calling id (ctypes?)
+    # XXX do this without calling id (using ctypes?)
 
     return constant_pointer(id(object_), type_)
 
@@ -40,28 +42,59 @@ def emit_and_execute(module_name = ""):
         from llvm.core  import (
             Module,
             Builder,
+            Function,
+            GlobalVariable,
             )
         from cargo.llvm import this_builder
 
         module = Module.new(module_name)
-        main   = module.add_function(Type.function(Type.void(), []), "main")
-        entry  = main.append_basic_block("entry")
+
+        # prepare for exception handling
+        context = GlobalVariable.new(module, Type.array(iptr_type, 5), "main_context")
+        setjmp  = Function.intrinsic(module, llvm.core.INTR_SETJMP, [])
+
+        context.linkage     = llvm.core.LINKAGE_INTERNAL
+        context.initializer = Constant.null(Type.array(iptr_type, 5))
+
+        # prepare for code generation
+        main    = module.add_function(Type.function(Type.void(), []), "main")
+        entry   = main.append_basic_block("entry")
 
         with this_builder(Builder.new(entry)) as builder:
+            # emit the module body
+            body = main.append_basic_block("body")
+            exit = main.append_basic_block("exit")
+
+            i8_context = builder.bitcast(context, Type.pointer(Type.int(8)))
+            jumped     = builder.call(setjmp, [i8_context], "jumped")
+
+            builder.cbranch(
+                builder.icmp(llvm.core.ICMP_EQ, jumped, Constant.int(Type.int(32), 0)),
+                body,
+                exit,
+                )
+            builder.position_at_end(body)
+
             emit(module)
 
+            builder.branch(exit)
+            builder.position_at_end(exit)
             builder.ret_void()
 
-        # then compile and execute it
-        from llvm.ee import ExecutionEngine
-
         print module
+        #logger.debug("verifying LLVM IR for execution:\n%s", module)
 
         module.verify()
+
+        # then compile and execute it
+        from llvm.ee            import ExecutionEngine
+        from cargo.llvm.support import raise_if_set
 
         engine = ExecutionEngine.new(module)
 
         engine.run_function(main, [])
+
+        raise_if_set()
 
     return decorator
 
@@ -74,7 +107,6 @@ def get_type_size(type_):
 
 sizeof_type = get_type_size
 
-# XXX type_from_struct_dtype, etc?
 def type_from_struct_type(dtype):
     """
     Build an LLVM type matching a numpy struct dtype.

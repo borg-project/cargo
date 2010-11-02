@@ -7,6 +7,8 @@ import numpy
 
 from cargo.llvm import HighFunction
 
+from cpython.exc cimport PyErr_Occurred
+
 cdef double random_double():
     """
     Emit a PRNG invocation.
@@ -38,4 +40,14 @@ def emit_random_int(high, upper, width):
     c_random_int = HighFunction(<long>&random_int, ctypes.c_long, [ctypes.c_long])
 
     return c_random_int(upper)
+
+cpdef int raise_if_set() except 1:
+    """
+    Force the Python runtime to notice an exception, if one is set.
+    """
+
+    if PyErr_Occurred():
+        return 1
+    else:
+        return 0
 

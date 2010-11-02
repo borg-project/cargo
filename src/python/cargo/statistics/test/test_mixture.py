@@ -20,6 +20,32 @@ from cargo.statistics          import (
     MixedBinomial,
     )
 
+def test_finite_mixture_rv():
+    """
+    Test finite-mixture random-variate generation.
+    """
+
+    d = FiniteMixture(Delta(float), 2)
+    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
+    s = numpy.empty(32768)
+
+    d.rv(p, s, RandomState(42))
+
+    assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
+    assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
+
+def test_finite_mixture_ll():
+    """
+    Test finite-mixture log-likelihood computation.
+    """
+
+    engine = ModelEngine(FiniteMixture(Delta(float), 2))
+    p = [[(0.25, 1.0), (0.75, 2.0)]]
+
+    assert_almost_equal(engine.ll(p,   1.0 ), numpy.log(0.25))
+    assert_almost_equal(engine.ll(p, [ 2.0]), numpy.log(0.75))
+    assert_almost_equal(engine.ll(p, [42.0]), numpy.finfo(float).min)
+
 def assert_finite_mixture_ml_ok(me):
     """
     Verify EM estimation of finite mixture distributions.
@@ -50,32 +76,6 @@ def test_finite_mixture_ml():
     me = ModelEngine(FiniteMixture(MixedBinomial(epsilon = 0.0), 2))
 
     assert_finite_mixture_ml_ok(me)
-
-def test_finite_mixture_ll():
-    """
-    Test finite-mixture log-likelihood computation.
-    """
-
-    engine = ModelEngine(FiniteMixture(Delta(float), 2))
-    p = [[(0.25, 1.0), (0.75, 2.0)]]
-
-    assert_almost_equal(engine.ll(p,   1.0 ), numpy.log(0.25))
-    assert_almost_equal(engine.ll(p, [ 2.0]), numpy.log(0.75))
-    assert_almost_equal(engine.ll(p, [42.0]), numpy.finfo(float).min)
-
-def test_finite_mixture_rv():
-    """
-    Test finite-mixture random-variate generation.
-    """
-
-    d = FiniteMixture(Delta(float), 2)
-    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
-    s = numpy.empty(32768)
-
-    d.rv(p, s, RandomState(42))
-
-    assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
-    assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
 
 def test_finite_mixture_given():
     """

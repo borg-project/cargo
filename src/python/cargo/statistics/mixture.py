@@ -30,11 +30,11 @@ def log_add_double(x, y):
     exp   = HighFunction("exp"  , float, [float])
     log1p = HighFunction("log1p", float, [float])
 
-    condition = x >= y
-    chosen_x  = high.select(condition, x, y)
-    chosen_y  = high.select(condition, y, x)
+    b  = x >= y
+    x_ = high.select(b, x, y)
+    y_ = high.select(b, y, x)
 
-    return chosen_x + log1p(exp(chosen_y - chosen_x))
+    return x_ + log1p(exp(y_ - x_))
 
 class FiniteMixture(object):
     """
@@ -56,7 +56,7 @@ class FiniteMixture(object):
                     ("p", numpy.float64),
                     ("c", distribution.parameter_dtype),
                     ],
-                K,
+                (K,),
                 ))
 
     def get_emitter(self, module):
@@ -208,10 +208,6 @@ class FiniteMixtureEmitter(object):
 
             (total.load() + r).store(total)
 
-            @high.python(k, r)
-            def _(k_py, r_py):
-                print k_py, r_py
-
         @high.for_(K)
         def _(k):
             p = out.at(k).data.gep(0, 0)
@@ -241,6 +237,10 @@ class FiniteMixtureEmitter(object):
                         )
 
                     exp(responsibility.load()).store(responsibility)
+
+                    @high.python(total.load(), responsibility.load())
+                    def _(total_py, r_py):
+                        print "total", total_py, "r", r_py
 
                     (total.load() + responsibility.load()).store(total)
 

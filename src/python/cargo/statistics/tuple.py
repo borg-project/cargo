@@ -12,6 +12,9 @@ from cargo.llvm import (
 class Tuple(object):
     """
     A tuple of independent distributions.
+
+    - parameter : {d0_parameter_t d0[d0_count]; d1_parameter_t d1[d1_count]; ...}
+    - sample    : {d0_sample_t d0[d0_count]; d1_sample_t d1[d1_count]; ...}
     """
 
     def __init__(self, distributions):

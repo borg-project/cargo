@@ -2,6 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from __future__ import absolute_import
+
 import numpy
 
 def get_random_random(random = numpy.random):

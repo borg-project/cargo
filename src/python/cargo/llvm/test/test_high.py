@@ -5,6 +5,7 @@
 from nose.tools import (
     assert_true,
     assert_equal,
+    assert_raises,
     assert_almost_equal,
     )
 from cargo.llvm import (
@@ -43,6 +44,44 @@ def test_high_python_arguments():
                 values.append(j)
 
     assert_equal(values, range(8))
+
+def test_high_python_exception():
+    """
+    Test exception handling in the python() LLVM construct.
+    """
+
+    class ExpectedException(Exception):
+        pass
+
+    def should_raise():
+        @emit_and_execute()
+        def _(_):
+            @high.python()
+            def _():
+                raise ExpectedException()
+
+    assert_raises(ExpectedException, should_raise)
+
+def test_high_python_exception_short_circuiting():
+    """
+    Test short-circuiting of exceptions in the python() LLVM construct.
+    """
+
+    class ExpectedException(Exception):
+        pass
+
+    def should_raise():
+        @emit_and_execute()
+        def _(_):
+            @high.python()
+            def _():
+                raise ExpectedException()
+
+            @high.python()
+            def _():
+                assert_true(False, "control flow was not short-circuited")
+
+    assert_raises(ExpectedException, should_raise)
 
 def test_high_for_():
     """

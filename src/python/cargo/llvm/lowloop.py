@@ -266,7 +266,7 @@ class StridedArray(object):
         (location, _) = ndarray.__array_interface__["data"]
         data          = Constant.int(iptr_type, location).inttoptr(Type.pointer(type_))
 
-        return StridedArray.from_raw(high.value(data), ndarray.shape, ndarray.strides)
+        return StridedArray.from_raw(high.value_from_any(data), ndarray.shape, ndarray.strides)
 
     @staticmethod
     def from_typed_pointer(data):
