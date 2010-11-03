@@ -153,21 +153,11 @@ class FiniteMixtureEmitter(object):
                 component_ll,
                 )
 
-            #@high.python(total.load(), component_ll.load())
-            #def _(ll_py, cl_py):
-                #print "total ll", ll_py
-                #print "component ll", cl_py
-
             log_add_double(
                 total.load(),
                 high.log(component.data.gep(0, 0).load()) + component_ll.load(),
                 ) \
                 .store(total)
-
-            #@high.python(component.data.gep(0, 0).load(), total.load())
-            #def _(pi_py, ll_py):
-                #print "log pi", pi_py
-                #print "total ll", ll_py
 
         total.load().store(out)
 

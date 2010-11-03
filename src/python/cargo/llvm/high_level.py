@@ -68,12 +68,12 @@ class HighStandard(object):
     Provide a simple higher-level Python-embedded language on top of LLVM.
     """
 
-    def __init__(self, nan_tests = False):
+    def __init__(self, test_for_nan = False):
         """
         Initialize.
         """
 
-        self._nan_tests = nan_tests
+        self._test_for_nan = test_for_nan
 
     def value_from_any(self, value):
         """
@@ -268,7 +268,7 @@ class HighStandard(object):
         log    = HighFunction.intrinsic(llvm.core.INTR_LOG, [float])
         result = log(value)
 
-        if self._nan_tests:
+        if self._test_for_nan:
             self.assert_(~result.is_nan, "result of log(%s) is not a number", value)
 
         return result
@@ -281,7 +281,7 @@ class HighStandard(object):
         log1p  = HighFunction.named("log1p", float, [float])
         result = log1p(value)
 
-        if self._nan_tests:
+        if self._test_for_nan:
             self.assert_(~result.is_nan, "result of log1p(%s) is not a number", value)
 
         return result
@@ -294,7 +294,7 @@ class HighStandard(object):
         exp    = HighFunction.intrinsic(llvm.core.INTR_EXP, [float])
         result = exp(value)
 
-        if self._nan_tests:
+        if self._test_for_nan:
             self.assert_(~result.is_nan, "result of exp(%s) is not a number", value)
 
         return result
@@ -399,7 +399,23 @@ class HighStandard(object):
             self.basic_block.instructions                       \
             and self.basic_block.instructions[-1].is_terminator
 
-high = HighStandard(nan_tests = True)
+    @property
+    def test_for_nan(self):
+        """
+        Is NaN testing enabled?
+        """
+
+        return self._test_for_nan
+
+    @test_for_nan.setter
+    def test_for_nan(self, test_for_nan):
+        """
+        Is NaN testing enabled?
+        """
+
+        self._test_for_nan = test_for_nan
+
+high = HighStandard(test_for_nan = True)
 
 class HighValue(object):
     """
@@ -426,86 +442,6 @@ class HighValue(object):
         """
 
         return "HighValue.from_low(%s)" % repr(self._value)
-
-    def __add__(self, other):
-        """
-        Return the result of an addition.
-        """
-
-        other    = high.value_from_any(other)
-        lhs_kind = self._value.type.kind
-        rhs_kind = other._value.type.kind
-
-        if lhs_kind != rhs_kind:
-            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
-        elif lhs_kind == llvm.core.TYPE_INTEGER:
-            low_value = high.builder.add(self._value, other._value)
-        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
-            low_value = high.builder.fadd(self._value, other._value)
-        else:
-            raise TypeError("unsupported argument types for addition")
-
-        return HighValue.from_low(low_value)
-
-    def __sub__(self, other):
-        """
-        Return the result of a subtraction.
-        """
-
-        other    = high.value_from_any(other)
-        lhs_kind = self._value.type.kind
-        rhs_kind = other._value.type.kind
-
-        if lhs_kind != rhs_kind:
-            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
-        elif lhs_kind == llvm.core.TYPE_INTEGER:
-            low_value = high.builder.sub(self._value, other._value)
-        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
-            low_value = high.builder.fsub(self._value, other._value)
-        else:
-            raise TypeError("unsupported argument types for subtraction")
-
-        return HighValue.from_low(low_value)
-
-    def __mul__(self, other):
-        """
-        Return the result of a multiplication.
-        """
-
-        other    = high.value_from_any(other)
-        lhs_kind = self._value.type.kind
-        rhs_kind = other._value.type.kind
-
-        if lhs_kind != rhs_kind:
-            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
-        elif lhs_kind == llvm.core.TYPE_INTEGER:
-            low_value = high.builder.mul(self._value, other._value)
-        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
-            low_value = high.builder.fmul(self._value, other._value)
-        else:
-            raise TypeError("unsupported argument types for multiplication")
-
-        return HighValue.from_low(low_value)
-
-    def __div__(self, other):
-        """
-        Return the result of a division.
-        """
-
-        other    = high.value_from_any(other)
-        lhs_kind = self._value.type.kind
-        rhs_kind = other._value.type.kind
-
-        if lhs_kind != rhs_kind:
-            raise TypeError("mismatched arguments (%s != %s)" % (lhs_kind, rhs_kind))
-        elif lhs_kind == llvm.core.TYPE_INTEGER:
-            low_value = high.builder.sdiv(self._value, other._value)
-        elif lhs_kind in (llvm.core.TYPE_DOUBLE, llvm.core.TYPE_FLOAT):
-            low_value = high.builder.fdiv(self._value, other._value)
-        else:
-            raise TypeError("unsupported argument types for division")
-
-        return HighValue.from_low(low_value)
 
     def store(self, pointer):
         """
@@ -588,7 +524,7 @@ class HighValue(object):
 
 class CoercionError(TypeError):
     """
-    Failure to coerce a value to that of another type.
+    Failed to coerce a value to that of another type.
     """
 
     def __init__(self, from_type, to_type):
@@ -612,6 +548,42 @@ class HighIntegerValue(HighValue):
         """
 
         return high.builder.xor(self._value, Constant.int(self.type_, -1))
+
+    def __add__(self, other):
+        """
+        Return the result of an addition.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+
+        return HighValue.from_low(high.builder.add(self._value, other._value))
+
+    def __sub__(self, other):
+        """
+        Return the result of a subtraction.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+
+        return HighValue.from_low(high.builder.sub(self._value, other._value))
+
+    def __mul__(self, other):
+        """
+        Return the result of a multiplication.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+
+        return HighValue.from_low(high.builder.mul(self._value, other._value))
+
+    def __div__(self, other):
+        """
+        Return the result of a division.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+
+        return HighValue.from_low(high.builder.sdiv(self._value, other._value))
 
     def cast_to(self, type_, name = ""):
         """
@@ -683,6 +655,58 @@ class HighRealValue(HighValue):
                     high.value_from_any(other)._value,
                     ),
                 )
+
+    def __add__(self, other):
+        """
+        Return the result of an addition.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+        value = HighValue.from_low(high.builder.fadd(self._value, other._value))
+
+        if high.test_for_nan:
+            high.assert_(~value.is_nan, "result of %s + %s is not a number", other, self)
+
+        return value
+
+    def __sub__(self, other):
+        """
+        Return the result of a subtraction.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+        value = HighValue.from_low(high.builder.fsub(self._value, other._value))
+
+        if high.test_for_nan:
+            high.assert_(~value.is_nan, "result of %s - %s is not a number", other, self)
+
+        return value
+
+    def __mul__(self, other):
+        """
+        Return the result of a multiplication.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+        value = HighValue.from_low(high.builder.fmul(self._value, other._value))
+
+        if high.test_for_nan:
+            high.assert_(~value.is_nan, "result of %s * %s is not a number", other, self)
+
+        return value
+
+    def __div__(self, other):
+        """
+        Return the result of a division.
+        """
+
+        other = high.value_from_any(other).cast_to(self.type_)
+        value = HighValue.from_low(high.builder.fdiv(self._value, other._value))
+
+        if high.test_for_nan:
+            high.assert_(~value.is_nan, "result of %s / %s is not a number", other, self)
+
+        return value
 
     @property
     def is_nan(self):

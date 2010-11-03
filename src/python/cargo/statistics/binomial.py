@@ -218,22 +218,12 @@ class MixedBinomialEmitter(object):
 
         pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
-        high.printf(
-            "k = %s; p = %s; n = %s; pdf = %s (%s?)",
-            sample.data.gep(0, 0).load(),
-            parameter.data.load(),
-            sample.data.gep(0, 1).load(),
-            pdf(
-                sample.data.gep(0, 0).load(),
-                parameter.data.load(),
-                sample.data.gep(0, 1).load(),
-                ),
-            pdf(
-                sample.data.gep(0, 0).load(),
-                parameter.data.load(),
-                sample.data.gep(0, 1).load(),
-                ),
-            )
+        #high.printf(
+            #"k = %s; p = %s; n = %s",
+            #sample.data.gep(0, 0).load(),
+            #parameter.data.load(),
+            #sample.data.gep(0, 1).load(),
+            #)
 
         high.log(
             pdf(
@@ -289,9 +279,22 @@ class MixedBinomialEmitter(object):
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
 
-        final_ratio = \
-              (total_k.load() + self._model._epsilon) \
-            / (total_n.load() + self._model._epsilon)
+        numerator   = (total_k.load() + self._model._epsilon)
+        denominator = (total_n.load() + self._model._epsilon)
+        final_ratio = numerator / denominator
+
+        if high.test_for_nan:
+            high.printf(
+                "ratio is (%s / %s)",
+                numerator,
+                denominator,
+                )
+            high.assert_(
+                ~final_ratio.is_nan,
+                "ratio (%s / %s) is not a number",
+                numerator,
+                denominator,
+                )
 
         final_ratio.store(out.data)
 
