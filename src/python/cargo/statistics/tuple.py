@@ -97,7 +97,7 @@ class TupleEmitter(object):
         Compute log likelihood under this distribution.
         """
 
-        high.value(0.0).store(out)
+        high.value_from_any(0.0).store(out)
 
         for (i, (_, count)) in enumerate(self._model._distributions):
             @high.for_(count)

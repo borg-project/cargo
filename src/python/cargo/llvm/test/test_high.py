@@ -2,8 +2,12 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import math
+import numpy
+
 from nose.tools import (
     assert_true,
+    assert_false,
     assert_equal,
     assert_raises,
     assert_almost_equal,
@@ -82,6 +86,45 @@ def test_high_python_exception_short_circuiting():
                 assert_true(False, "control flow was not short-circuited")
 
     assert_raises(ExpectedException, should_raise)
+
+def test_high_if_():
+    """
+    Test the high-LLVM if_() construct.
+    """
+
+    bad = [True]
+
+    @emit_and_execute()
+    def _(_):
+        @high.if_(True)
+        def _(then):
+            if then:
+                @high.python()
+                def _():
+                    del bad[:]
+            else:
+                @high.python()
+                def _():
+                    assert_true(False)
+
+    assert_false(bad)
+
+    bad = [True]
+
+    @emit_and_execute()
+    def _(_):
+        @high.if_(False)
+        def _(then):
+            if then:
+                @high.python()
+                def _():
+                    assert_true(False)
+            else:
+                @high.python()
+                def _():
+                    del bad[:]
+
+    assert_false(bad)
 
 def test_high_for_():
     """
@@ -181,4 +224,56 @@ def test_high_select():
 
     assert_equal(result[0], 3)
     assert_equal(result[1], 4)
+
+def test_high_isnan():
+    """
+    Test LLVM NaN testing.
+    """
+
+    @emit_and_execute()
+    def _(_):
+        b = high.value_from_any(numpy.nan).is_nan
+
+        @high.python(b)
+        def _(b_py):
+            assert_true(b_py)
+
+def test_high_log():
+    """
+    Test the LLVM log() intrinsic wrapper.
+    """
+
+    @emit_and_execute()
+    def _(_):
+        v0 = high.log(math.e)
+
+        @high.python(v0)
+        def _(v0_py):
+            assert_equal(v0_py, 1.0)
+
+def test_high_log1p():
+    """
+    Test the LLVM log1p() construct.
+    """
+
+    @emit_and_execute()
+    def _(_):
+        v0 = high.log1p(math.e - 1.0)
+
+        @high.python(v0)
+        def _(v0_py):
+            assert_equal(v0_py, 1.0)
+
+def test_high_exp():
+    """
+    Test the LLVM exp() intrinsic wrapper.
+    """
+
+    @emit_and_execute()
+    def _(_):
+        v0 = high.exp(1.0)
+
+        @high.python(v0)
+        def _(v0_py):
+            assert_equal(v0_py, math.e)
 

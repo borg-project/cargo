@@ -10,6 +10,7 @@ from llvm.core  import (
     Type,
     Value,
     Constant,
+    Function,
     )
 from cargo.llvm import (
     iptr_type,
@@ -24,10 +25,12 @@ class HighStandard(object):
     Provide a simple higher-level Python-embedded language on top of LLVM.
     """
 
-    def __init__(self):
+    def __init__(self, nan_tests = False):
         """
         Initialize.
         """
+
+        self._nan_tests = nan_tests
 
     def value_from_any(self, value):
         """
@@ -81,35 +84,37 @@ class HighStandard(object):
         else:
             raise TypeError("cannot build type from \"%s\" instance" % type(some_type))
 
-    def if_(self, condition, emit_then, emit_else):
+    def if_(self, condition):
         """
         Emit an if-then-else statement.
         """
 
-        # XXX the implied syntax is terrible; not sure how to improve it
+        condition  = self.value_from_any(condition).cast_to(Type.int(1))
+        then       = self.function.append_basic_block("then")
+        else_      = self.function.append_basic_block("else")
+        merge      = self.function.append_basic_block("merge")
 
-        builder   = self.builder
-        condition = self.value_from_any(condition)
-        then      = self.function.append_basic_block("then")
-        else_     = self.function.append_basic_block("else")
-        merge     = self.function.append_basic_block("merge")
+        def decorator(emit_branch):
+            builder = self.builder
 
-        builder.cbranch(condition.low, then, else_)
-        builder.position_at_end(then)
+            builder.cbranch(condition.low, then, else_)
+            builder.position_at_end(then)
 
-        emit_then()
+            emit_branch(True)
 
-        if not self.block_terminated:
-            builder.branch(merge)
+            if not self.block_terminated:
+                builder.branch(merge)
 
-        builder.position_at_end(else_)
+            builder.position_at_end(else_)
 
-        emit_else()
+            emit_branch(False)
 
-        if not self.block_terminated:
-            builder.branch(merge)
+            if not self.block_terminated:
+                builder.branch(merge)
 
-        builder.position_at_end(merge)
+            builder.position_at_end(merge)
+
+        return decorator
 
     def for_(self, count):
         """
@@ -181,13 +186,6 @@ class HighStandard(object):
                     ),
                 )
 
-    def unwind(self):
-        """
-        Emit an unwind instruction.
-        """
-
-        self.builder.unwind()
-
     def random(self):
         """
         Emit a PRNG invocation.
@@ -206,6 +204,60 @@ class HighStandard(object):
 
         return emit_random_int(self, upper, width)
 
+    def log(self, value):
+        """
+        Emit a natural log computation.
+        """
+
+        log    = HighFunction.intrinsic(llvm.core.INTR_LOG, [float])
+        result = log(value)
+
+        if self._nan_tests:
+            @self.if_(result.is_nan)
+            def _():
+                # XXX we can do this more simply (call PyErr_SetString then bail)
+                @self.python()
+                def _():
+                    raise RuntimeError("value is nan")
+
+        return result
+
+    def log1p(self, value):
+        """
+        Emit a natural log computation.
+        """
+
+        log1p  = HighFunction("log1p", float, [float])
+        result = log1p(value)
+
+        if self._nan_tests:
+            @self.if_(result.is_nan)
+            def _():
+                # XXX we can do this more simply (call PyErr_SetString then bail)
+                @self.python()
+                def _():
+                    raise RuntimeError("value is nan")
+
+        return result
+
+    def exp(self, value):
+        """
+        Emit a natural exponentiation.
+        """
+
+        exp    = HighFunction.intrinsic(llvm.core.INTR_EXP, [float])
+        result = exp(value)
+
+        if self._nan_tests:
+            @self.if_(result.is_nan)
+            def _():
+                # XXX we can do this more simply (call PyErr_SetString then bail)
+                @self.python()
+                def _():
+                    raise RuntimeError("value is nan")
+
+        return result
+
     def python(self, *arguments):
         """
         Emit a call to a Python callable.
@@ -221,7 +273,7 @@ class HighStandard(object):
         from cargo.llvm import sizeof_type
 
         type_  = self.type_from_any(type_)
-        malloc = HighFunction("malloc", Type.pointer(Type.int(8)), [long])
+        malloc = HighFunction.named("malloc", Type.pointer(Type.int(8)), [long])
         bytes_ = (self.value_from_any(count) * sizeof_type(type_)).cast_to(long)
 
         return malloc(bytes_).cast_to(Type.pointer(type_))
@@ -280,7 +332,7 @@ class HighStandard(object):
             self.basic_block.instructions                       \
             and self.basic_block.instructions[-1].is_terminator
 
-high = HighStandard()
+high = HighStandard(nan_tests = True)
 
 class HighValue(object):
     """
@@ -306,23 +358,7 @@ class HighValue(object):
         Return a parseable string representation of this value.
         """
 
-        return "HighValue(%s)" % repr(self._value)
-
-    def __ge__(self, other):
-        """
-        Return the result of a less-than comparison.
-        """
-
-        # XXX support non-floating-point comparisons
-
-        return \
-            HighValue.from_low(
-                high.builder.fcmp(
-                    llvm.core.FCMP_OGE,
-                    self._value,
-                    high.value_from_any(other)._value,
-                    ),
-                )
+        return "HighValue.from_low(%s)" % repr(self._value)
 
     def __add__(self, other):
         """
@@ -403,16 +439,6 @@ class HighValue(object):
             raise TypeError("unsupported argument types for division")
 
         return HighValue.from_low(low_value)
-
-    def load(self, name = ""):
-        """
-        Load the value pointed to by this pointer.
-        """
-
-        return \
-            HighValue.from_low(
-                high.builder.load(self._value, name = name),
-                )
 
     def store(self, pointer):
         """
@@ -518,7 +544,6 @@ class HighIntegerValue(HighValue):
         Cast this value to the specified type.
         """
 
-        # XXX support more casts
         # XXX cleanly handle signedness somehow (explicit "signed" highvalue?)
 
         type_     = high.type_from_any(type_)
@@ -531,6 +556,8 @@ class HighIntegerValue(HighValue):
                 low_value = self._value
             elif self.type_.width < type_.width:
                 low_value = high.builder.sext(self._value, type_, name)
+            elif self.type_.width > type_.width:
+                low_value = high.builder.trunc(self._value, type_, name)
 
         if low_value is None:
             raise CoercionError(self.type_, type_)
@@ -542,7 +569,7 @@ class HighIntegerValue(HighValue):
         Emit conversion of this value to a Python object.
         """
 
-        int_from_long = HighFunction("PyInt_FromLong", object_ptr_type, [ctypes.c_long])
+        int_from_long = HighFunction.named("PyInt_FromLong", object_ptr_type, [ctypes.c_long])
 
         return int_from_long(self._value)
 
@@ -567,6 +594,37 @@ class HighRealValue(HighValue):
                     ),
                 )
 
+    def __ge__(self, other):
+        """
+        Return the result of a less-than comparison.
+        """
+
+        # XXX support non-floating-point comparisons
+
+        return \
+            HighValue.from_low(
+                high.builder.fcmp(
+                    llvm.core.FCMP_OGE,
+                    self._value,
+                    high.value_from_any(other)._value,
+                    ),
+                )
+
+    @property
+    def is_nan(self):
+        """
+        Test for nan.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.fcmp(
+                    llvm.core.FCMP_UNO,
+                    self._value,
+                    self._value,
+                    ),
+                )
+
     def cast_to(self, type_, name = ""):
         """
         Cast this value to the specified type.
@@ -577,20 +635,23 @@ class HighRealValue(HighValue):
         type_     = high.type_from_any(type_)
         low_value = None
 
+        if type_.kind == llvm.core.TYPE_DOUBLE:
+            if self.type_.kind == llvm.core.TYPE_DOUBLE:
+                low_value = self._value
         if type_.kind == llvm.core.TYPE_INTEGER:
             low_value = high.builder.fptosi(self._value, type_, name)
 
         if low_value is None:
             raise CoercionError(self.type_, type_)
         else:
-            return HighValue.from_any(low_value)
+            return HighValue.from_low(low_value)
 
     def to_python(self):
         """
         Emit conversion of this value to a Python object.
         """
 
-        float_from_double = HighFunction("PyFloat_FromDouble", object_ptr_type, [float])
+        float_from_double = HighFunction.named("PyFloat_FromDouble", object_ptr_type, [float])
 
         return float_from_double(self._value)
 
@@ -611,6 +672,16 @@ class HighPointerValue(HighValue):
                     high.builder.ptrtoint(self._value, iptr_type),
                     high.value_from_any(other).cast_to(iptr_type)._value,
                     ),
+                )
+
+    def load(self, name = ""):
+        """
+        Load the value pointed to by this pointer.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.load(self._value, name = name),
                 )
 
     def gep(self, *indices):
@@ -654,9 +725,49 @@ class HighFunction(HighValue):
     Function in the wrapper language.
     """
 
-    def __init__(self, name, return_type, argument_types, new = False):
+    def __call__(self, *arguments):
         """
-        Initialize.
+        Emit IR for a function call.
+        """
+
+        arguments = map(high.value_from_any, arguments)
+        coerced   = [v.cast_to(a) for (v, a) in zip(arguments, self.argument_types)]
+
+        return \
+            HighValue.from_low(
+                high.builder.call(
+                    self._value,
+                    [c.low for c in coerced],
+                    ),
+                )
+
+    @property
+    def argument_values(self):
+        """
+        Return the function argument values.
+
+        Meaningful only inside the body of this function.
+        """
+
+        return map(high.value_from_any, self._value.args)
+
+    @property
+    def argument_types(self):
+        """
+        Return the function argument values.
+
+        Meaningful only inside the body of this function.
+        """
+
+        if self.type_.kind == llvm.core.TYPE_POINTER:
+            return self.type_.pointee.args
+        else:
+            return self.type_.args
+
+    @staticmethod
+    def named(name, return_type, argument_types):
+        """
+        Return a named function.
         """
 
         type_ = \
@@ -665,36 +776,77 @@ class HighFunction(HighValue):
                 map(high.type_from_any, argument_types),
                 )
 
-        if isinstance(name, int):
-            low_value = Constant.int(iptr_type, name).inttoptr(Type.pointer(type_))
-        else:
-            if new:
-                low_value = high.module.add_function(type_, name)
-            else:
-                low_value = high.module.get_or_insert_function(type_, name)
+        return HighFunction(high.module.get_or_insert_function(type_, name))
 
-        HighValue.__init__(self, low_value)
-
-    def __call__(self, *arguments):
+    @staticmethod
+    def get_named(name):
         """
-        Emit IR for a function call.
+        Look up a named function.
         """
 
-        return \
-            HighValue.from_low(
-                high.builder.call(
-                    self._value,
-                    [high.value_from_any(v).low for v in arguments],
-                    ),
+        return HighFunction(high.module.get_function_named(name))
+
+    @staticmethod
+    def new_named(name, return_type, argument_types):
+        """
+        Look up or create a named function.
+        """
+
+        type_ = \
+            Type.function(
+                high.type_from_any(return_type),
+                map(high.type_from_any, argument_types),
                 )
 
-    @property
-    def arguments(self):
+        return HighFunction(high.module.add_function(type_, name))
+
+    @staticmethod
+    def pointed(address, return_type, argument_types):
         """
-        Return the function argument values.
+        Return a function from a function pointer.
         """
 
-        return map(high.value_from_any, self._value.args)
+        type_ = \
+            Type.function(
+                high.type_from_any(return_type),
+                map(high.type_from_any, argument_types),
+                )
+
+        return HighFunction(Constant.int(iptr_type, address).inttoptr(Type.pointer(type_)))
+
+    @staticmethod
+    def intrinsic(intrinsic_id, qualifiers = ()):
+        """
+        Return an intrinsic function.
+        """
+
+        qualifiers = map(high.type_from_any, qualifiers)
+
+        return HighFunction(Function.intrinsic(high.module, intrinsic_id, qualifiers))
+
+class IfDecorator(object):
+    """
+    Emit an if-then-else statement.
+    """
+
+    def __init__(self, condition):
+        """
+        Initialize.
+        """
+
+        self._condition = condition
+
+    def __call__(self, emit_then):
+        """
+        Emit a "then" block.
+        """
+
+        return self(emit_then)
+
+    def then(self, emit_then):
+        """
+        Emit a "then" block.
+        """
 
 class CallPythonDecorator(object):
     """
@@ -720,9 +872,9 @@ class CallPythonDecorator(object):
         CallPythonDecorator.__whatever += [callable_]
 
         # build a Python argument tuple
-        tuple_new      = HighFunction("PyTuple_New", object_ptr_type, [ctypes.c_int])
+        tuple_new      = HighFunction.named("PyTuple_New", object_ptr_type, [ctypes.c_int])
         tuple_set_item = \
-            HighFunction(
+            HighFunction.named(
                 "PyTuple_SetItem",
                 ctypes.c_int,
                 [object_ptr_type, ctypes.c_size_t, object_ptr_type],
@@ -737,7 +889,7 @@ class CallPythonDecorator(object):
         from cargo.llvm import constant_pointer_to
 
         call_object = \
-            HighFunction(
+            HighFunction.named(
                 "PyObject_CallObject",
                 object_ptr_type,
                 [object_ptr_type, object_ptr_type],
@@ -750,23 +902,21 @@ class CallPythonDecorator(object):
                 )
 
         # XXX decrement arguments, return value, etc.
-        dec_ref = HighFunction("Py_DecRef"  , Type.void()    , [object_ptr_type])
+        dec_ref = HighFunction.named("Py_DecRef", Type.void(), [object_ptr_type])
 
         # respond to an exception, if present
-        from llvm.core import Function
+        err_occurred = HighFunction.named("PyErr_Occurred", object_ptr_type, [])
 
-        err_occurred = HighFunction("PyErr_Occurred", object_ptr_type, [])
-        longjmp = Function.intrinsic(high.module, llvm.core.INTR_LONGJMP, [])
+        @high.if_(err_occurred() == 0)
+        def _(then):
+            if then:
+                # XXX can longjmp be marked as noreturn? to avoid the unnecessary br, etc
+                longjmp    = HighFunction.intrinsic(llvm.core.INTR_LONGJMP)
+                context    = high.module.get_global_variable_named("main_context")
+                i8_context = high.builder.bitcast(context, Type.pointer(Type.int(8)))
 
-        def emit_unwind():
-            context    = high.module.get_global_variable_named("main_context")
-            i8_context = high.builder.bitcast(context, Type.pointer(Type.int(8)))
-
-            high.builder.call(longjmp, [i8_context, high.value_from_any(1).low])
-
-        def emit_clean_up():
-            # XXX
-            pass
-
-        high.if_(err_occurred() == 0, emit_clean_up, emit_unwind)
+                longjmp(i8_context, 1)
+            else:
+                # XXX emit cleanup code
+                pass
 

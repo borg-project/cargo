@@ -57,8 +57,8 @@ def emit_and_execute(module_name = ""):
         context.initializer = Constant.null(Type.array(iptr_type, 5))
 
         # prepare for code generation
-        main    = module.add_function(Type.function(Type.void(), []), "main")
-        entry   = main.append_basic_block("entry")
+        main  = module.add_function(Type.function(Type.void(), []), "main")
+        entry = main.append_basic_block("entry")
 
         with this_builder(Builder.new(entry)) as builder:
             # emit the module body
@@ -81,8 +81,7 @@ def emit_and_execute(module_name = ""):
             builder.position_at_end(exit)
             builder.ret_void()
 
-        print module
-        #logger.debug("verifying LLVM IR for execution:\n%s", module)
+        logger.debug("verifying LLVM IR for execution:\n%s", module)
 
         module.verify()
 

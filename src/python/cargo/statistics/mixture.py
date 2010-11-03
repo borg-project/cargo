@@ -27,14 +27,11 @@ def log_add_double(x, y):
         Kingsbury and Rayner, 1970.
     """
 
-    exp   = HighFunction("exp"  , float, [float])
-    log1p = HighFunction("log1p", float, [float])
-
     b  = x >= y
     x_ = high.select(b, x, y)
     y_ = high.select(b, y, x)
 
-    return x_ + log1p(exp(y_ - x_))
+    return x_ + high.log1p(high.exp(y_ - x_))
 
 class FiniteMixture(object):
     """
@@ -142,8 +139,6 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        log = HighFunction("log", float, [float])
-
         # XXX eeek leaking stack space
         total        = high.stack_allocate(Type.double(), numpy.finfo(float).min)
         component_ll = high.stack_allocate(Type.double())
@@ -165,7 +160,7 @@ class FiniteMixtureEmitter(object):
 
             log_add_double(
                 total.load(),
-                log(component.data.gep(0, 0).load()) + component_ll.load(),
+                high.log(component.data.gep(0, 0).load()) + component_ll.load(),
                 ) \
                 .store(total)
 
@@ -184,9 +179,8 @@ class FiniteMixtureEmitter(object):
         from cargo.llvm import StridedArray
 
         # mise en place
-        K   = self._model._K
-        N   = samples.shape[0]
-        exp = HighFunction("exp", float, [float])
+        K = self._model._K
+        N = samples.shape[0]
 
         # generate a random initial state
         # XXX eeek leaking stack space
@@ -224,7 +218,7 @@ class FiniteMixtureEmitter(object):
             def _(n):
                 sample = samples.at(n)
 
-                high.value(0.0).store(total)
+                high.value_from_any(0.0).store(total)
 
                 @high.for_(K)
                 def _(k):
@@ -236,7 +230,7 @@ class FiniteMixtureEmitter(object):
                         responsibility,
                         )
 
-                    exp(responsibility.load()).store(responsibility)
+                    high.exp(responsibility.load()).store(responsibility)
 
                     @high.python(total.load(), responsibility.load())
                     def _(total_py, r_py):
@@ -263,7 +257,7 @@ class FiniteMixtureEmitter(object):
                     StridedArray.from_typed_pointer(component.gep(0, 1)),
                     )
 
-                high.value(0.0).store(total)
+                high.value_from_any(0.0).store(total)
 
                 @high.for_(samples.shape[0])
                 def _(n):
@@ -277,10 +271,8 @@ class FiniteMixtureEmitter(object):
         """
 
         # mise en place
-        K   = self._model._K
-        N   = samples.shape[0]
-        exp = HighFunction("exp", float, [float])
-        log = HighFunction("log", float, [float])
+        K = self._model._K
+        N = samples.shape[0]
 
         # compute posterior mixture parameters
         # XXX eeek leaking stack space
@@ -292,7 +284,7 @@ class FiniteMixtureEmitter(object):
             component_pi        = component.gep(0, 0)
             component_parameter = parameter.at(k).data.gep(0, 1)
 
-            log(parameter.at(k).data.gep(0, 0).load()).store(component_pi)
+            high.log(parameter.at(k).data.gep(0, 0).load()).store(component_pi)
 
             # XXX clean up above, out / parameter distinction
 
@@ -308,7 +300,7 @@ class FiniteMixtureEmitter(object):
 
                 (component_pi.load() + previous).store(component_pi)
 
-            exped = exp(component_pi.load())
+            exped = high.exp(component_pi.load())
 
             exped.store(component_pi)
 

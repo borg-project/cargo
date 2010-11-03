@@ -86,10 +86,9 @@ class BinomialEmitter(object):
 
         from ctypes import c_uint
 
-        log = HighFunction("log"                 , float, [float                ])
-        pdf = HighFunction("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
+        pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
-        log(
+        high.log(
             pdf(
                 sample.data.load(),
                 parameter.data.gep(0, 0).load(),
@@ -106,19 +105,18 @@ class BinomialEmitter(object):
         from cargo.llvm import this_builder
 
         compute = \
-            HighFunction(
+            HighFunction.new_named(
                 "binomial_ml",
                 Type.void(),
                 [samples.data.type_, weights.data.type_, out.data.type_],
-                new = True,
                 )
         entry = compute.low.append_basic_block("entry")
 
         with this_builder(Builder.new(entry)) as builder:
             self._ml(
-                samples.using(compute.arguments[0]),
-                weights.using(compute.arguments[1]),
-                out.using(compute.arguments[2]),
+                samples.using(compute.argument_values[0]),
+                weights.using(compute.argument_values[1]),
+                out.using(compute.argument_values[2]),
                 )
 
             builder.ret_void()
@@ -146,7 +144,7 @@ class BinomialEmitter(object):
             / (total_w.load() + self._model._epsilon)
 
         final_ratio.store(out.data.gep(0, 0))
-        high.value(self._model._estimation_n).store(out.data.gep(0, 1))
+        high.value_from_any(self._model._estimation_n).store(out.data.gep(0, 1))
 
 class MixedBinomial(object):
     """
@@ -218,10 +216,9 @@ class MixedBinomialEmitter(object):
 
         from ctypes import c_uint
 
-        log = HighFunction("log"                 , float, [float                ])
-        pdf = HighFunction("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
+        pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
-        log(
+        high.log(
             pdf(
                 sample.data.gep(0, 0).load(),
                 parameter.data.load(),
@@ -238,19 +235,18 @@ class MixedBinomialEmitter(object):
         from cargo.llvm import this_builder
 
         compute = \
-            HighFunction(
+            HighFunction.new_named(
                 "mixed_binomial_ml",
                 Type.void(),
                 [samples.data.type_, weights.data.type_, out.data.type_],
-                new = True,
                 )
         entry = compute.low.append_basic_block("entry")
 
         with this_builder(Builder.new(entry)) as builder:
             self._ml(
-                samples.using(compute.arguments[0]),
-                weights.using(compute.arguments[1]),
-                out.using(compute.arguments[2]),
+                samples.using(compute.argument_values[0]),
+                weights.using(compute.argument_values[1]),
+                out.using(compute.argument_values[2]),
                 )
 
             builder.ret_void()
@@ -275,11 +271,6 @@ class MixedBinomialEmitter(object):
 
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
-
-            @high.python(total_k.load(), total_n.load())
-            def _(k_py, n_py):
-                if isnan(k_py) or isnan(n_py):
-                    print "k", k_py, "n", n_py
 
         final_ratio = \
               (total_k.load() + self._model._epsilon) \
