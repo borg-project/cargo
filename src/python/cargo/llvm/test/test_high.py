@@ -189,6 +189,26 @@ def test_high_nested_for_():
 
     assert_equal(iterations[0], count**2)
 
+def test_high_assert_():
+    """
+    Test the high-LLVM assert_() construct.
+    """
+
+    # should not raise
+    @emit_and_execute()
+    def _(_):
+        high.assert_(True)
+
+    # should raise
+    from cargo.llvm import EmittedAssertionError
+
+    def should_raise():
+        @emit_and_execute()
+        def _(_):
+            high.assert_(False)
+
+    assert_raises(EmittedAssertionError, should_raise)
+
 def test_high_random():
     """
     Test the high-LLVM random() construct.
@@ -257,10 +277,12 @@ def test_high_is_nan():
 
     @emit_and_execute()
     def _(_):
+        a = high.value_from_any(-0.000124992188151).is_nan
         b = high.value_from_any(numpy.nan).is_nan
 
-        @high.python(b)
-        def _(b_py):
+        @high.python(a, b)
+        def _(a_py, b_py):
+            assert_false(a_py)
             assert_true(b_py)
 
 def test_high_log():

@@ -218,6 +218,23 @@ class MixedBinomialEmitter(object):
 
         pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
+        high.printf(
+            "k = %s; p = %s; n = %s; pdf = %s (%s?)",
+            sample.data.gep(0, 0).load(),
+            parameter.data.load(),
+            sample.data.gep(0, 1).load(),
+            pdf(
+                sample.data.gep(0, 0).load(),
+                parameter.data.load(),
+                sample.data.gep(0, 1).load(),
+                ),
+            pdf(
+                sample.data.gep(0, 0).load(),
+                parameter.data.load(),
+                sample.data.gep(0, 1).load(),
+                ),
+            )
+
         high.log(
             pdf(
                 sample.data.gep(0, 0).load(),

@@ -20,6 +20,49 @@ from cargo.llvm import (
 object_type     = Type.struct([])
 object_ptr_type = Type.pointer(object_type)
 
+class EmittedAssertionError(AssertionError):
+    """
+    An assertion was tripped in generated code.
+    """
+
+    def __init__(self, message, emission_stack = None):
+        """
+        Initialize.
+        """
+
+        from traceback import extract_stack
+
+        if emission_stack is None:
+            emission_stack = extract_stack()[:-1]
+
+        self._emission_stack = emission_stack
+
+        AssertionError.__init__(self, message)
+
+    def __str__(self):
+        """
+        Generate a human-readable exception message.
+        """
+
+        try:
+            from traceback import format_list
+
+            return \
+                "%s\nCode generation stack:\n%s" % (
+                    AssertionError.__str__(self),
+                    "".join(format_list(self._emission_stack)),
+                    )
+        except Exception as error:
+            print sys.exc_info()
+
+    @property
+    def emission_stack(self):
+        """
+        Return the stack at the point of assertion IR generation.
+        """
+
+        return self._emission_stack
+
 class HighStandard(object):
     """
     Provide a simple higher-level Python-embedded language on top of LLVM.
@@ -226,12 +269,7 @@ class HighStandard(object):
         result = log(value)
 
         if self._nan_tests:
-            @self.if_(result.is_nan)
-            def _():
-                # XXX we can do this more simply (call PyErr_SetString then bail)
-                @self.python()
-                def _():
-                    raise RuntimeError("value is nan")
+            self.assert_(~result.is_nan, "result of log(%s) is not a number", value)
 
         return result
 
@@ -244,12 +282,7 @@ class HighStandard(object):
         result = log1p(value)
 
         if self._nan_tests:
-            @self.if_(result.is_nan)
-            def _():
-                # XXX we can do this more simply (call PyErr_SetString then bail)
-                @self.python()
-                def _():
-                    raise RuntimeError("value is nan")
+            self.assert_(~result.is_nan, "result of log1p(%s) is not a number", value)
 
         return result
 
@@ -262,12 +295,7 @@ class HighStandard(object):
         result = exp(value)
 
         if self._nan_tests:
-            @self.if_(result.is_nan)
-            def _():
-                # XXX we can do this more simply (call PyErr_SetString then bail)
-                @self.python()
-                def _():
-                    raise RuntimeError("value is nan")
+            self.assert_(~result.is_nan, "result of exp(%s) is not a number", value)
 
         return result
 
@@ -277,6 +305,15 @@ class HighStandard(object):
         """
 
         return CallPythonDecorator(arguments)
+
+    def printf(self, format_, *arguments):
+        """
+        Emit a call to a Python callable.
+        """
+
+        @high.python(*arguments)
+        def _(*pythonized):
+            print format_ % pythonized
 
     def heap_allocate(self, type_, count = 1):
         """
@@ -302,6 +339,23 @@ class HighStandard(object):
             self.value_from_any(initial).store(allocated)
 
         return allocated
+
+    def assert_(self, boolean, message = "false assertion", *arguments):
+        """
+        Assert a fact; bails out of the module if false.
+        """
+
+        from traceback import extract_stack
+
+        boolean        = self.value_from_any(boolean).cast_to(Type.int(1))
+        emission_stack = extract_stack()[:-1]
+
+        @self.if_(~boolean)
+        def _():
+            # XXX we can do this more simply (avoid the callable argument mangling, etc)
+            @self.python(*arguments)
+            def _(*pythonized):
+                raise EmittedAssertionError(message % pythonized, emission_stack)
 
     @property
     def builder(self):
@@ -551,6 +605,13 @@ class HighIntegerValue(HighValue):
     """
     Integer value in the wrapper language.
     """
+
+    def __invert__(self):
+        """
+        Return the result of bitwise inversion.
+        """
+
+        return high.builder.xor(self._value, Constant.int(self.type_, -1))
 
     def cast_to(self, type_, name = ""):
         """
@@ -915,6 +976,8 @@ class CallPythonDecorator(object):
                 )
 
         # XXX decrement arguments, return value, etc.
+        # XXX we could potentially move the bail-on-exception code into a function
+
         dec_ref = HighFunction.named("Py_DecRef", Type.void(), [object_ptr_type])
 
         # respond to an exception, if present

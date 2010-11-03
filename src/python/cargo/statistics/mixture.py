@@ -153,10 +153,10 @@ class FiniteMixtureEmitter(object):
                 component_ll,
                 )
 
-            @high.python(total.load(), component_ll.load())
-            def _(ll_py, cl_py):
-                print "total ll", ll_py
-                print "component ll", cl_py
+            #@high.python(total.load(), component_ll.load())
+            #def _(ll_py, cl_py):
+                #print "total ll", ll_py
+                #print "component ll", cl_py
 
             log_add_double(
                 total.load(),
@@ -164,10 +164,10 @@ class FiniteMixtureEmitter(object):
                 ) \
                 .store(total)
 
-            @high.python(component.data.gep(0, 0).load(), total.load())
-            def _(pi_py, ll_py):
-                print "log pi", pi_py
-                print "total ll", ll_py
+            #@high.python(component.data.gep(0, 0).load(), total.load())
+            #def _(pi_py, ll_py):
+                #print "log pi", pi_py
+                #print "total ll", ll_py
 
         total.load().store(out)
 
@@ -232,9 +232,9 @@ class FiniteMixtureEmitter(object):
 
                     high.exp(responsibility.load()).store(responsibility)
 
-                    @high.python(total.load(), responsibility.load())
-                    def _(total_py, r_py):
-                        print "total", total_py, "r", r_py
+                    #@high.python(total.load(), responsibility.load())
+                    #def _(total_py, r_py):
+                        #print "total", total_py, "r", r_py
 
                     (total.load() + responsibility.load()).store(total)
 
