@@ -86,6 +86,19 @@ class HighStandard(object):
 
     def if_(self, condition):
         """
+        Emit an if-then statement.
+        """
+
+        def decorator(emit_then):
+            @self.if_else(condition)
+            def _(then):
+                if then:
+                    emit_then()
+
+        return decorator
+
+    def if_else(self, condition):
+        """
         Emit an if-then-else statement.
         """
 
@@ -227,7 +240,7 @@ class HighStandard(object):
         Emit a natural log computation.
         """
 
-        log1p  = HighFunction("log1p", float, [float])
+        log1p  = HighFunction.named("log1p", float, [float])
         result = log1p(value)
 
         if self._nan_tests:
@@ -907,16 +920,16 @@ class CallPythonDecorator(object):
         # respond to an exception, if present
         err_occurred = HighFunction.named("PyErr_Occurred", object_ptr_type, [])
 
-        @high.if_(err_occurred() == 0)
+        @high.if_else(err_occurred() == 0)
         def _(then):
             if then:
+                # XXX emit cleanup code
+                pass
+            else:
                 # XXX can longjmp be marked as noreturn? to avoid the unnecessary br, etc
                 longjmp    = HighFunction.intrinsic(llvm.core.INTR_LONGJMP)
                 context    = high.module.get_global_variable_named("main_context")
                 i8_context = high.builder.bitcast(context, Type.pointer(Type.int(8)))
 
                 longjmp(i8_context, 1)
-            else:
-                # XXX emit cleanup code
-                pass
 

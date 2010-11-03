@@ -97,6 +97,31 @@ def test_high_if_():
     @emit_and_execute()
     def _(_):
         @high.if_(True)
+        def _():
+            @high.python()
+            def _():
+                del bad[:]
+
+    assert_false(bad)
+
+    @emit_and_execute()
+    def _(_):
+        @high.if_(False)
+        def _():
+            @high.python()
+            def _():
+                assert_true(False)
+
+def test_high_if_else():
+    """
+    Test the high-LLVM if_else() construct.
+    """
+
+    bad = [True]
+
+    @emit_and_execute()
+    def _(_):
+        @high.if_else(True)
         def _(then):
             if then:
                 @high.python()
@@ -113,7 +138,7 @@ def test_high_if_():
 
     @emit_and_execute()
     def _(_):
-        @high.if_(False)
+        @high.if_else(False)
         def _(then):
             if then:
                 @high.python()
@@ -225,9 +250,9 @@ def test_high_select():
     assert_equal(result[0], 3)
     assert_equal(result[1], 4)
 
-def test_high_isnan():
+def test_high_is_nan():
     """
-    Test LLVM NaN testing.
+    Test LLVM real-value is_nan property.
     """
 
     @emit_and_execute()
