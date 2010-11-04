@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from cargo.log  import get_logger
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
-logger    = get_logger(__name__, level = "DEBUG")
+logger    = get_logger(__name__, level = "WARNING")
 
 def constant_pointer(address, type_):
     """
@@ -28,7 +28,7 @@ def constant_pointer_to(object_, type_):
     Return an LLVM pointer constant to a Python object.
     """
 
-    # XXX do this without calling id (using ctypes?)
+    # XXX do this without assuming id behavior (using ctypes?)
 
     return constant_pointer(id(object_), type_)
 
@@ -97,15 +97,6 @@ def emit_and_execute(module_name = ""):
 
     return decorator
 
-def get_type_size(type_):
-    """
-    Return the size of an instance of a type, in bytes.
-    """
-
-    return dtype_from_type(type_).itemsize
-
-sizeof_type = get_type_size
-
 def type_from_struct_type(dtype):
     """
     Build an LLVM type matching a numpy struct dtype.
@@ -152,6 +143,13 @@ def type_from_dtype(dtype):
     else:
         raise ValueError("could not build an LLVM type for dtype %s" % dtype.descr)
 
+def size_of_type(type_):
+    """
+    Return the size of an instance of a type, in bytes.
+    """
+
+    return dtype_from_type(type_).itemsize
+
 def dtype_from_integer_type(type_):
     """
     Build a numpy dtype from an LLVM integer type.
@@ -173,7 +171,7 @@ def dtype_from_array_type(type_):
 
     from cargo.numpy import normalize_dtype
 
-    raw_dtype = numpy.dtype(dtype_from_type(type_.element), (type_.count))
+    raw_dtype = numpy.dtype((dtype_from_type(type_.element), (type_.count,)))
 
     return normalize_dtype(raw_dtype)
 
@@ -182,10 +180,7 @@ def dtype_from_struct_type(type_):
     Build a numpy dtype from an LLVM struct type.
     """
 
-    fields = [
-        ("f%i" % i, dtype_from_type(f))
-        for (i, f) in enumerate(type_.elements)
-        ]
+    fields = [("f%i" % i, dtype_from_type(f)) for (i, f) in enumerate(type_.elements)]
 
     return numpy.dtype(fields)
 

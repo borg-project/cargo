@@ -20,19 +20,19 @@ from cargo.statistics          import (
     MixedBinomial,
     )
 
-def test_finite_mixture_rv():
-    """
-    Test finite-mixture random-variate generation.
-    """
+#def test_finite_mixture_rv():
+    #"""
+    #Test finite-mixture random-variate generation.
+    #"""
 
-    d = FiniteMixture(Delta(float), 2)
-    p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
-    s = numpy.empty(32768)
+    #d = FiniteMixture(Delta(float), 2)
+    #p = numpy.array([[(0.25, 1.0), (0.75, 2.0)]], d.parameter_dtype.base)
+    #s = numpy.empty(32768)
 
-    d.rv(p, s, RandomState(42))
+    #d.rv(p, s, RandomState(42))
 
-    assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
-    assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
+    #assert_almost_equal(s[s == 1.0].size / float(s.size), 0.25, places = 2)
+    #assert_almost_equal(s[s == 2.0].size / float(s.size), 0.75, places = 2)
 
 def test_finite_mixture_ll():
     """
@@ -87,16 +87,16 @@ def test_finite_mixture_given():
     assert_almost_equal(out["p"][0], 0.0)
     assert_almost_equal(out["p"][1], 1.0)
 
-def test_restarting_ml():
-    """
-    Test the restarting-ML distribution wrapper.
-    """
+#def test_restarting_ml():
+    #"""
+    #Test the restarting-ML distribution wrapper.
+    #"""
 
-    from cargo.statistics.mixture  import RestartingML
-    from cargo.statistics.binomial import MixedBinomial
+    #from cargo.statistics.mixture  import RestartingML
+    #from cargo.statistics.binomial import MixedBinomial
 
-    m = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
-    d = RestartingML(m)
+    #m = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
+    #d = RestartingML(m)
 
-    assert_finite_mixture_ml_ok(d)
+    #assert_finite_mixture_ml_ok(d)
 

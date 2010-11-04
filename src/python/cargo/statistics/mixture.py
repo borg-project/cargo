@@ -180,6 +180,8 @@ class FiniteMixtureEmitter(object):
         def _(k):
             n = high.random_int(N)
 
+            high.printf("examplar n = %i", n)
+
             self._sub_emitter.ml(
                 samples.at(n).envelop(),
                 weights.at(n).envelop(),
@@ -222,10 +224,6 @@ class FiniteMixtureEmitter(object):
 
                     high.exp(responsibility.load()).store(responsibility)
 
-                    #@high.python(total.load(), responsibility.load())
-                    #def _(total_py, r_py):
-                        #print "total", total_py, "r", r_py
-
                     (total.load() + responsibility.load()).store(total)
 
                 total_value = total.load()
@@ -233,8 +231,12 @@ class FiniteMixtureEmitter(object):
                 @high.for_(K)
                 def _(k):
                     responsibility = r_KN.at(k, n).data
+                    normalized     =                                         \
+                        (responsibility.load() + numpy.finfo(float).eps)     \
+                        /                                                    \
+                        (total_value           + numpy.finfo(float).eps)
 
-                    (responsibility.load() / total_value).store(responsibility)
+                    normalized.store(responsibility)
 
             # make maximum-likelihood estimates
             @high.for_(K)

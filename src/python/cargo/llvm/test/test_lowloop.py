@@ -11,17 +11,17 @@ from llvm.core  import (
     Builder,
     )
 from llvm.ee    import ExecutionEngine
-from cargo.llvm import high
+from cargo.llvm import (
+    high,
+    emit_and_execute,
+    StridedArray,
+    StridedArrays,
+    )
 
 def assert_copying_ok(in_, out, expected):
     """
     Assert that the array loop can make a correct array copy.
     """
-
-    from cargo.llvm import (
-        emit_and_execute,
-        StridedArrays,
-        )
 
     @emit_and_execute()
     def _(_):
@@ -97,12 +97,6 @@ def test_array_loop_subarrays():
     baz[:] = foo[0]
 
     # verify correctness
-    from cargo.llvm import (
-        emit_and_execute,
-        StridedArray,
-        StridedArrays,
-        )
-
     @emit_and_execute()
     def _(_):
         arrays = \
@@ -130,12 +124,6 @@ def test_array_loop_extracted():
     foo["y"] = baz
 
     # verify correctness
-    from cargo.llvm import (
-        emit_and_execute,
-        StridedArray,
-        StridedArrays,
-        )
-
     @emit_and_execute()
     def _(_):
         arrays = \
@@ -149,4 +137,33 @@ def test_array_loop_extracted():
             l.arrays["in"].data.load().store(l.arrays["out"].data)
 
     assert_equal(bar.tolist(), baz.tolist())
+
+def test_array_loop_complex_dtype():
+    """
+    Test strided-array loop compilation with a complex dtype.
+    """
+
+    # generate some test data
+    dtype = numpy.dtype([("d", [("k", numpy.uint32), ("n", numpy.uint32)], (4,))])
+    array = numpy.empty(8, dtype)
+
+    array["d"]["k"] = 0
+    array["d"]["n"] = 42
+
+    print array.strides
+
+    # verify correctness
+    from cargo.llvm import iptr_type
+
+    @emit_and_execute()
+    def _(_):
+        ll_array = StridedArray.from_numpy(array)
+
+        at0 = ll_array.at(0).data.cast_to(iptr_type)
+        at1 = ll_array.at(1).data.cast_to(iptr_type)
+
+        @high.python(at0, at1)
+        def _(at0_py, at1_py):
+            assert_equal(at0_py, array[0].__array_interface__["data"][0])
+            assert_equal(at1_py, array[1].__array_interface__["data"][0])
 

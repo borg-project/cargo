@@ -320,11 +320,11 @@ class HighStandard(object):
         Stack-allocate and return a value.
         """
 
-        from cargo.llvm import sizeof_type
+        from cargo.llvm import size_of_type
 
         type_  = self.type_from_any(type_)
         malloc = HighFunction.named("malloc", Type.pointer(Type.int(8)), [long])
-        bytes_ = (self.value_from_any(count) * sizeof_type(type_)).cast_to(long)
+        bytes_ = (self.value_from_any(count) * size_of_type(type_)).cast_to(long)
 
         return malloc(bytes_).cast_to(Type.pointer(type_))
 
@@ -427,6 +427,13 @@ class HighValue(object):
         Initialize.
         """
 
+        if self.kind is not None and value.type.kind != self.kind:
+            raise TypeError(
+                "cannot construct an %s instance from a %s value",
+                type(self).__name__,
+                type(value).__name,
+                )
+
         self._value = value
 
     def __str__(self):
@@ -443,6 +450,251 @@ class HighValue(object):
 
         return "HighValue.from_low(%s)" % repr(self._value)
 
+    def __lt__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator < defined" % type(self).__name__)
+
+    def __le__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator <= defined" % type(self).__name__)
+
+    def __gt__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator > defined" % type(self).__name__)
+
+    def __ge__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator >= defined" % type(self).__name__)
+
+    def __eq__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator == defined" % type(self).__name__)
+
+    def __ne__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator != defined" % type(self).__name__)
+
+    def __add__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator + defined" % type(self).__name__)
+
+    def __sub__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator - defined" % type(self).__name__)
+
+    def __mul__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator * defined" % type(self).__name__)
+
+    def __div__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator / defined" % type(self).__name__)
+
+    def __floordiv__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator // defined" % type(self).__name__)
+
+    def __mod__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator % defined" % type(self).__name__)
+
+    def __divmod__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator divmod() defined" % type(self).__name__)
+
+    def __pow__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator ** defined" % type(self).__name__)
+
+    def __and__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator & defined" % type(self).__name__)
+
+    def __xor__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator ^ defined" % type(self).__name__)
+
+    def __or__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator | defined" % type(self).__name__)
+
+    def __lshift__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator << defined" % type(self).__name__)
+
+    def __rshift__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator >> defined" % type(self).__name__)
+
+    def __neg__(self):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have unary operator - defined" % type(self).__name__)
+
+    def __pos__(self):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have unary operator + defined" % type(self).__name__)
+
+    def __abs__(self):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator abs() defined" % type(self).__name__)
+
+    def __invert__(self):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator ~= defined" % type(self).__name__)
+
+    def __iadd__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator += defined" % type(self).__name__)
+
+    def __isub__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator -= defined" % type(self).__name__)
+
+    def __imul__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator *= defined" % type(self).__name__)
+
+    def __idiv__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator /= defined" % type(self).__name__)
+
+    def __ifloordiv__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator //= defined" % type(self).__name__)
+
+    def __imod__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator %= defined" % type(self).__name__)
+
+    def __ipow__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator **= defined" % type(self).__name__)
+
+    def __iand__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator &= defined" % type(self).__name__)
+
+    def __ixor__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator ^= defined" % type(self).__name__)
+
+    def __ior__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator |= defined" % type(self).__name__)
+
+    def __ilshift__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator <<= defined" % type(self).__name__)
+
+    def __irshift__(self, other):
+        """
+        Explicitly fail for generically-typed values.
+        """
+
+        raise TypeError("%s value does not have operator >>= defined" % type(self).__name__)
+
     def store(self, pointer):
         """
         Store this value to the specified pointer.
@@ -453,7 +705,7 @@ class HighValue(object):
     @property
     def low(self):
         """
-        Return the associated LLVM value.
+        The associated LLVM value.
         """
 
         return self._value
@@ -461,10 +713,18 @@ class HighValue(object):
     @property
     def type_(self):
         """
-        Return the type of the associated LLVM value.
+        The type of the associated LLVM value.
         """
 
         return self._value.type
+
+    @property
+    def kind(self):
+        """
+        Enum describing the general kind of this value, or None.
+        """
+
+        return None
 
     @staticmethod
     def from_any(value):
@@ -549,6 +809,34 @@ class HighIntegerValue(HighValue):
 
         return high.builder.xor(self._value, Constant.int(self.type_, -1))
 
+    def __ge__(self, other):
+        """
+        Return the result of a greater-than comparison.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.icmp(
+                    llvm.core.ICMP_SGE,
+                    self._value,
+                    high.value_from_any(other).cast_to(self.type_)._value,
+                    ),
+                )
+
+    def __le__(self, other):
+        """
+        Return the result of a less-than comparison.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.icmp(
+                    llvm.core.ICMP_SLE,
+                    self._value,
+                    high.value_from_any(other).cast_to(self.type_)._value,
+                    ),
+                )
+
     def __add__(self, other):
         """
         Return the result of an addition.
@@ -556,7 +844,7 @@ class HighIntegerValue(HighValue):
 
         other = high.value_from_any(other).cast_to(self.type_)
 
-        return HighValue.from_low(high.builder.add(self._value, other._value))
+        return HighIntegerValue(high.builder.add(self._value, other._value))
 
     def __sub__(self, other):
         """
@@ -565,7 +853,7 @@ class HighIntegerValue(HighValue):
 
         other = high.value_from_any(other).cast_to(self.type_)
 
-        return HighValue.from_low(high.builder.sub(self._value, other._value))
+        return HighIntegerValue(high.builder.sub(self._value, other._value))
 
     def __mul__(self, other):
         """
@@ -574,7 +862,7 @@ class HighIntegerValue(HighValue):
 
         other = high.value_from_any(other).cast_to(self.type_)
 
-        return HighValue.from_low(high.builder.mul(self._value, other._value))
+        return HighIntegerValue(high.builder.mul(self._value, other._value))
 
     def __div__(self, other):
         """
@@ -583,7 +871,7 @@ class HighIntegerValue(HighValue):
 
         other = high.value_from_any(other).cast_to(self.type_)
 
-        return HighValue.from_low(high.builder.sdiv(self._value, other._value))
+        return HighIntegerValue(high.builder.sdiv(self._value, other._value))
 
     def cast_to(self, type_, name = ""):
         """
@@ -629,8 +917,6 @@ class HighRealValue(HighValue):
         Return the result of an equality comparison.
         """
 
-        # XXX support non-floating-point comparisons
-
         return \
             HighValue.from_low(
                 high.builder.fcmp(
@@ -642,17 +928,29 @@ class HighRealValue(HighValue):
 
     def __ge__(self, other):
         """
-        Return the result of a less-than comparison.
+        Return the result of a greater-than comparison.
         """
-
-        # XXX support non-floating-point comparisons
 
         return \
             HighValue.from_low(
                 high.builder.fcmp(
                     llvm.core.FCMP_OGE,
                     self._value,
-                    high.value_from_any(other)._value,
+                    high.value_from_any(other).cast_to(self.type_)._value,
+                    ),
+                )
+
+    def __le__(self, other):
+        """
+        Return the result of a less-than comparison.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.fcmp(
+                    llvm.core.FCMP_OLE,
+                    self._value,
+                    high.value_from_any(other).cast_to(self.type_)._value,
                     ),
                 )
 
@@ -662,7 +960,7 @@ class HighRealValue(HighValue):
         """
 
         other = high.value_from_any(other).cast_to(self.type_)
-        value = HighValue.from_low(high.builder.fadd(self._value, other._value))
+        value = HighRealValue(high.builder.fadd(self._value, other._value))
 
         if high.test_for_nan:
             high.assert_(~value.is_nan, "result of %s + %s is not a number", other, self)
@@ -675,7 +973,7 @@ class HighRealValue(HighValue):
         """
 
         other = high.value_from_any(other).cast_to(self.type_)
-        value = HighValue.from_low(high.builder.fsub(self._value, other._value))
+        value = HighRealValue(high.builder.fsub(self._value, other._value))
 
         if high.test_for_nan:
             high.assert_(~value.is_nan, "result of %s - %s is not a number", other, self)
@@ -688,7 +986,7 @@ class HighRealValue(HighValue):
         """
 
         other = high.value_from_any(other).cast_to(self.type_)
-        value = HighValue.from_low(high.builder.fmul(self._value, other._value))
+        value = HighRealValue(high.builder.fmul(self._value, other._value))
 
         if high.test_for_nan:
             high.assert_(~value.is_nan, "result of %s * %s is not a number", other, self)
@@ -701,7 +999,7 @@ class HighRealValue(HighValue):
         """
 
         other = high.value_from_any(other).cast_to(self.type_)
-        value = HighValue.from_low(high.builder.fdiv(self._value, other._value))
+        value = HighRealValue(high.builder.fdiv(self._value, other._value))
 
         if high.test_for_nan:
             high.assert_(~value.is_nan, "result of %s / %s is not a number", other, self)
@@ -807,6 +1105,9 @@ class HighPointerValue(HighValue):
 
         if type_.kind == llvm.core.TYPE_POINTER:
             low_value = high.builder.bitcast(self._value, type_, name)
+        elif type_.kind == llvm.core.TYPE_INTEGER:
+            if type_.width == iptr_type.width:
+                low_value = high.builder.ptrtoint(self._value, type_, name)
 
         if low_value is None:
             raise CoercionError(self.type_, type_)

@@ -218,21 +218,18 @@ class MixedBinomialEmitter(object):
 
         pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
 
-        #high.printf(
-            #"k = %s; p = %s; n = %s",
-            #sample.data.gep(0, 0).load(),
-            #parameter.data.load(),
-            #sample.data.gep(0, 1).load(),
-            #)
+        p = parameter.data.load()
+        k = sample.data.gep(0, 0).load()
+        n = sample.data.gep(0, 1).load()
 
-        high.log(
-            pdf(
-                sample.data.gep(0, 0).load(),
-                parameter.data.load(),
-                sample.data.gep(0, 1).load(),
-                ),
-            ) \
-            .store(out)
+        if high.test_for_nan:
+            high.assert_(p >= 0.0, "invalid p = %s"           , p   )
+            high.assert_(p <= 1.0, "invalid p = %s"           , p   )
+            high.assert_(k >= 0  , "invalid k = %s"           , k   )
+            high.assert_(n >= 0  , "invalid n = %s"           , n   )
+            high.assert_(k <= n  , "invalid k = %s (> n = %s)", k, n)
+
+        high.log(pdf(k, p, n)).store(out)
 
     def ml(self, samples, weights, out):
         """
@@ -265,8 +262,6 @@ class MixedBinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        import math
-
         total_k = high.stack_allocate(float, 0.0)
         total_n = high.stack_allocate(float, 0.0)
 
@@ -276,6 +271,20 @@ class MixedBinomialEmitter(object):
             sample_k = samples.at(n).data.gep(0, 0).load().cast_to(float)
             sample_n = samples.at(n).data.gep(0, 1).load().cast_to(float)
 
+            #high.printf(
+                #"sample %i: k = %i; n = %i; w = %.2f",
+                #n,
+                #sample_k,
+                #sample_n,
+                #weight,
+                #)
+
+            if high.test_for_nan:
+                high.assert_(weight   >= 0.0     , "invalid weight = %s"      , weight            )
+                high.assert_(sample_k >= 0       , "invalid k = %s"           , sample_k          )
+                high.assert_(sample_n >= 0       , "invalid n = %s"           , sample_n          )
+                high.assert_(sample_k <= sample_n, "invalid k = %s (> n = %s)", sample_k, sample_n)
+
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
 
@@ -284,11 +293,6 @@ class MixedBinomialEmitter(object):
         final_ratio = numerator / denominator
 
         if high.test_for_nan:
-            high.printf(
-                "ratio is (%s / %s)",
-                numerator,
-                denominator,
-                )
             high.assert_(
                 ~final_ratio.is_nan,
                 "ratio (%s / %s) is not a number",

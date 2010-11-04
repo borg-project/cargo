@@ -118,9 +118,9 @@ def get_strided_type(element_type, shape, strides):
                     shape[0] * strides[0],
                     )
     else:
-        from cargo.llvm import sizeof_type
+        from cargo.llvm import size_of_type
 
-        return (element_type, sizeof_type(element_type))
+        return (element_type, size_of_type(element_type))
 
 class StridedArray(object):
     """
@@ -234,10 +234,10 @@ class StridedArray(object):
         shape = map(int, shape)
 
         if strides is None:
-            from cargo.llvm import sizeof_type
+            from cargo.llvm import size_of_type
 
             strides   = []
-            axis_size = sizeof_type(data.type_.pointee)
+            axis_size = size_of_type(data.type_.pointee)
 
             for d in reversed(shape):
                 strides   += [axis_size]
