@@ -155,12 +155,11 @@ class MixedBinomial(object):
     - sample    : {uint32 k; uint32 n;}
     """
 
-    def __init__(self, epsilon = 1e-3):
+    def __init__(self):
         """
         Initialize.
         """
 
-        self._epsilon         = epsilon
         self._parameter_dtype = numpy.dtype(numpy.float64)
         self._sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
 
@@ -271,14 +270,6 @@ class MixedBinomialEmitter(object):
             sample_k = samples.at(n).data.gep(0, 0).load().cast_to(float)
             sample_n = samples.at(n).data.gep(0, 1).load().cast_to(float)
 
-            #high.printf(
-                #"sample %i: k = %i; n = %i; w = %.2f",
-                #n,
-                #sample_k,
-                #sample_n,
-                #weight,
-                #)
-
             if high.test_for_nan:
                 high.assert_(weight   >= 0.0     , "invalid weight = %s"      , weight            )
                 high.assert_(sample_k >= 0       , "invalid k = %s"           , sample_k          )
@@ -288,17 +279,15 @@ class MixedBinomialEmitter(object):
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
 
-        numerator   = (total_k.load() + self._model._epsilon)
-        denominator = (total_n.load() + self._model._epsilon)
-        final_ratio = numerator / denominator
+        epsilon = numpy.finfo(float).eps
+        ratio   = ((total_k.load() + epsilon) / (total_n.load() + epsilon)) / (1.0 / (1.0 - 2 * epsilon)) + epsilon
 
-        if high.test_for_nan:
-            high.assert_(
-                ~final_ratio.is_nan,
-                "ratio (%s / %s) is not a number",
-                numerator,
-                denominator,
-                )
+        ratio.store(out.data)
 
-        final_ratio.store(out.data)
+    def given(self, parameter, samples, out):
+        """
+        Return the conditional distribution.
+        """
+
+        parameter.data.load().store(out.data)
 

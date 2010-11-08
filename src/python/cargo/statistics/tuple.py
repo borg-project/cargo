@@ -117,19 +117,26 @@ class TupleEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        from cargo.llvm import iptr_type
+        for (i, (_, count)) in enumerate(self._model._distributions):
+            @high.for_(count)
+            def _(j):
+                self._emitters[i].ml(
+                    samples.extract(0, i, j),
+                    weights,
+                    StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
+                    )
+
+    def given(self, parameter, samples, out):
+        """
+        Return the conditional distribution.
+        """
 
         for (i, (_, count)) in enumerate(self._model._distributions):
             @high.for_(count)
             def _(j):
-                data = samples.extract(0, i, j).data.cast_to(iptr_type)
-                @high.python(j, data)
-                def _(j_py, d_py):
-                    print "data %i, %i" % (i, j_py), d_py
-
-                self._emitters[i].ml(
+                self._emitters[i].given(
+                    StridedArray.from_typed_pointer(parameter.data.gep(0, i, j)),
                     samples.extract(0, i, j),
-                    weights,
                     StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
                     )
 

@@ -71,7 +71,7 @@ def test_finite_mixture_ml():
     Test EM estimation of finite mixture distributions.
     """
 
-    me = ModelEngine(FiniteMixture(MixedBinomial(epsilon = 0.0), 2))
+    me = ModelEngine(FiniteMixture(MixedBinomial(), 2))
 
     assert_finite_mixture_ml_ok(me)
 

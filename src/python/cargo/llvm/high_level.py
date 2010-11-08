@@ -6,16 +6,17 @@ import ctypes
 import numpy
 import llvm.core
 
+from contextlib import contextmanager
 from llvm.core  import (
     Type,
     Value,
+    Module,
+    Builder,
     Constant,
     Function,
+    GlobalVariable,
     )
-from cargo.llvm import (
-    iptr_type,
-    BuilderStack,
-    )
+from cargo.llvm import iptr_type
 
 object_type     = Type.struct([])
 object_ptr_type = Type.pointer(object_type)
@@ -63,17 +64,60 @@ class EmittedAssertionError(AssertionError):
 
         return self._emission_stack
 
-class HighStandard(object):
+class HighLanguage(object):
     """
     Provide a simple higher-level Python-embedded language on top of LLVM.
     """
 
-    def __init__(self, test_for_nan = False):
+    _language_stack = []
+
+    def __init__(self, module = None, test_for_nan = False):
         """
         Initialize.
         """
 
-        self._test_for_nan = test_for_nan
+        # members
+        if module is None:
+            module = Module.new("high")
+
+        self._module        = module
+        self._test_for_nan  = test_for_nan
+        self._literals      = {}
+        self._builder_stack = []
+
+        # make Python-support declarations
+        self._module.add_type_name("PyObjectPtr", Type.pointer(Type.struct([])))
+
+        with self.active():
+            # add a main
+            main_body = HighFunction.new_named("main_body")
+
+            @HighFunction.define()
+            def main():
+                """
+                The true entry point.
+                """
+
+                # initialize the Python runtime (matters only for certain test scenarios)
+                HighFunction.named("Py_Initialize")()
+
+                # prepare for exception handling
+                from cargo.llvm.support import size_of_jmp_buf
+
+                context_type = Type.array(Type.int(8), size_of_jmp_buf())
+                context      = GlobalVariable.new(self._module, context_type, "main_context")
+                setjmp       = HighFunction.named("setjmp", int, [Type.pointer(Type.int(8))])
+
+                context.linkage     = llvm.core.LINKAGE_INTERNAL
+                context.initializer = Constant.null(context_type)
+
+                self.if_(setjmp(context) == 0)(main_body)
+                self.return_()
+
+        # prepare for user code
+        body_entry = main_body._value.append_basic_block("entry")
+
+        self._builder_stack.append(Builder.new(body_entry))
 
     def value_from_any(self, value):
         """
@@ -127,16 +171,48 @@ class HighStandard(object):
         else:
             raise TypeError("cannot build type from \"%s\" instance" % type(some_type))
 
+    def string_literal(self, string):
+        """
+        Define a new string literal.
+        """
+
+        if string not in self._literals:
+            name  = "literal%i" % len(self._literals)
+            value = \
+                HighValue.from_low(
+                    GlobalVariable.new(self.module, Type.array(Type.int(8), len(string) + 1), name),
+                    )
+
+            value._value.linkage     = llvm.core.LINKAGE_INTERNAL
+            value._value.initializer = Constant.stringz(string)
+
+            self._literals[string] = value
+
+            return value
+        else:
+            return self._literals[string]
+
     def if_(self, condition):
         """
         Emit an if-then statement.
         """
 
-        def decorator(emit_then):
-            @self.if_else(condition)
-            def _(then):
-                if then:
-                    emit_then()
+        condition  = self.value_from_any(condition).cast_to(Type.int(1))
+        then       = self.function.append_basic_block("then")
+        merge      = self.function.append_basic_block("merge")
+
+        def decorator(emit):
+            builder = self.builder
+
+            builder.cbranch(condition.low, then, merge)
+            builder.position_at_end(then)
+
+            emit()
+
+            if not self.block_terminated:
+                builder.branch(merge)
+
+            builder.position_at_end(merge)
 
         return decorator
 
@@ -299,21 +375,151 @@ class HighStandard(object):
 
         return result
 
+    __whatever = []
+
     def python(self, *arguments):
         """
         Emit a call to a Python callable.
         """
 
-        return CallPythonDecorator(arguments)
+        def decorator(callable_):
+            """
+            Emit a call to an arbitrary Python object.
+            """
 
-    def printf(self, format_, *arguments):
+            # XXX properly associate a destructor with the module, etc
+
+            HighLanguage.__whatever += [callable_]
+
+            from cargo.llvm import constant_pointer_to
+
+            HighObject(constant_pointer_to(callable_, self.object_ptr_type))(*arguments)
+
+        return decorator
+
+    def py_import(self, name):
         """
-        Emit a call to a Python callable.
+        Import a Python module.
         """
 
-        @high.python(*arguments)
-        def _(*pythonized):
-            print format_ % pythonized
+        object_ptr_type = self.module.get_type_named("PyObjectPtr")
+        import_         = HighFunction.named("PyImport_ImportModule", object_ptr_type, [Type.pointer(Type.int(8))])
+
+        # XXX error handling
+
+        return HighObject(import_(self.string_literal(name))._value)
+
+    @contextmanager
+    def py_scope(self):
+        """
+        Define a Python object lifetime scope.
+        """
+
+        yield HighPyScope()
+
+    def py_tuple(self, *values):
+        """
+        Build a Python tuple from high-LLVM values.
+        """
+
+        tuple_new      = HighFunction.named("PyTuple_New", object_ptr_type, [ctypes.c_int])
+        tuple_set_item = \
+            HighFunction.named(
+                "PyTuple_SetItem",
+                ctypes.c_int,
+                [object_ptr_type, ctypes.c_size_t, object_ptr_type],
+                )
+
+        values_tuple = tuple_new(len(values))
+
+        for (i, value) in enumerate(values):
+            if value.type_ == self.object_ptr_type:
+                self.py_inc_ref(value)
+
+            tuple_set_item(values_tuple, i, value.to_python())
+
+        return values_tuple
+
+    def py_inc_ref(self, value):
+        """
+        Decrement the refcount of a Python object.
+        """
+
+        inc_ref = HighFunction.named("Py_IncRef", Type.void(), [object_ptr_type])
+
+        inc_ref(value)
+
+    def py_dec_ref(self, value):
+        """
+        Decrement the refcount of a Python object.
+        """
+
+        dec_ref = HighFunction.named("Py_DecRef", Type.void(), [object_ptr_type])
+
+        dec_ref(value)
+
+    def py_print(self, value):
+        """
+        Print a Python string via sys.stdout.
+        """
+
+        if isinstance(value, str):
+            value = HighObject.from_string(value)
+        elif value.type_ != self.object_ptr_type:
+            raise TypeError("py_print() expects a str or object pointer argument")
+
+        with self.py_scope():
+            self.py_import("sys").get("stdout").get("write")(value)
+
+    def py_printf(self, format_, *arguments):
+        """
+        Print arguments via to-Python conversion.
+        """
+
+        object_ptr_type = self.object_ptr_type
+        py_format       = HighFunction.named("PyString_Format", object_ptr_type, [object_ptr_type] * 2)
+        py_from_string  = HighFunction.named("PyString_FromString", object_ptr_type, [Type.pointer(Type.int(8))])
+
+        @HighFunction.define(Type.void(), [a.type_ for a in arguments])
+        def py_printf(*inner_arguments):
+            """
+            Emit the body of the generated print function.
+            """
+
+            # build the output string
+            format_object    = py_from_string(self.string_literal(format_))
+            arguments_object = high.py_tuple(*inner_arguments)
+            output_object    = py_format(format_object, arguments_object)
+
+            self.py_dec_ref(format_object)
+            self.py_dec_ref(arguments_object)
+            self.py_check_null(output_object)
+
+            # write it to the standard output stream
+            self.py_print(output_object)
+            self.py_dec_ref(output_object)
+            self.return_()
+
+        py_printf(*arguments)
+
+    def py_check_null(self, value):
+        """
+        Bail if a value is null.
+        """
+
+        from ctypes import c_int
+
+        @high.if_(value == 0)
+        def _():
+            longjmp = \
+                HighFunction.named(
+                    "longjmp",
+                    Type.void(),
+                    [Type.pointer(Type.int(8)), c_int],
+                    )
+            context = self.module.get_global_variable_named("main_context")
+
+            longjmp(context, 1)
 
     def heap_allocate(self, type_, count = 1):
         """
@@ -357,13 +563,55 @@ class HighStandard(object):
             def _(*pythonized):
                 raise EmittedAssertionError(message % pythonized, emission_stack)
 
+    def return_(self, value = None):
+        """
+        Emit a return statement.
+        """
+
+        if value is None:
+            self.builder.ret_void()
+        else:
+            self.builder.ret(value._value)
+
+    @contextmanager
+    def active(self):
+        """
+        Make a new language instance active in this context.
+        """
+
+        HighLanguage._language_stack.append(self)
+
+        yield self
+
+        HighLanguage._language_stack.pop()
+
+    @contextmanager
+    def this_builder(self, builder):
+        """
+        Temporarily alter the active builder.
+        """
+
+        self._builder_stack.append(builder)
+
+        yield builder
+
+        self._builder_stack.pop()
+
+    @property
+    def main(self):
+        """
+        Return the module entry point.
+        """
+
+        return self.module.get_function_named("main")
+
     @property
     def builder(self):
         """
         Return the current IR builder.
         """
 
-        return BuilderStack.local.top()
+        return self._builder_stack[-1]
 
     @property
     def basic_block(self):
@@ -387,7 +635,7 @@ class HighStandard(object):
         Return the current module.
         """
 
-        return self.function.module
+        return self._module
 
     @property
     def block_terminated(self):
@@ -415,7 +663,35 @@ class HighStandard(object):
 
         self._test_for_nan = test_for_nan
 
-high = HighStandard(test_for_nan = True)
+    @property
+    def object_ptr_type(self):
+        """
+        Return the PyObject* type.
+        """
+
+        return self.module.get_type_named("PyObjectPtr")
+
+    @staticmethod
+    def get_active():
+        """
+        Get the currently-active language instance.
+        """
+
+        return HighLanguage._language_stack[-1]
+
+class HighLanguageDispatcher(object):
+    """
+    Refer to the currently-active Qy language instance.
+    """
+
+    def __getattr__(self, name):
+        """
+        Retrieve an attribute of the currently-active Qy instance.
+        """
+
+        return getattr(HighLanguage.get_active(), name)
+
+high = HighLanguageDispatcher()
 
 class HighValue(object):
     """
@@ -427,7 +703,9 @@ class HighValue(object):
         Initialize.
         """
 
-        if self.kind is not None and value.type.kind != self.kind:
+        if not isinstance(value, Value):
+            raise TypeError("HighValue constructor requires an llvm.core.Value")
+        elif self.kind is not None and value.type.kind != self.kind:
             raise TypeError(
                 "cannot construct an %s instance from a %s value",
                 type(self).__name__,
@@ -809,6 +1087,20 @@ class HighIntegerValue(HighValue):
 
         return high.builder.xor(self._value, Constant.int(self.type_, -1))
 
+    def __eq__(self, other):
+        """
+        Return the result of an equality comparison.
+        """
+
+        return \
+            HighValue.from_low(
+                high.builder.icmp(
+                    llvm.core.ICMP_EQ,
+                    self._value,
+                    high.value_from_any(other)._value,
+                    ),
+                )
+
     def __ge__(self, other):
         """
         Return the result of a greater-than comparison.
@@ -1093,6 +1385,16 @@ class HighPointerValue(HighValue):
                     ),
                 )
 
+    def to_python(self):
+        """
+        Build a Python-compatible argument value.
+        """
+
+        if self.type_ == high.object_ptr_type:
+            return self._value
+        else:
+            raise TypeError("unknown to-Python conversion for %s" % self.type_)
+
     def cast_to(self, type_, name = ""):
         """
         Cast this value to the specified type.
@@ -1129,6 +1431,17 @@ class HighFunction(HighValue):
         Emit IR for a function call.
         """
 
+        # sanity
+        if len(arguments) != len(self.argument_types):
+            raise TypeError(
+                "function %s expects %i arguments but received %i" % (
+                    self._value.name,
+                    len(self.argument_types),
+                    len(arguments),
+                    ),
+                )
+
+        # emit the call
         arguments = map(high.value_from_any, arguments)
         coerced   = [v.cast_to(a) for (v, a) in zip(arguments, self.argument_types)]
 
@@ -1164,9 +1477,9 @@ class HighFunction(HighValue):
             return self.type_.args
 
     @staticmethod
-    def named(name, return_type, argument_types):
+    def named(name, return_type = Type.void(), argument_types = ()):
         """
-        Return a named function.
+        Look up or create a named function.
         """
 
         type_ = \
@@ -1186,9 +1499,9 @@ class HighFunction(HighValue):
         return HighFunction(high.module.get_function_named(name))
 
     @staticmethod
-    def new_named(name, return_type, argument_types):
+    def new_named(name, return_type = Type.void(), argument_types = ()):
         """
-        Look up or create a named function.
+        Create a named function.
         """
 
         type_ = \
@@ -1198,6 +1511,35 @@ class HighFunction(HighValue):
                 )
 
         return HighFunction(high.module.add_function(type_, name))
+
+    @staticmethod
+    def define(return_type = Type.void(), argument_types = (), name = None):
+        """
+        Look up or create a named function.
+        """
+
+        def decorator(emit):
+            """
+            Emit the body of the function.
+            """
+
+            if name is None:
+                if emit.__name__ == "_":
+                    function_name = "function"
+                else:
+                    function_name = emit.__name__
+            else:
+                function_name = name
+
+            function = HighFunction.new_named(function_name, return_type, argument_types)
+            entry    = function._value.append_basic_block("entry")
+
+            with high.this_builder(Builder.new(entry)) as builder:
+                emit(*function.argument_values)
+
+            return function
+
+        return decorator
 
     @staticmethod
     def pointed(address, return_type, argument_types):
@@ -1223,101 +1565,76 @@ class HighFunction(HighValue):
 
         return HighFunction(Function.intrinsic(high.module, intrinsic_id, qualifiers))
 
-class IfDecorator(object):
+class HighObject(HighPointerValue):
     """
-    Emit an if-then-else statement.
-    """
-
-    def __init__(self, condition):
-        """
-        Initialize.
-        """
-
-        self._condition = condition
-
-    def __call__(self, emit_then):
-        """
-        Emit a "then" block.
-        """
-
-        return self(emit_then)
-
-    def then(self, emit_then):
-        """
-        Emit a "then" block.
-        """
-
-class CallPythonDecorator(object):
-    """
-    Emit calls to Python in LLVM.
+    Higher-level interface to Python objects in LLVM.
     """
 
-    __whatever = []
-
-    def __init__(self, arguments = ()):
+    def __call__(self, *arguments):
         """
-        Initialize.
+        Emit a Python call.
         """
 
-        self._arguments = arguments
+        @HighFunction.define(
+            Type.void(),
+            [high.object_ptr_type] + [a.type_ for a in arguments],
+            )
+        def invoke_python(*inner_arguments):
+            from cargo.llvm import constant_pointer_to
 
-    def __call__(self, callable_):
+            call_object = \
+                HighFunction.named(
+                    "PyObject_CallObject",
+                    object_ptr_type,
+                    [object_ptr_type, object_ptr_type],
+                    )
+
+            argument_tuple = high.py_tuple(*inner_arguments[1:])
+            call_result    = call_object(inner_arguments[0], argument_tuple)
+
+            high.py_dec_ref(argument_tuple)
+            high.py_check_null(call_result)
+            high.py_dec_ref(call_result)
+            high.return_()
+
+        invoke_python(self, *arguments)
+
+    def get(self, name):
         """
-        Emit IR for a particular callable.
+        Get an attribute.
         """
 
-        # XXX instead maintain module-level reference to the callable
+        object_ptr_type = high.object_ptr_type
 
-        CallPythonDecorator.__whatever += [callable_]
+        get_attr = HighFunction.named("PyObject_GetAttrString", object_ptr_type, [object_ptr_type, Type.pointer(Type.int(8))])
 
-        # build a Python argument tuple
-        tuple_new      = HighFunction.named("PyTuple_New", object_ptr_type, [ctypes.c_int])
-        tuple_set_item = \
-            HighFunction.named(
-                "PyTuple_SetItem",
-                ctypes.c_int,
-                [object_ptr_type, ctypes.c_size_t, object_ptr_type],
-                )
+        result = get_attr(self, high.string_literal(name))
 
-        argument_tuple = tuple_new(len(self._arguments))
+        high.py_check_null(result)
 
-        for (i, argument) in enumerate(self._arguments):
-            tuple_set_item(argument_tuple, i, argument.to_python())
+        return HighObject(result._value)
 
-        # call the callable
+    @staticmethod
+    def from_object(instance):
+        """
+        Build a HighObject for a Python object.
+        """
+
         from cargo.llvm import constant_pointer_to
 
-        call_object = \
-            HighFunction.named(
-                "PyObject_CallObject",
-                object_ptr_type,
-                [object_ptr_type, object_ptr_type],
-                )
+        return HighObject(constant_pointer_to(instance, high.object_ptr_type))
 
-        call_result = \
-            call_object(
-                constant_pointer_to(callable_, object_ptr_type),
-                argument_tuple,
-                )
+    @staticmethod
+    def from_string(string):
+        """
+        Build a HighObject for a Python string object.
+        """
 
-        # XXX decrement arguments, return value, etc.
-        # XXX we could potentially move the bail-on-exception code into a function
+        py_from_string = HighFunction.named("PyString_FromString", object_ptr_type, [Type.pointer(Type.int(8))])
 
-        dec_ref = HighFunction.named("Py_DecRef", Type.void(), [object_ptr_type])
+        return HighObject(py_from_string(high.string_literal(string))._value)
 
-        # respond to an exception, if present
-        err_occurred = HighFunction.named("PyErr_Occurred", object_ptr_type, [])
-
-        @high.if_else(err_occurred() == 0)
-        def _(then):
-            if then:
-                # XXX emit cleanup code
-                pass
-            else:
-                # XXX can longjmp be marked as noreturn? to avoid the unnecessary br, etc
-                longjmp    = HighFunction.intrinsic(llvm.core.INTR_LONGJMP)
-                context    = high.module.get_global_variable_named("main_context")
-                i8_context = high.builder.bitcast(context, Type.pointer(Type.int(8)))
-
-                longjmp(i8_context, 1)
+class HighPyScope(object):
+    # XXX
+    pass
 

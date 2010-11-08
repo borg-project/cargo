@@ -74,7 +74,7 @@ def test_mixed_binomial_ml():
     Test max-likelihood estimation under the mixed binomial distribution.
     """
 
-    me = ModelEngine(MixedBinomial(epsilon = 0.0))
+    me = ModelEngine(MixedBinomial())
 
     assert_almost_equal_deep(
         me.ml(

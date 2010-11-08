@@ -15,6 +15,7 @@ from nose.tools import (
 from cargo.llvm import (
     high,
     emit_and_execute,
+    HighObject,
     )
 
 def test_high_python_no_arguments():
@@ -25,7 +26,7 @@ def test_high_python_no_arguments():
     executed = [False]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.python()
         def _():
             executed[0] = [True]
@@ -40,7 +41,7 @@ def test_high_python_arguments():
     values = []
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.for_(8)
         def _(i):
             @high.python(i)
@@ -59,7 +60,7 @@ def test_high_python_exception():
 
     def should_raise():
         @emit_and_execute()
-        def _(_):
+        def _():
             @high.python()
             def _():
                 raise ExpectedException()
@@ -76,7 +77,7 @@ def test_high_python_exception_short_circuiting():
 
     def should_raise():
         @emit_and_execute()
-        def _(_):
+        def _():
             @high.python()
             def _():
                 raise ExpectedException()
@@ -95,7 +96,7 @@ def test_high_if_():
     bad = [True]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.if_(True)
         def _():
             @high.python()
@@ -105,7 +106,7 @@ def test_high_if_():
     assert_false(bad)
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.if_(False)
         def _():
             @high.python()
@@ -120,7 +121,7 @@ def test_high_if_else():
     bad = [True]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.if_else(True)
         def _(then):
             if then:
@@ -137,7 +138,7 @@ def test_high_if_else():
     bad = [True]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.if_else(False)
         def _(then):
             if then:
@@ -160,7 +161,7 @@ def test_high_for_():
     iterations = [0]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.for_(count)
         def _(_):
             @high.python()
@@ -168,6 +169,77 @@ def test_high_for_():
                 iterations[0] += 1
 
     assert_equal(iterations[0], count)
+
+def test_high_object_basics():
+    """
+    Test basic operations on LLVM-wrapped Python objects.
+    """
+
+    result = [None]
+    text   = "testing"
+
+    def do_function(string_py):
+        result[0] = string_py
+
+    @emit_and_execute()
+    def _():
+        do     = HighObject.from_object(do_function)
+        string = HighObject.from_string(text)
+
+        do(string)
+
+    assert_equal(result, [text])
+
+def test_high_py_print():
+    """
+    Test the py_print() LLVM construct with arguments.
+    """
+
+    import sys
+
+    from cStringIO import StringIO
+
+    old_stdout = sys.stdout
+
+    try:
+        new_stdout = StringIO()
+        sys.stdout = new_stdout
+
+        @emit_and_execute()
+        def _():
+            high.py_print("test text\n")
+    finally:
+        sys.stdout = old_stdout
+
+    assert_equal(new_stdout.getvalue(), "test text\n")
+
+def test_high_py_printf():
+    """
+    Test the py_printf() LLVM construct with arguments.
+    """
+
+    import sys
+
+    from cStringIO import StringIO
+
+    old_stdout = sys.stdout
+
+    try:
+        new_stdout = StringIO()
+        sys.stdout = new_stdout
+
+        @emit_and_execute()
+        def _():
+            @high.for_(8)
+            def _(i):
+                high.py_printf("i = %i\n", i)
+    finally:
+        sys.stdout = old_stdout
+
+    assert_equal(
+        new_stdout.getvalue(),
+        "".join("i = %i\n" % i for i in xrange(8)),
+        )
 
 def test_high_nested_for_():
     """
@@ -178,7 +250,7 @@ def test_high_nested_for_():
     iterations = [0]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.for_(count)
         def _(_):
             @high.for_(count)
@@ -196,7 +268,7 @@ def test_high_assert_():
 
     # should not raise
     @emit_and_execute()
-    def _(_):
+    def _():
         high.assert_(True)
 
     # should raise
@@ -204,7 +276,7 @@ def test_high_assert_():
 
     def should_raise():
         @emit_and_execute()
-        def _(_):
+        def _():
             high.assert_(False)
 
     assert_raises(EmittedAssertionError, should_raise)
@@ -218,7 +290,7 @@ def test_high_random():
     total = [0.0]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.for_(count)
         def _(_):
             v = high.random()
@@ -238,7 +310,7 @@ def test_high_random_int():
     values = []
 
     @emit_and_execute()
-    def _(_):
+    def _():
         @high.for_(count)
         def _(_):
             v = high.random_int(2)
@@ -258,7 +330,7 @@ def test_high_select():
     result = [None, None]
 
     @emit_and_execute()
-    def _(_):
+    def _():
         v0 = high.select(True, 3, 4)
         v1 = high.select(False, 3, 4)
 
@@ -276,7 +348,7 @@ def test_high_is_nan():
     """
 
     @emit_and_execute()
-    def _(_):
+    def _():
         a = high.value_from_any(-0.000124992188151).is_nan
         b = high.value_from_any(numpy.nan).is_nan
 
@@ -291,7 +363,7 @@ def test_high_log():
     """
 
     @emit_and_execute()
-    def _(_):
+    def _():
         v0 = high.log(math.e)
 
         @high.python(v0)
@@ -304,7 +376,7 @@ def test_high_log1p():
     """
 
     @emit_and_execute()
-    def _(_):
+    def _():
         v0 = high.log1p(math.e - 1.0)
 
         @high.python(v0)
@@ -317,7 +389,7 @@ def test_high_exp():
     """
 
     @emit_and_execute()
-    def _(_):
+    def _():
         v0 = high.exp(1.0)
 
         @high.python(v0)

@@ -160,6 +160,11 @@ class ModelEngine(object):
                 AA(samples   , self._model.sample_dtype   , 1),
                 )
 
+        print "common shape", shape
+        print "out shape", out.shape, "dtype", out.dtype
+        print "parameters shape", parameters.shape
+        print "samples shape", samples.shape
+
         # computation
         @emit_and_execute("local")
         def _(module):
@@ -177,6 +182,14 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
+                from cargo.llvm import high, iptr_type
+                high.py_printf(
+                    "%i %i %i\n",
+                    l.arrays["p"].data.cast_to(iptr_type),
+                    l.arrays["s"].data.cast_to(iptr_type),
+                    l.arrays["o"].data.cast_to(iptr_type),
+                    )
+
                 emitter.given(l.arrays["p"], l.arrays["s"], l.arrays["o"])
 
         # done

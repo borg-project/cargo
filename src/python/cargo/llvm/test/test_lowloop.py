@@ -33,7 +33,7 @@ def assert_copying_ok(in_, out, expected):
 
     assert_equal(expected.tolist(), out.tolist())
 
-def test_array_loop_simple():
+def test_strided_arrays_loop_all_simple():
     """
     Test basic strided-array loop compilation.
     """
@@ -45,7 +45,7 @@ def test_array_loop_simple():
     # verify correctness
     assert_copying_ok(foo, bar, numpy.copy(foo))
 
-def test_array_loop_broadcast():
+def test_strided_arrays_loop_all_broadcast():
     """
     Test strided-array loop compilation with broadcast arrays.
     """
@@ -63,7 +63,7 @@ def test_array_loop_broadcast():
     # verify correctness
     assert_copying_ok(foo, bar, baz)
 
-def test_array_loop_views():
+def test_strided_arrays_loop_all_views():
     """
     Test strided-array loop compilation on numpy views.
     """
@@ -81,7 +81,7 @@ def test_array_loop_views():
     # verify correctness
     assert_copying_ok(foo, bar, baz)
 
-def test_array_loop_subarrays():
+def test_strided_arrays_loop_all_subarrays():
     """
     Test strided-array loop compilation on subarrays.
     """
@@ -111,7 +111,7 @@ def test_array_loop_subarrays():
 
     assert_equal(bar[1].tolist(), baz.tolist())
 
-def test_array_loop_extracted():
+def test_strided_array_extract():
     """
     Test strided-array loop compilation on extracted member arrays.
     """
@@ -138,9 +138,9 @@ def test_array_loop_extracted():
 
     assert_equal(bar.tolist(), baz.tolist())
 
-def test_array_loop_complex_dtype():
+def test_strided_array_at_complex_dtype():
     """
-    Test strided-array loop compilation with a complex dtype.
+    Test strided-array addressing with a complex dtype.
     """
 
     # generate some test data
@@ -149,8 +149,6 @@ def test_array_loop_complex_dtype():
 
     array["d"]["k"] = 0
     array["d"]["n"] = 42
-
-    print array.strides
 
     # verify correctness
     from cargo.llvm import iptr_type
@@ -166,4 +164,32 @@ def test_array_loop_complex_dtype():
         def _(at0_py, at1_py):
             assert_equal(at0_py, array[0].__array_interface__["data"][0])
             assert_equal(at1_py, array[1].__array_interface__["data"][0])
+
+def test_strided_array_loop_subshape_complex_dtype():
+    """
+    Test strided-array loop compilation with a complex dtype.
+    """
+
+    # generate some test data
+    dtype = numpy.dtype([("d", [("k", numpy.uint32), ("n", numpy.uint32)], (4,))])
+    array = numpy.empty(2, dtype)
+
+    array["d"]["k"] = 0
+    array["d"]["n"] = 42
+
+    # verify correctness
+    from cargo.llvm import iptr_type
+
+    @emit_and_execute()
+    def _(_):
+        ll_array  = StridedArray.from_numpy(array)
+        ll_arrays = StridedArrays({"a" : ll_array})
+
+        @ll_arrays.loop_all()
+        def _(l):
+            high.printf("address %i", l.arrays["a"].data.cast_to(iptr_type))
+            #@high.python(at0, at1)
+            #def _(at0_py, at1_py):
+                #assert_equal(at0_py, array[0].__array_interface__["data"][0])
+                #assert_equal(at1_py, array[1].__array_interface__["data"][0])
 

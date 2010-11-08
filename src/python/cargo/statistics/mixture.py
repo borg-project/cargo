@@ -64,14 +64,6 @@ class FiniteMixture(object):
         return FiniteMixtureEmitter(self, module)
 
     @property
-    def distribution(self):
-        """
-        Return the mixture components.
-        """
-
-        return self._distribution
-
-    @property
     def parameter_dtype(self):
         """
         Return the parameter type.
@@ -86,6 +78,22 @@ class FiniteMixture(object):
         """
 
         return self._distribution.sample_dtype
+
+    @property
+    def K(self):
+        """
+        The number of mixture components.
+        """
+
+        return self._K
+
+    @property
+    def distribution(self):
+        """
+        Return the mixture components.
+        """
+
+        return self._distribution
 
 class FiniteMixtureEmitter(object):
     """
@@ -180,8 +188,6 @@ class FiniteMixtureEmitter(object):
         def _(k):
             n = high.random_int(N)
 
-            high.printf("examplar n = %i", n)
-
             self._sub_emitter.ml(
                 samples.at(n).envelop(),
                 weights.at(n).envelop(),
@@ -210,7 +216,7 @@ class FiniteMixtureEmitter(object):
             def _(n):
                 sample = samples.at(n)
 
-                high.value_from_any(0.0).store(total)
+                high.value_from_any(numpy.finfo(float).min).store(total)
 
                 @high.for_(K)
                 def _(k):
@@ -222,21 +228,16 @@ class FiniteMixtureEmitter(object):
                         responsibility,
                         )
 
-                    high.exp(responsibility.load()).store(responsibility)
-
-                    (total.load() + responsibility.load()).store(total)
+                    log_add_double(total.load(), responsibility.load()).store(total)
 
                 total_value = total.load()
 
                 @high.for_(K)
                 def _(k):
                     responsibility = r_KN.at(k, n).data
-                    normalized     =                                         \
-                        (responsibility.load() + numpy.finfo(float).eps)     \
-                        /                                                    \
-                        (total_value           + numpy.finfo(float).eps)
+                    normalized     = responsibility.load() - total_value
 
-                    normalized.store(responsibility)
+                    high.exp(normalized).store(responsibility)
 
             # make maximum-likelihood estimates
             @high.for_(K)
@@ -268,48 +269,47 @@ class FiniteMixtureEmitter(object):
 
         # compute posterior mixture parameters
         # XXX eeek leaking stack space
-        total = high.stack_allocate(float, 0.0)
+        total = high.stack_allocate(float, numpy.finfo(float).min)
 
         @high.for_(K)
         def _(k):
-            component           = out.at(k).data
-            component_pi        = component.gep(0, 0)
-            component_parameter = parameter.at(k).data.gep(0, 1)
+            prior_pi        = parameter.at(k).data.gep(0, 0)
+            prior_parameter = parameter.at(k).data.gep(0, 1)
+            posterior_pi    = out.at(k).data.gep(0, 0)
 
-            high.log(parameter.at(k).data.gep(0, 0).load()).store(component_pi)
-
-            # XXX clean up above, out / parameter distinction
+            high.log(prior_pi.load()).store(posterior_pi)
 
             @high.for_(N)
             def _(n):
-                previous = component_pi.load()
+                current_pi = posterior_pi.load()
 
                 self._sub_emitter.ll(
-                    StridedArray.from_typed_pointer(component_parameter),
+                    StridedArray.from_typed_pointer(prior_parameter),
                     samples.at(n),
-                    component_pi,
+                    posterior_pi,
                     )
 
-                (component_pi.load() + previous).store(component_pi)
+                (current_pi + posterior_pi.load()).store(posterior_pi)
 
-            exped = high.exp(component_pi.load())
-
-            exped.store(component_pi)
-
-            (total.load() + exped).store(total)
+            log_add_double(total.load(), posterior_pi.load()).store(total)
 
         @high.for_(K)
         def _(k):
-            component_pi = out.at(k).data.gep(0, 0)
+            posterior_pi  = out.at(k).data.gep(0, 0)
+            normalized_pi = posterior_pi.load() - total.load()
 
-            (component_pi.load() / total.load()).store(component_pi)
+            high.exp(normalized_pi).store(posterior_pi)
 
+        # compute posterior component parameters
         @high.for_(K)
         def _(k):
+            prior_parameter     = parameter.at(k).data.gep(0, 1)
+            posterior_parameter = out.at(k).data.gep(0, 1)
+
             self._sub_emitter.given(
-                StridedArray.from_typed_pointer(parameter.at(k).data.gep(0, 1)),
+                StridedArray.from_typed_pointer(prior_parameter),
                 samples,
-                StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
+                StridedArray.from_typed_pointer(posterior_parameter),
                 )
 
 #class RestartingML(object):

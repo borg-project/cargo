@@ -41,6 +41,18 @@ def emit_random_int(high, upper, width):
 
     return c_random_int(upper)
 
+cdef extern from "setjmp.h":
+    struct __jmp_buf_tag:
+        # GNU-specific (?) jump buffer type.
+        pass
+
+def size_of_jmp_buf():
+    """
+    Return the size of a jmp_buf structure in bytes.
+    """
+
+    return sizeof(__jmp_buf_tag)
+
 cpdef int raise_if_set() except 1:
     """
     Force the Python runtime to notice an exception, if one is set.

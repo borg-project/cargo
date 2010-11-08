@@ -5,6 +5,7 @@
 import ctypes
 import numpy
 import llvm.core
+import llvm.passes
 
 from llvm.core  import (
     Type,
@@ -14,7 +15,7 @@ from contextlib import contextmanager
 from cargo.log  import get_logger
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
-logger    = get_logger(__name__, level = "WARNING")
+logger    = get_logger(__name__)
 
 def constant_pointer(address, type_):
     """
@@ -37,53 +38,36 @@ def emit_and_execute(module_name = ""):
     Prepare for, emit, and run some LLVM IR.
     """
 
+    from cargo.llvm import (
+        high,
+        HighLanguage,
+        )
+
     def decorator(emit):
-        # emit some IR
-        from llvm.core  import (
-            Module,
-            Builder,
-            Function,
-            GlobalVariable,
-            )
-        from cargo.llvm import this_builder
+        """
+        Build an LLVM module, then execute it.
+        """
 
-        module = Module.new(module_name)
+        # construct the module
+        with HighLanguage().active() as high:
+            emit()
 
-        # prepare for exception handling
-        context = GlobalVariable.new(module, Type.array(iptr_type, 5), "main_context")
-        setjmp  = Function.intrinsic(module, llvm.core.INTR_SETJMP, [])
+            high.return_()
 
-        context.linkage     = llvm.core.LINKAGE_INTERNAL
-        context.initializer = Constant.null(Type.array(iptr_type, 5))
-
-        # prepare for code generation
-        main  = module.add_function(Type.function(Type.void(), []), "main")
-        entry = main.append_basic_block("entry")
-
-        with this_builder(Builder.new(entry)) as builder:
-            # emit the module body
-            body = main.append_basic_block("body")
-            exit = main.append_basic_block("exit")
-
-            i8_context = builder.bitcast(context, Type.pointer(Type.int(8)))
-            jumped     = builder.call(setjmp, [i8_context], "jumped")
-
-            builder.cbranch(
-                builder.icmp(llvm.core.ICMP_EQ, jumped, Constant.int(Type.int(32), 0)),
-                body,
-                exit,
-                )
-            builder.position_at_end(body)
-
-            emit(module)
-
-            builder.branch(exit)
-            builder.position_at_end(exit)
-            builder.ret_void()
+        module = high.module
 
         logger.debug("verifying LLVM IR for execution:\n%s", module)
 
         module.verify()
+
+        # run optimization passes
+        from llvm.passes import PassManager
+
+        manager = PassManager.new()
+
+        logger.debug("running optimization passes on LLVM IR")
+
+        manager.run(module)
 
         # then compile and execute it
         from llvm.ee            import ExecutionEngine
@@ -91,7 +75,9 @@ def emit_and_execute(module_name = ""):
 
         engine = ExecutionEngine.new(module)
 
-        engine.run_function(main, [])
+        logger.debug("JITing and executing LLVM IR")
+
+        engine.run_function(high.main, [])
 
         raise_if_set()
 
@@ -198,53 +184,4 @@ def dtype_from_type(type_):
         }
 
     return mapping[type_.kind](type_)
-
-class BuilderStack(object):
-    """
-    A stack of IR builders.
-    """
-
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        self._builders = []
-
-    def top(self):
-        """
-        Return the current IR builder.
-        """
-
-        return self._builders[-1]
-
-    def push(self, builder):
-        """
-        Push an IR builder onto the builder stack.
-        """
-
-        self._builders.append(builder)
-
-        return builder
-
-    def pop(self):
-        """
-        Pop an IR builder off of the builder stack.
-        """
-
-        return self._builders.pop()
-
-BuilderStack.local = BuilderStack()
-
-@contextmanager
-def this_builder(builder):
-    """
-    Change the current IR builder for a managed duration.
-    """
-
-    BuilderStack.local.push(builder)
-
-    yield builder
-
-    BuilderStack.local.pop()
 

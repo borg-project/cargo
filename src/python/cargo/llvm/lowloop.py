@@ -11,10 +11,7 @@ from llvm.core import (
     Constant,
     )
 from cargo.llvm            import iptr_type
-from cargo.llvm.high_level import (
-    high,
-    HighValue,
-    )
+from cargo.llvm.high_level import high
 
 class StridedArrays(object):
     """
@@ -32,6 +29,8 @@ class StridedArrays(object):
         """
         Emit IR to return subarrays at a particular location.
         """
+
+        #high.printf("indices" + " %s" * len(indices), *indices)
 
         return StridedArrays((k, v.at(*indices)) for (k, v) in self._arrays.items())
 
