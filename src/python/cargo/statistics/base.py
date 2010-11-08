@@ -90,8 +90,8 @@ class ModelEngine(object):
                 )
 
         # computation
-        @emit_and_execute("local")
-        def _(module):
+        @emit_and_execute()
+        def _():
             """
             Emit the log-likelihood computation.
             """
@@ -105,7 +105,7 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
-                emitter = self._model.get_emitter(module)
+                emitter = self._model.get_emitter()
 
                 emitter.ll(l.arrays["p"], l.arrays["s"], l.arrays["o"].data)
 
@@ -126,8 +126,8 @@ class ModelEngine(object):
                 )
 
         # computation
-        @emit_and_execute("local")
-        def _(module):
+        @emit_and_execute()
+        def _():
             """
             Emit the log-likelihood computation.
             """
@@ -138,7 +138,7 @@ class ModelEngine(object):
                     "w" : weights,
                     "o" : out,
                     })
-            emitter = self._model.get_emitter(module)
+            emitter = self._model.get_emitter()
 
             @arrays.loop_all(len(shape))
             def _(l):
@@ -166,8 +166,8 @@ class ModelEngine(object):
         print "samples shape", samples.shape
 
         # computation
-        @emit_and_execute("local")
-        def _(module):
+        @emit_and_execute()
+        def _():
             """
             Emit the log-likelihood computation.
             """
@@ -178,7 +178,7 @@ class ModelEngine(object):
                     "s" : samples,
                     "o" : out,
                     })
-            emitter = self._model.get_emitter(module)
+            emitter = self._model.get_emitter()
 
             @arrays.loop_all(len(shape))
             def _(l):

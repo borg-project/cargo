@@ -1635,6 +1635,6 @@ class HighObject(HighPointerValue):
         return HighObject(py_from_string(high.string_literal(string))._value)
 
 class HighPyScope(object):
-    # XXX
+    # XXX unimplemented; we're leaking Python objects
     pass
 

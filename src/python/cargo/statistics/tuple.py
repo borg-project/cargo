@@ -47,12 +47,12 @@ class Tuple(object):
         self._parameter_dtype = numpy.dtype(parameter_fields)
         self._sample_dtype    = numpy.dtype(sample_fields)
 
-    def get_emitter(self, module):
+    def get_emitter(self):
         """
         Return an IR emitter.
         """
 
-        return TupleEmitter(self, module)
+        return TupleEmitter(self)
 
     @property
     def distributions(self):
@@ -83,14 +83,13 @@ class TupleEmitter(object):
     Emitter for the tuple distribution.
     """
 
-    def __init__(self, model, module):
+    def __init__(self, model):
         """
         Initialize.
         """
 
         self._model    = model
-        self._module   = module
-        self._emitters = [d.get_emitter(module) for (d, _) in model._distributions]
+        self._emitters = [d.get_emitter() for (d, _) in model._distributions]
 
     def ll(self, parameter, sample, out):
         """

@@ -34,7 +34,7 @@ class Delta(object):
         if self._type.kind not in supported:
             raise ValueError("unsupported type for constant distribution")
 
-    def get_emitter(self, module):
+    def get_emitter(self):
         """
         Return an IR emitter for this distribution.
         """

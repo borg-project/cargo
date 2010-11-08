@@ -56,12 +56,12 @@ class FiniteMixture(object):
                 (K,),
                 ))
 
-    def get_emitter(self, module):
+    def get_emitter(self):
         """
         Return an IR emitter for this distribution.
         """
 
-        return FiniteMixtureEmitter(self, module)
+        return FiniteMixtureEmitter(self)
 
     @property
     def parameter_dtype(self):
@@ -100,14 +100,13 @@ class FiniteMixtureEmitter(object):
     Emit IR for the FiniteMixture distribution.
     """
 
-    def __init__(self, model, module):
+    def __init__(self, model):
         """
         Initialize.
         """
 
         self._model       = model
-        self._module      = module
-        self._sub_emitter = self._model.distribution.get_emitter(module)
+        self._sub_emitter = self._model.distribution.get_emitter()
 
     #def rv(self, parameters, out, random = numpy.random):
         #"""

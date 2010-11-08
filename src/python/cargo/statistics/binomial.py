@@ -33,12 +33,12 @@ class Binomial(object):
         self._estimation_n    = estimation_n # XXX MASSIVE HACK; needs to go away
         self._epsilon         = epsilon
 
-    def get_emitter(self, module):
+    def get_emitter(self):
         """
         Return IR emitter.
         """
 
-        return BinomialEmitter(self, module)
+        return BinomialEmitter(self)
 
     @property
     def parameter_dtype(self):
@@ -61,14 +61,13 @@ class BinomialEmitter(object):
     Build low-level operations of the binomial distribution.
     """
 
-    def __init__(self, model, module):
+    def __init__(self, model):
         """
         Initialize.
         """
 
         # members
-        self._model  = model
-        self._module = module
+        self._model = model
 
         # link the GSL
         import ctypes
@@ -102,26 +101,20 @@ class BinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        from cargo.llvm import this_builder
-
-        compute = \
-            HighFunction.new_named(
-                "binomial_ml",
-                Type.void(),
-                [samples.data.type_, weights.data.type_, out.data.type_],
-                )
-        entry = compute.low.append_basic_block("entry")
-
-        with this_builder(Builder.new(entry)) as builder:
+        @HighFunction.define(
+            Type.void(),
+            [samples.data.type_, weights.data.type_, out.data.type_],
+            )
+        def binomial_ml(samples_data, weights_data, out_data):
             self._ml(
-                samples.using(compute.argument_values[0]),
-                weights.using(compute.argument_values[1]),
-                out.using(compute.argument_values[2]),
+                samples.using(samples_data),
+                weights.using(weights_data),
+                out.using(out_data),
                 )
 
-            builder.ret_void()
+            high.return_()
 
-        compute(samples.data, weights.data, out.data)
+        binomial_ml(samples.data, weights.data, out.data)
 
     def _ml(self, samples, weights, out):
         """
@@ -163,12 +156,12 @@ class MixedBinomial(object):
         self._parameter_dtype = numpy.dtype(numpy.float64)
         self._sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
 
-    def get_emitter(self, module):
+    def get_emitter(self):
         """
         Return IR emitter.
         """
 
-        return MixedBinomialEmitter(self, module)
+        return MixedBinomialEmitter(self)
 
     @property
     def parameter_dtype(self):
@@ -191,13 +184,12 @@ class MixedBinomialEmitter(object):
     Build low-level operations of the binomial distribution.
     """
 
-    def __init__(self, model, module):
+    def __init__(self, model):
         """
         Initialize.
         """
 
-        self._model  = model
-        self._module = module
+        self._model = model
 
         # link the GSL
         import ctypes
@@ -235,26 +227,20 @@ class MixedBinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        from cargo.llvm import this_builder
-
-        compute = \
-            HighFunction.new_named(
-                "mixed_binomial_ml",
-                Type.void(),
-                [samples.data.type_, weights.data.type_, out.data.type_],
-                )
-        entry = compute.low.append_basic_block("entry")
-
-        with this_builder(Builder.new(entry)) as builder:
+        @HighFunction.define(
+            Type.void(),
+            [samples.data.type_, weights.data.type_, out.data.type_],
+            )
+        def mixed_binomial_ml(samples_data, weights_data, out_data):
             self._ml(
-                samples.using(compute.argument_values[0]),
-                weights.using(compute.argument_values[1]),
-                out.using(compute.argument_values[2]),
+                samples.using(samples_data),
+                weights.using(weights_data),
+                out.using(out_data),
                 )
 
-            builder.ret_void()
+            high.return_()
 
-        compute(samples.data, weights.data, out.data)
+        mixed_binomial_ml(samples.data, weights.data, out.data)
 
     def _ml(self, samples, weights, out):
         """

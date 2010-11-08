@@ -24,7 +24,7 @@ def assert_copying_ok(in_, out, expected):
     """
 
     @emit_and_execute()
-    def _(_):
+    def _():
         arrays = StridedArrays.from_numpy({"in" : in_, "out" : out})
 
         @arrays.loop_all()
@@ -98,7 +98,7 @@ def test_strided_arrays_loop_all_subarrays():
 
     # verify correctness
     @emit_and_execute()
-    def _(_):
+    def _():
         arrays = \
             StridedArrays({
                 "in"  : StridedArray.from_numpy(foo).at(0),
@@ -125,7 +125,7 @@ def test_strided_array_extract():
 
     # verify correctness
     @emit_and_execute()
-    def _(_):
+    def _():
         arrays = \
             StridedArrays({
                 "in"  : StridedArray.from_numpy(foo).extract(0, 1),
@@ -154,7 +154,7 @@ def test_strided_array_at_complex_dtype():
     from cargo.llvm import iptr_type
 
     @emit_and_execute()
-    def _(_):
+    def _():
         ll_array = StridedArray.from_numpy(array)
 
         at0 = ll_array.at(0).data.cast_to(iptr_type)
@@ -181,13 +181,13 @@ def test_strided_array_loop_subshape_complex_dtype():
     from cargo.llvm import iptr_type
 
     @emit_and_execute()
-    def _(_):
+    def _():
         ll_array  = StridedArray.from_numpy(array)
         ll_arrays = StridedArrays({"a" : ll_array})
 
         @ll_arrays.loop_all()
         def _(l):
-            high.printf("address %i", l.arrays["a"].data.cast_to(iptr_type))
+            high.py_printf("address %i", l.arrays["a"].data.cast_to(iptr_type))
             #@high.python(at0, at1)
             #def _(at0_py, at1_py):
                 #assert_equal(at0_py, array[0].__array_interface__["data"][0])
