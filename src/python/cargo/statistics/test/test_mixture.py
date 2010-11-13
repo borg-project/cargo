@@ -10,6 +10,7 @@ from numpy                     import (
     )
 from numpy.random              import RandomState
 from nose.tools                import (
+    assert_equal,
     assert_not_equal,
     assert_almost_equal,
     )
@@ -84,8 +85,35 @@ def test_finite_mixture_given():
     engine = ModelEngine(model)
     out    = engine.given([(0.25, 1.0), (0.75, 2.0)], [2.0])
 
+    assert_equal(out["c"].tolist(), [1.0, 2.0])
     assert_almost_equal(out["p"][0], 0.0)
     assert_almost_equal(out["p"][1], 1.0)
+
+def test_finite_mixture_given_binomials():
+    """
+    Test finite-mixture posterior-parameter computation with binomials.
+    """
+
+    model  = FiniteMixture(MixedBinomial(), 2)
+    engine = ModelEngine(model)
+    out    = engine.given([(0.25, 0.25), (0.75, 0.75)], [(1, 1)])
+
+    assert_equal(out["c"].tolist(), [0.25, 0.75])
+    assert_almost_equal(out["p"][0], 0.1)
+    assert_almost_equal(out["p"][1], 0.9)
+
+def test_finite_mixture_given_enveloped():
+    """
+    Test mixture posterior computation with enveloped arrays.
+    """
+
+    model  = FiniteMixture(Delta(float), 2)
+    engine = ModelEngine(model)
+    out    = engine.given([(0.25, 1.0), (0.75, 2.0)], [[2.0]] * 3)
+
+    for i in xrange(3):
+        assert_almost_equal(out["p"][i, 0], 0.0)
+        assert_almost_equal(out["p"][i, 1], 1.0)
 
 #def test_restarting_ml():
     #"""

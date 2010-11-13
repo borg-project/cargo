@@ -27,11 +27,18 @@ def log_add_double(x, y):
         Kingsbury and Rayner, 1970.
     """
 
-    b  = x >= y
-    x_ = high.select(b, x, y)
-    y_ = high.select(b, y, x)
+    if "log_add_d" in high.module.global_variables:
+        log_add_d = HighFunction.get_named("log_add_d")
+    else:
+        @HighFunction.define(float, [float, float])
+        def log_add_d(x_in, y_in):
+            b  = x_in >= y_in
+            x_ = high.select(b, x_in, y_in)
+            y_ = high.select(b, y_in, x_in)
 
-    return x_ + high.log1p(high.exp(y_ - x_))
+            high.return_(x_ + high.log1p(high.exp(y_ - x_)))
+
+    return log_add_d(x, y)
 
 class FiniteMixture(object):
     """
@@ -146,8 +153,27 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        # XXX eeek leaking stack space
-        total        = high.stack_allocate(Type.double(), numpy.finfo(float).min)
+        @HighFunction.define(
+            Type.void(),
+            [parameter.data.type_, sample.data.type_, out.type_],
+            )
+        def finite_mixture_ll(parameter_data, sample_data, out_data):
+            self._ll(
+                parameter.using(parameter_data),
+                sample.using(sample_data),
+                out_data,
+                )
+
+            high.return_()
+
+        finite_mixture_ll(parameter.data, sample.data, out)
+
+    def _ll(self, parameter, sample, out):
+        """
+        Compute finite-mixture log-likelihood.
+        """
+
+        total        = high.stack_allocate(Type.double(), numpy.finfo(float).min, "total")
         component_ll = high.stack_allocate(Type.double())
 
         @high.for_(self._model._K)
@@ -173,14 +199,31 @@ class FiniteMixtureEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        from cargo.llvm import StridedArray
+        @HighFunction.define(
+            Type.void(),
+            [samples.data.type_, weights.data.type_, out.data.type_],
+            )
+        def finite_mixture_ml(samples_data, weights_data, out_data):
+            self._ml(
+                samples.using(samples_data),
+                weights.using(weights_data),
+                out.using(out_data),
+                )
+
+            high.return_()
+
+        finite_mixture_ml(samples.data, weights.data, out.data)
+
+    def _ml(self, samples, weights, out):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
 
         # mise en place
         K = self._model._K
         N = samples.shape[0]
 
         # generate a random initial state
-        # XXX eeek leaking stack space
         total = high.stack_allocate(float, 0.0)
 
         @high.for_(K)
@@ -206,7 +249,7 @@ class FiniteMixtureEmitter(object):
             (p.load() / total.load()).store(p)
 
         # run EM until convergence
-        r_KN = StridedArray.heap_allocated(float, (K, N)) # XXX never deallocated
+        r_KN = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
 
         @high.for_(self._model._iterations)
         def _(i):
@@ -259,7 +302,27 @@ class FiniteMixtureEmitter(object):
 
     def given(self, parameter, samples, out):
         """
-        Return the conditional distribution.
+        Compute the conditional distribution.
+        """
+
+        @HighFunction.define(
+            Type.void(),
+            [parameter.data.type_, samples.data.type_, out.data.type_],
+            )
+        def finite_mixture_given(parameter_data, samples_data, out_data):
+            self._given(
+                parameter.using(parameter_data),
+                samples.using(samples_data),
+                out.using(out_data),
+                )
+
+            high.return_()
+
+        finite_mixture_given(parameter.data, samples.data, out.data)
+
+    def _given(self, parameter, samples, out):
+        """
+        Compute the conditional distribution.
         """
 
         # mise en place
@@ -267,7 +330,6 @@ class FiniteMixtureEmitter(object):
         N = samples.shape[0]
 
         # compute posterior mixture parameters
-        # XXX eeek leaking stack space
         total = high.stack_allocate(float, numpy.finfo(float).min)
 
         @high.for_(K)

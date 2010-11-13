@@ -37,6 +37,24 @@ from subprocess   import (
 from contextlib   import contextmanager
 from cargo.errors import Raised
 
+def write_named_tuples_to_csv(path, tuples):
+    """
+    Write a list of named tuples to a CSV file.
+    """
+
+    from csv import writer as csv_writer
+
+    with open(path, "w") as file_:
+        writer = csv_writer(file_)
+
+        if tuples:
+            names = tuples[0]._fields
+        else:
+            return
+
+        writer.writerow(names)
+        writer.writerows(tuples)
+
 def cache_file(path, cache_dir = None, namespace = uuid4()):
     """
     Safely cache a file in some location.

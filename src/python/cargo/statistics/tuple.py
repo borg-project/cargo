@@ -4,9 +4,11 @@
 
 import numpy
 
+from llvm.core  import Type
 from cargo.llvm import (
     high,
     StridedArray,
+    HighFunction,
     )
 
 class Tuple(object):
@@ -92,6 +94,26 @@ class TupleEmitter(object):
         self._emitters = [d.get_emitter() for (d, _) in model._distributions]
 
     def ll(self, parameter, sample, out):
+        """
+        Compute log likelihood under this distribution.
+        """
+
+        @HighFunction.define(
+            Type.void(),
+            [parameter.data.type_, sample.data.type_, out.type_],
+            )
+        def tuple_ll(parameter_data, sample_data, out_data):
+            self._ll(
+                parameter.using(parameter_data),
+                sample.using(sample_data),
+                out_data,
+                )
+
+            high.return_()
+
+        tuple_ll(parameter.data, sample.data, out)
+
+    def _ll(self, parameter, sample, out):
         """
         Compute log likelihood under this distribution.
         """

@@ -4,11 +4,7 @@
 
 import numpy
 
-from llvm.core import (
-    Type,
-    Builder,
-    Constant,
-    )
+from llvm.core             import Type
 from cargo.llvm.high_level import (
     high,
     HighFunction,
@@ -56,6 +52,27 @@ class Binomial(object):
 
         return self._sample_dtype
 
+def binomial_pdf(k, p, n):
+    """
+    Compute the binomial PDF function.
+    """
+
+    name = "gsl_ran_binomial_pdf"
+
+    if name in high.module.global_variables:
+        pdf = HighFunction.get_named(name)
+    else:
+        import llvm.core
+
+        from ctypes import c_uint
+
+        pdf = HighFunction.named(name, float, [c_uint, float, c_uint])
+
+        pdf._value.add_attribute(llvm.core.ATTR_READONLY)
+        pdf._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
+
+    return pdf(k, p, n)
+
 class BinomialEmitter(object):
     """
     Build low-level operations of the binomial distribution.
@@ -83,12 +100,28 @@ class BinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        from ctypes import c_uint
+        @HighFunction.define(
+            Type.void(),
+            [parameter.data.type_, sample.data.type_, out.type_],
+            )
+        def binomial_ll(parameter_data, sample_data, out_data):
+            self._ll(
+                parameter.using(parameter_data),
+                sample.using(sample_data),
+                out_data,
+                )
 
-        pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
+            high.return_()
+
+        binomial_ll(parameter.data, sample.data, out)
+
+    def _ll(self, parameter, sample, out):
+        """
+        Compute log probability under this distribution.
+        """
 
         high.log(
-            pdf(
+            binomial_pdf(
                 sample.data.load(),
                 parameter.data.gep(0, 0).load(),
                 parameter.data.gep(0, 1).load(),
@@ -205,9 +238,25 @@ class MixedBinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        from ctypes import c_uint
+        @HighFunction.define(
+            Type.void(),
+            [parameter.data.type_, sample.data.type_, out.type_],
+            )
+        def mixed_binomial_ll(parameter_data, sample_data, out_data):
+            self._ll(
+                parameter.using(parameter_data),
+                sample.using(sample_data),
+                out_data,
+                )
 
-        pdf = HighFunction.named("gsl_ran_binomial_pdf", float, [c_uint, float, c_uint])
+            high.return_()
+
+        mixed_binomial_ll(parameter.data, sample.data, out)
+
+    def _ll(self, parameter, sample, out):
+        """
+        Compute log probability under this distribution.
+        """
 
         p = parameter.data.load()
         k = sample.data.gep(0, 0).load()
@@ -220,7 +269,7 @@ class MixedBinomialEmitter(object):
             high.assert_(n >= 0  , "invalid n = %s"           , n   )
             high.assert_(k <= n  , "invalid k = %s (> n = %s)", k, n)
 
-        high.log(pdf(k, p, n)).store(out)
+        high.log(binomial_pdf(k, p, n)).store(out)
 
     def ml(self, samples, weights, out):
         """

@@ -38,12 +38,14 @@ def outsource_or_run(jobs, outsource, name = None, url = defaults.labor_url):
         Session = make_session(bind = make_engine(url))
 
         with Session() as session:
-            outsource_jobs(session, jobs, name)
+            return outsource_jobs(session, jobs, name)
     else:
         log.note("running %i jobs immediately", len(jobs))
 
         for job in jobs:
             job()
+
+        return None
 
 def outsource_jobs(session, jobs, name = None, chunk_size = 1024):
     """
@@ -94,7 +96,7 @@ def outsource_jobs(session, jobs, name = None, chunk_size = 1024):
 
     log.note("committed job insertions")
 
-    return job_set
+    return job_set_uuid
 
 def labor_connect(engines = SQL_Engines.default, url = defaults.labor_url):
     """

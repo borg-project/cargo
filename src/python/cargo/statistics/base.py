@@ -5,13 +5,9 @@
 import numpy
 
 from collections import namedtuple
-from llvm.core   import (
-    Type,
-    Module,
-    Builder,
-    Constant,
-    )
+from llvm.core   import Type
 from cargo.llvm import (
+    high,
     emit_and_execute,
     StridedArrays,
     )
@@ -37,6 +33,7 @@ def semicast_arguments(out_argument, *in_arguments):
     # XXX semicasting isn't quite right---needs to be slightly rethought
     # XXX to handle the "extra" parameters correctly; perhaps what we're
     # XXX truly doing is semicasting individual regions across arrays?
+    # XXX see notes, eg, 11/5/2010:2
 
     # semicast arrays
     from cargo.numpy import semicast
@@ -47,13 +44,13 @@ def semicast_arguments(out_argument, *in_arguments):
 
     if out_argument.array is None:
         (shape, cast_arrays) = semicast(*in_pairs)
-        out_array            = numpy.empty(shape[:out_pair[0]], out_argument.dtype)
+        out_array            = numpy.empty(shape, out_argument.dtype)
 
         return (shape, [out_array] + cast_arrays)
     else:
         (shape, cast_arrays) = semicast(*([out_pair] + in_pairs))
 
-        assert out.shape == shape[:out_pair[0]] + out_argument.dtype.shape
+        assert out.shape == shape + out_argument.dtype.shape
 
         return (shape, cast_arrays)
 
@@ -62,12 +59,13 @@ class ModelEngine(object):
     Vectorized operations on a model.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, optimize = True):
         """
         Initialize.
         """
 
-        self._model = model
+        self._model    = model
+        self._optimize = optimize
 
     def rv(self, b, par_p, out_p, prng):
         """
@@ -90,7 +88,7 @@ class ModelEngine(object):
                 )
 
         # computation
-        @emit_and_execute()
+        @emit_and_execute(optimize = self._optimize)
         def _():
             """
             Emit the log-likelihood computation.
@@ -126,7 +124,7 @@ class ModelEngine(object):
                 )
 
         # computation
-        @emit_and_execute()
+        @emit_and_execute(optimize = self._optimize)
         def _():
             """
             Emit the log-likelihood computation.
@@ -160,13 +158,8 @@ class ModelEngine(object):
                 AA(samples   , self._model.sample_dtype   , 1),
                 )
 
-        print "common shape", shape
-        print "out shape", out.shape, "dtype", out.dtype
-        print "parameters shape", parameters.shape
-        print "samples shape", samples.shape
-
         # computation
-        @emit_and_execute()
+        @emit_and_execute(optimize = self._optimize)
         def _():
             """
             Emit the log-likelihood computation.
@@ -182,14 +175,6 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
-                from cargo.llvm import high, iptr_type
-                high.py_printf(
-                    "%i %i %i\n",
-                    l.arrays["p"].data.cast_to(iptr_type),
-                    l.arrays["s"].data.cast_to(iptr_type),
-                    l.arrays["o"].data.cast_to(iptr_type),
-                    )
-
                 emitter.given(l.arrays["p"], l.arrays["s"], l.arrays["o"])
 
         # done
@@ -202,4 +187,20 @@ class ModelEngine(object):
         """
 
         return self._model
+
+    @property
+    def optimize(self):
+        """
+        Are optimizations enabled?
+        """
+
+        return self._optimize
+
+    @optimize.setter
+    def optimize(self, value):
+        """
+        Enable or disable optimizations.
+        """
+
+        self._optimize = value
 

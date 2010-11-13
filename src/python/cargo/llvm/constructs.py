@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from cargo.log  import get_logger
 
 iptr_type = Type.int(ctypes.sizeof(ctypes.c_void_p) * 8)
-logger    = get_logger(__name__)
+logger    = get_logger(__name__, level = "WARNING")
 
 def constant_pointer(address, type_):
     """
@@ -33,7 +33,7 @@ def constant_pointer_to(object_, type_):
 
     return constant_pointer(id(object_), type_)
 
-def emit_and_execute(module_name = ""):
+def emit_and_execute(module_name = "", optimize = True):
     """
     Prepare for, emit, and run some LLVM IR.
     """
@@ -56,26 +56,44 @@ def emit_and_execute(module_name = ""):
 
         module = high.module
 
-        logger.debug("verifying LLVM IR for execution:\n%s", module)
+        logger.debug("verifying LLVM IR")
 
         module.verify()
 
-        # run optimization passes
-        from llvm.passes import PassManager
-
-        manager = PassManager.new()
-
-        logger.debug("running optimization passes on LLVM IR")
-
-        manager.run(module)
-
-        # then compile and execute it
+        # optimize it
         from llvm.ee            import ExecutionEngine
+        from llvm.passes        import PassManager
         from cargo.llvm.support import raise_if_set
 
         engine = ExecutionEngine.new(module)
 
-        logger.debug("JITing and executing LLVM IR")
+        if optimize:
+            manager = PassManager.new()
+
+            manager.add(engine.target_data)
+
+            manager.add(llvm.passes.PASS_FUNCTION_INLINING)
+            manager.add(llvm.passes.PASS_PROMOTE_MEMORY_TO_REGISTER)
+            manager.add(llvm.passes.PASS_CONSTANT_PROPAGATION)
+            manager.add(llvm.passes.PASS_INSTRUCTION_COMBINING)
+            manager.add(llvm.passes.PASS_IND_VAR_SIMPLIFY)
+            manager.add(llvm.passes.PASS_GEP_SPLITTER)
+            manager.add(llvm.passes.PASS_LOOP_SIMPLIFY)
+            manager.add(llvm.passes.PASS_LICM)
+            manager.add(llvm.passes.PASS_LOOP_ROTATE)
+            manager.add(llvm.passes.PASS_LOOP_STRENGTH_REDUCE)
+            manager.add(llvm.passes.PASS_LOOP_UNROLL)
+            manager.add(llvm.passes.PASS_GVN)
+            manager.add(llvm.passes.PASS_DEAD_STORE_ELIMINATION)
+            manager.add(llvm.passes.PASS_DEAD_CODE_ELIMINATION)
+            manager.add(llvm.passes.PASS_CFG_SIMPLIFICATION)
+
+            logger.debug("running optimization passes on LLVM IR")
+
+            manager.run(module)
+
+        # execute it
+        logger.debug("JITing and executing optimized LLVM IR:\n%s", str(module))
 
         engine.run_function(high.main, [])
 

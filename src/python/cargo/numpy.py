@@ -6,17 +6,19 @@ from __future__ import absolute_import
 
 import numpy
 
-def tolist_deeply(array):
+def tolist_deeply(value):
     """
     Fully convert a numpy object into a list.
     """
 
-    # XXX may break if the recalcitrant object is deeply nested
-
-    if isinstance(array, numpy.ndarray):
-        return map(tolist_deeply, array.tolist())
+    if isinstance(value, numpy.ndarray):
+        return map(tolist_deeply, value.tolist())
+    elif isinstance(value, list):
+        return map(tolist_deeply, value)
+    elif isinstance(value, tuple):
+        return tuple(map(tolist_deeply, value))
     else:
-        return array
+        return value
 
 def normalize_dtype(dtype):
     """

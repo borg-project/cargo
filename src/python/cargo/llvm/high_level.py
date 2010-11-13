@@ -92,7 +92,7 @@ class HighLanguage(object):
             # add a main
             main_body = HighFunction.new_named("main_body")
 
-            @HighFunction.define()
+            @HighFunction.define(internal = False)
             def main():
                 """
                 The true entry point.
@@ -354,7 +354,11 @@ class HighLanguage(object):
         Emit a natural log computation.
         """
 
-        log1p  = HighFunction.named("log1p", float, [float])
+        log1p = HighFunction.named("log1p", float, [float])
+
+        log1p._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
+        log1p._value.add_attribute(llvm.core.ATTR_READONLY)
+
         result = log1p(value)
 
         if self._test_for_nan:
@@ -519,6 +523,8 @@ class HighLanguage(object):
                     )
             context = self.module.get_global_variable_named("main_context")
 
+            longjmp._value.add_attribute(llvm.core.ATTR_NO_RETURN)
+
             longjmp(context, 1)
 
     def heap_allocate(self, type_, count = 1):
@@ -534,12 +540,12 @@ class HighLanguage(object):
 
         return malloc(bytes_).cast_to(Type.pointer(type_))
 
-    def stack_allocate(self, type_, initial = None):
+    def stack_allocate(self, type_, initial = None, name = ""):
         """
         Stack-allocate and return a value.
         """
 
-        allocated = HighValue.from_low(self.builder.alloca(self.type_from_any(type_)))
+        allocated = HighValue.from_low(self.builder.alloca(self.type_from_any(type_), name))
 
         if initial is not None:
             self.value_from_any(initial).store(allocated)
@@ -1499,7 +1505,7 @@ class HighFunction(HighValue):
         return HighFunction(high.module.get_function_named(name))
 
     @staticmethod
-    def new_named(name, return_type = Type.void(), argument_types = ()):
+    def new_named(name, return_type = Type.void(), argument_types = (), internal = True):
         """
         Create a named function.
         """
@@ -1509,11 +1515,15 @@ class HighFunction(HighValue):
                 high.type_from_any(return_type),
                 map(high.type_from_any, argument_types),
                 )
+        function = high.module.add_function(type_, name)
 
-        return HighFunction(high.module.add_function(type_, name))
+        if internal:
+            function.linkage = llvm.core.LINKAGE_INTERNAL
+
+        return HighFunction(function)
 
     @staticmethod
-    def define(return_type = Type.void(), argument_types = (), name = None):
+    def define(return_type = Type.void(), argument_types = (), name = None, internal = True):
         """
         Look up or create a named function.
         """
@@ -1531,8 +1541,9 @@ class HighFunction(HighValue):
             else:
                 function_name = name
 
-            function = HighFunction.new_named(function_name, return_type, argument_types)
-            entry    = function._value.append_basic_block("entry")
+            function = HighFunction.new_named(function_name, return_type, argument_types, internal = internal)
+
+            entry = function._value.append_basic_block("entry")
 
             with high.this_builder(Builder.new(entry)) as builder:
                 emit(*function.argument_values)

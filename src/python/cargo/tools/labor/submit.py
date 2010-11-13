@@ -282,20 +282,20 @@ def default_condor_home():
     return "workers-%s" % datetime.datetime.now().replace(microsecond = 0).isoformat()
 
 @annotations(
-    job_set_uuid = ("job set on which to work",    "positional", None, UUID),
-    workers      = ("number of workers to submit", "positional", None, int),
-    url          = ("labor database URL",          "option"),
-    matching     = ("node match restriction",      "option"),
-    description  = ("condor job description",      "option"),
-    home         = ("job submission directory",    "option"),
+    job_set_uuid = ("job set on which to work"   , "positional", None, UUID),
+    workers      = ("number of workers to submit", "positional", None, int ),
+    url          = ("labor database URL"         , "option"                ),
+    matching     = ("node match restriction"     , "option"                ),
+    description  = ("condor job description"     , "option"                ),
+    home         = ("job submission directory"   , "option"                ),
     )
-def main(
-    workers,
-    job_set_uuid,
-    url         = defaults.labor_url,
-    matching    = defaults.condor_matching,
+def submit_workers_for(
+    workers                                              ,
+    job_set_uuid                                         ,
+    url         = defaults.labor_url                     ,
+    matching    = defaults.condor_matching               ,
     description = "distributed Python worker process(es)",
-    home        = default_condor_home(),
+    home        = default_condor_home()                  ,
     ):
     """
     Spawn condor workers.
@@ -312,4 +312,6 @@ def main(
     submission.add_many(workers, url)
     submission.prepare()
     submission.submit()
+
+main = submit_workers_for
 
