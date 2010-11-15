@@ -3,11 +3,11 @@
 """
 
 import numpy
+import qy
 
 from collections import namedtuple
 from llvm.core   import Type
-from cargo.llvm import (
-    high,
+from qy          import (
     emit_and_execute,
     StridedArrays,
     )

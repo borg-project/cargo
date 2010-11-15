@@ -5,17 +5,18 @@
 import sys
 import numpy
 import llvm.core
+import qy
 
-from llvm.core import (
+from qy         import (
+    get_qy,
+    Function,
+    StridedArray,
+    )
+from llvm.core  import (
     Type,
     Constant,
     )
-from cargo.log             import get_logger
-from cargo.llvm            import StridedArray
-from cargo.llvm.high_level import (
-    high,
-    HighFunction,
-    )
+from cargo.log  import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,16 +28,16 @@ def log_add_double(x, y):
         Kingsbury and Rayner, 1970.
     """
 
-    if "log_add_d" in high.module.global_variables:
-        log_add_d = HighFunction.get_named("log_add_d")
+    if "log_add_d" in get_qy().module.global_variables:
+        log_add_d = Function.get_named("log_add_d")
     else:
-        @HighFunction.define(float, [float, float])
+        @Function.define(float, [float, float])
         def log_add_d(x_in, y_in):
             b  = x_in >= y_in
-            x_ = high.select(b, x_in, y_in)
-            y_ = high.select(b, y_in, x_in)
+            x_ = qy.select(b, x_in, y_in)
+            y_ = qy.select(b, y_in, x_in)
 
-            high.return_(x_ + high.log1p(high.exp(y_ - x_)))
+            qy.return_(x_ + qy.log1p(qy.exp(y_ - x_)))
 
     return log_add_d(x, y)
 
@@ -153,7 +154,7 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [parameter.data.type_, sample.data.type_, out.type_],
             )
@@ -164,7 +165,7 @@ class FiniteMixtureEmitter(object):
                 out_data,
                 )
 
-            high.return_()
+            qy.return_()
 
         finite_mixture_ll(parameter.data, sample.data, out)
 
@@ -173,10 +174,10 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        total        = high.stack_allocate(Type.double(), numpy.finfo(float).min, "total")
-        component_ll = high.stack_allocate(Type.double())
+        total        = qy.stack_allocate(Type.double(), numpy.finfo(float).min, "total")
+        component_ll = qy.stack_allocate(Type.double())
 
-        @high.for_(self._model._K)
+        @qy.for_(self._model._K)
         def _(index):
             component = parameter.at(index)
 
@@ -188,7 +189,7 @@ class FiniteMixtureEmitter(object):
 
             log_add_double(
                 total.load(),
-                high.log(component.data.gep(0, 0).load()) + component_ll.load(),
+                qy.log(component.data.gep(0, 0).load()) + component_ll.load(),
                 ) \
                 .store(total)
 
@@ -199,7 +200,7 @@ class FiniteMixtureEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [samples.data.type_, weights.data.type_, out.data.type_],
             )
@@ -210,7 +211,7 @@ class FiniteMixtureEmitter(object):
                 out.using(out_data),
                 )
 
-            high.return_()
+            qy.return_()
 
         finite_mixture_ml(samples.data, weights.data, out.data)
 
@@ -224,11 +225,11 @@ class FiniteMixtureEmitter(object):
         N = samples.shape[0]
 
         # generate a random initial state
-        total = high.stack_allocate(float, 0.0)
+        total = qy.stack_allocate(float, 0.0)
 
-        @high.for_(K)
+        @qy.for_(K)
         def _(k):
-            n = high.random_int(N)
+            n = qy.random_int(N)
 
             self._sub_emitter.ml(
                 samples.at(n).envelop(),
@@ -236,13 +237,13 @@ class FiniteMixtureEmitter(object):
                 StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
                 )
 
-            r = high.random()
+            r = qy.random()
 
             r.store(out.at(k).data.gep(0, 0))
 
             (total.load() + r).store(total)
 
-        @high.for_(K)
+        @qy.for_(K)
         def _(k):
             p = out.at(k).data.gep(0, 0)
 
@@ -251,16 +252,16 @@ class FiniteMixtureEmitter(object):
         # run EM until convergence
         r_KN = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
 
-        @high.for_(self._model._iterations)
+        @qy.for_(self._model._iterations)
         def _(i):
             # compute responsibilities
-            @high.for_(N)
+            @qy.for_(N)
             def _(n):
                 sample = samples.at(n)
 
-                high.value_from_any(numpy.finfo(float).min).store(total)
+                qy.value_from_any(numpy.finfo(float).min).store(total)
 
-                @high.for_(K)
+                @qy.for_(K)
                 def _(k):
                     responsibility = r_KN.at(k, n).data
 
@@ -274,15 +275,15 @@ class FiniteMixtureEmitter(object):
 
                 total_value = total.load()
 
-                @high.for_(K)
+                @qy.for_(K)
                 def _(k):
                     responsibility = r_KN.at(k, n).data
                     normalized     = responsibility.load() - total_value
 
-                    high.exp(normalized).store(responsibility)
+                    qy.exp(normalized).store(responsibility)
 
             # make maximum-likelihood estimates
-            @high.for_(K)
+            @qy.for_(K)
             def _(k):
                 component = out.at(k).data
 
@@ -292,9 +293,9 @@ class FiniteMixtureEmitter(object):
                     StridedArray.from_typed_pointer(component.gep(0, 1)),
                     )
 
-                high.value_from_any(0.0).store(total)
+                qy.value_from_any(0.0).store(total)
 
-                @high.for_(samples.shape[0])
+                @qy.for_(samples.shape[0])
                 def _(n):
                     (total.load() + r_KN.at(k, n).data.load()).store(total)
 
@@ -305,7 +306,7 @@ class FiniteMixtureEmitter(object):
         Compute the conditional distribution.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [parameter.data.type_, samples.data.type_, out.data.type_],
             )
@@ -316,7 +317,7 @@ class FiniteMixtureEmitter(object):
                 out.using(out_data),
                 )
 
-            high.return_()
+            qy.return_()
 
         finite_mixture_given(parameter.data, samples.data, out.data)
 
@@ -330,17 +331,17 @@ class FiniteMixtureEmitter(object):
         N = samples.shape[0]
 
         # compute posterior mixture parameters
-        total = high.stack_allocate(float, numpy.finfo(float).min)
+        total = qy.stack_allocate(float, numpy.finfo(float).min)
 
-        @high.for_(K)
+        @qy.for_(K)
         def _(k):
             prior_pi        = parameter.at(k).data.gep(0, 0)
             prior_parameter = parameter.at(k).data.gep(0, 1)
             posterior_pi    = out.at(k).data.gep(0, 0)
 
-            high.log(prior_pi.load()).store(posterior_pi)
+            qy.log(prior_pi.load()).store(posterior_pi)
 
-            @high.for_(N)
+            @qy.for_(N)
             def _(n):
                 current_pi = posterior_pi.load()
 
@@ -354,15 +355,15 @@ class FiniteMixtureEmitter(object):
 
             log_add_double(total.load(), posterior_pi.load()).store(total)
 
-        @high.for_(K)
+        @qy.for_(K)
         def _(k):
             posterior_pi  = out.at(k).data.gep(0, 0)
             normalized_pi = posterior_pi.load() - total.load()
 
-            high.exp(normalized_pi).store(posterior_pi)
+            qy.exp(normalized_pi).store(posterior_pi)
 
         # compute posterior component parameters
-        @high.for_(K)
+        @qy.for_(K)
         def _(k):
             prior_parameter     = parameter.at(k).data.gep(0, 1)
             posterior_parameter = out.at(k).data.gep(0, 1)

@@ -3,11 +3,12 @@
 """
 
 import numpy
+import qy
 
-from llvm.core             import Type
-from cargo.llvm.high_level import (
-    high,
-    HighFunction,
+from llvm.core import Type
+from qy        import (
+    get_qy,
+    Function,
     )
 
 class Binomial(object):
@@ -59,14 +60,14 @@ def binomial_pdf(k, p, n):
 
     name = "gsl_ran_binomial_pdf"
 
-    if name in high.module.global_variables:
-        pdf = HighFunction.get_named(name)
+    if name in get_qy().module.global_variables:
+        pdf = Function.get_named(name)
     else:
         import llvm.core
 
         from ctypes import c_uint
 
-        pdf = HighFunction.named(name, float, [c_uint, float, c_uint])
+        pdf = Function.named(name, float, [c_uint, float, c_uint])
 
         pdf._value.add_attribute(llvm.core.ATTR_READONLY)
         pdf._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
@@ -100,7 +101,7 @@ class BinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [parameter.data.type_, sample.data.type_, out.type_],
             )
@@ -111,7 +112,7 @@ class BinomialEmitter(object):
                 out_data,
                 )
 
-            high.return_()
+            qy.return_()
 
         binomial_ll(parameter.data, sample.data, out)
 
@@ -120,7 +121,7 @@ class BinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        high.log(
+        qy.log(
             binomial_pdf(
                 sample.data.load(),
                 parameter.data.gep(0, 0).load(),
@@ -134,7 +135,7 @@ class BinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [samples.data.type_, weights.data.type_, out.data.type_],
             )
@@ -145,7 +146,7 @@ class BinomialEmitter(object):
                 out.using(out_data),
                 )
 
-            high.return_()
+            qy.return_()
 
         binomial_ml(samples.data, weights.data, out.data)
 
@@ -154,10 +155,10 @@ class BinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        total_k = high.stack_allocate(float, 0.0)
-        total_w = high.stack_allocate(float, 0.0)
+        total_k = qy.stack_allocate(float, 0.0)
+        total_w = qy.stack_allocate(float, 0.0)
 
-        @high.for_(samples.shape[0])
+        @qy.for_(samples.shape[0])
         def _(n):
             weight = weights.at(n).data.load()
             sample = samples.at(n).data.load().cast_to(float)
@@ -170,7 +171,7 @@ class BinomialEmitter(object):
             / (total_w.load() + self._model._epsilon)
 
         final_ratio.store(out.data.gep(0, 0))
-        high.value_from_any(self._model._estimation_n).store(out.data.gep(0, 1))
+        qy.value_from_any(self._model._estimation_n).store(out.data.gep(0, 1))
 
 class MixedBinomial(object):
     """
@@ -238,7 +239,7 @@ class MixedBinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [parameter.data.type_, sample.data.type_, out.type_],
             )
@@ -249,7 +250,7 @@ class MixedBinomialEmitter(object):
                 out_data,
                 )
 
-            high.return_()
+            qy.return_()
 
         mixed_binomial_ll(parameter.data, sample.data, out)
 
@@ -262,21 +263,21 @@ class MixedBinomialEmitter(object):
         k = sample.data.gep(0, 0).load()
         n = sample.data.gep(0, 1).load()
 
-        if high.test_for_nan:
-            high.assert_(p >= 0.0, "invalid p = %s"           , p   )
-            high.assert_(p <= 1.0, "invalid p = %s"           , p   )
-            high.assert_(k >= 0  , "invalid k = %s"           , k   )
-            high.assert_(n >= 0  , "invalid n = %s"           , n   )
-            high.assert_(k <= n  , "invalid k = %s (> n = %s)", k, n)
+        if get_qy().test_for_nan:
+            qy.assert_(p >= 0.0, "invalid p = %s"           , p   )
+            qy.assert_(p <= 1.0, "invalid p = %s"           , p   )
+            qy.assert_(k >= 0  , "invalid k = %s"           , k   )
+            qy.assert_(n >= 0  , "invalid n = %s"           , n   )
+            qy.assert_(k <= n  , "invalid k = %s (> n = %s)", k, n)
 
-        high.log(binomial_pdf(k, p, n)).store(out)
+        qy.log(binomial_pdf(k, p, n)).store(out)
 
     def ml(self, samples, weights, out):
         """
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [samples.data.type_, weights.data.type_, out.data.type_],
             )
@@ -287,7 +288,7 @@ class MixedBinomialEmitter(object):
                 out.using(out_data),
                 )
 
-            high.return_()
+            qy.return_()
 
         mixed_binomial_ml(samples.data, weights.data, out.data)
 
@@ -296,20 +297,20 @@ class MixedBinomialEmitter(object):
         Emit computation of the estimated maximum-likelihood parameter.
         """
 
-        total_k = high.stack_allocate(float, 0.0)
-        total_n = high.stack_allocate(float, 0.0)
+        total_k = qy.stack_allocate(float, 0.0)
+        total_n = qy.stack_allocate(float, 0.0)
 
-        @high.for_(samples.shape[0])
+        @qy.for_(samples.shape[0])
         def _(n):
             weight   = weights.at(n).data.load()
             sample_k = samples.at(n).data.gep(0, 0).load().cast_to(float)
             sample_n = samples.at(n).data.gep(0, 1).load().cast_to(float)
 
-            if high.test_for_nan:
-                high.assert_(weight   >= 0.0     , "invalid weight = %s"      , weight            )
-                high.assert_(sample_k >= 0       , "invalid k = %s"           , sample_k          )
-                high.assert_(sample_n >= 0       , "invalid n = %s"           , sample_n          )
-                high.assert_(sample_k <= sample_n, "invalid k = %s (> n = %s)", sample_k, sample_n)
+            if get_qy().test_for_nan:
+                get_qy().assert_(weight   >= 0.0     , "invalid weight = %s"      , weight            )
+                get_qy().assert_(sample_k >= 0       , "invalid k = %s"           , sample_k          )
+                get_qy().assert_(sample_n >= 0       , "invalid n = %s"           , sample_n          )
+                get_qy().assert_(sample_k <= sample_n, "invalid k = %s (> n = %s)", sample_k, sample_n)
 
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)

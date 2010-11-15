@@ -3,13 +3,13 @@
 """
 
 import numpy
+import qy
 
-from llvm.core  import Type
-from cargo.llvm import (
-    high,
+from qy         import (
+    Function,
     StridedArray,
-    HighFunction,
     )
+from llvm.core  import Type
 
 class Tuple(object):
     """
@@ -98,7 +98,7 @@ class TupleEmitter(object):
         Compute log likelihood under this distribution.
         """
 
-        @HighFunction.define(
+        @Function.define(
             Type.void(),
             [parameter.data.type_, sample.data.type_, out.type_],
             )
@@ -109,7 +109,7 @@ class TupleEmitter(object):
                 out_data,
                 )
 
-            high.return_()
+            qy.return_()
 
         tuple_ll(parameter.data, sample.data, out)
 
@@ -118,10 +118,10 @@ class TupleEmitter(object):
         Compute log likelihood under this distribution.
         """
 
-        high.value_from_any(0.0).store(out)
+        qy.value_from_any(0.0).store(out)
 
         for (i, (_, count)) in enumerate(self._model._distributions):
-            @high.for_(count)
+            @qy.for_(count)
             def _(j):
                 previous_total = out.load()
 
@@ -139,7 +139,7 @@ class TupleEmitter(object):
         """
 
         for (i, (_, count)) in enumerate(self._model._distributions):
-            @high.for_(count)
+            @qy.for_(count)
             def _(j):
                 self._emitters[i].ml(
                     samples.extract(0, i, j),
@@ -153,7 +153,7 @@ class TupleEmitter(object):
         """
 
         for (i, (_, count)) in enumerate(self._model._distributions):
-            @high.for_(count)
+            @qy.for_(count)
             def _(j):
                 self._emitters[i].given(
                     StridedArray.from_typed_pointer(parameter.data.gep(0, i, j)),

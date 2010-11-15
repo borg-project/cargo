@@ -4,12 +4,12 @@
 
 import numpy
 import llvm.core
+import qy
 
 from llvm.core import (
     Type,
     Constant,
     )
-from cargo.llvm.high_level import high
 
 class Delta(object):
     """
@@ -21,7 +21,7 @@ class Delta(object):
         Initialize.
         """
 
-        from cargo.llvm import type_from_dtype
+        from qy import type_from_dtype
 
         self._dtype = numpy.dtype(dtype)
         self._type  = type_from_dtype(self._dtype)
@@ -68,7 +68,7 @@ class Delta(object):
         Compute constant-distribution log-likelihood.
         """
 
-        high.select(
+        qy.select(
             parameter.data.load() == sample.data.load(),
             0.0,
             numpy.finfo(float).min,
