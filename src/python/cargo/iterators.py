@@ -30,12 +30,12 @@ def divide(items, fraction = 0.5):
 
     return (items[:size], items[size:])
 
-def shuffled(sequence, random = numpy.random):
+def shuffled(sequence, random = numpy.random, dtype = None):
     """
     Return an array copy of the sequence in random order.
     """
 
-    copy = numpy.copy(sequence)
+    copy = numpy.array(sequence, dtype = dtype)
 
     random.shuffle(copy)
 

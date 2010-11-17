@@ -127,7 +127,7 @@ class TupleEmitter(object):
 
                 self._emitters[i].ll(
                     StridedArray.from_typed_pointer(parameter.data.gep(0, i, j)),
-                    StridedArray.from_typed_pointer(sample.data.gep(0, i, j)),
+                    StridedArray.from_typed_pointer(sample.data.gep(0, i, j)   ),
                     out,
                     )
 

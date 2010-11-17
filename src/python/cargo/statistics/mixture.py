@@ -33,11 +33,15 @@ def log_add_double(x, y):
     else:
         @Function.define(float, [float, float])
         def log_add_d(x_in, y_in):
-            b  = x_in >= y_in
-            x_ = qy.select(b, x_in, y_in)
-            y_ = qy.select(b, y_in, x_in)
+            s = x_in >= y_in
+            a = qy.select(s, x_in, y_in)
 
-            qy.return_(x_ + qy.log1p(qy.exp(y_ - x_)))
+            @qy.if_else(a == -numpy.inf)
+            def _(then):
+                if then:
+                    qy.return_(-numpy.inf)
+                else:
+                    qy.return_(a + qy.log1p(qy.exp(qy.select(s, y_in, x_in) - a)))
 
     return log_add_d(x, y)
 
@@ -174,7 +178,7 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        total        = qy.stack_allocate(Type.double(), numpy.finfo(float).min, "total")
+        total        = qy.stack_allocate(Type.double(), -numpy.inf, "total")
         component_ll = qy.stack_allocate(Type.double())
 
         @qy.for_(self._model._K)
@@ -259,7 +263,7 @@ class FiniteMixtureEmitter(object):
             def _(n):
                 sample = samples.at(n)
 
-                qy.value_from_any(numpy.finfo(float).min).store(total)
+                qy.value_from_any(-numpy.inf).store(total)
 
                 @qy.for_(K)
                 def _(k):
@@ -275,14 +279,20 @@ class FiniteMixtureEmitter(object):
 
                 total_value = total.load()
 
-                @qy.for_(K)
-                def _(k):
-                    responsibility = r_KN.at(k, n).data
-                    normalized     = responsibility.load() - total_value
+                @qy.if_else(total_value == -numpy.inf)
+                def _(then):
+                    if then:
+                        @qy.for_(K)
+                        def _(k):
+                            qy.value_from_any(1.0 / K).store(r_KN.at(k, n).data)
+                    else:
+                        @qy.for_(K)
+                        def _(k):
+                            responsibility = r_KN.at(k, n).data
 
-                    qy.exp(normalized).store(responsibility)
+                            qy.exp(responsibility.load() - total_value).store(responsibility)
 
-            # make maximum-likelihood estimates
+            # estimate new mixture and component parameters
             @qy.for_(K)
             def _(k):
                 component = out.at(k).data
@@ -331,7 +341,7 @@ class FiniteMixtureEmitter(object):
         N = samples.shape[0]
 
         # compute posterior mixture parameters
-        total = qy.stack_allocate(float, numpy.finfo(float).min)
+        total = qy.stack_allocate(float, -numpy.inf)
 
         @qy.for_(K)
         def _(k):
@@ -355,12 +365,21 @@ class FiniteMixtureEmitter(object):
 
             log_add_double(total.load(), posterior_pi.load()).store(total)
 
-        @qy.for_(K)
-        def _(k):
-            posterior_pi  = out.at(k).data.gep(0, 0)
-            normalized_pi = posterior_pi.load() - total.load()
+        total_value = total.load()
 
-            qy.exp(normalized_pi).store(posterior_pi)
+        @qy.if_else(total_value == -numpy.inf)
+        def _(then):
+            if then:
+                @qy.for_(K)
+                def _(k):
+                    qy.value_from_any(1.0 / K).store(out.at(k).data.gep(0, 0))
+            else:
+                @qy.for_(K)
+                def _(k):
+                    posterior_pi  = out.at(k).data.gep(0, 0)
+                    normalized_pi = posterior_pi.load() - total_value
+
+                    qy.exp(normalized_pi).store(posterior_pi)
 
         # compute posterior component parameters
         @qy.for_(K)

@@ -58,6 +58,8 @@ def binomial_pdf(k, p, n):
     Compute the binomial PDF function.
     """
 
+    # XXX implement binomial_pdf ourselves?
+
     name = "gsl_ran_binomial_pdf"
 
     if name in get_qy().module.global_variables:
@@ -172,6 +174,14 @@ class BinomialEmitter(object):
 
         final_ratio.store(out.data.gep(0, 0))
         qy.value_from_any(self._model._estimation_n).store(out.data.gep(0, 1))
+
+    def given(self, parameter, samples, out):
+        """
+        Return the conditional distribution.
+        """
+
+        parameter.data.gep(0, 0).load().store(out.data.gep(0, 0))
+        parameter.data.gep(0, 1).load().store(out.data.gep(0, 1))
 
 class MixedBinomial(object):
     """
