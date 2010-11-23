@@ -311,6 +311,10 @@ class FiniteMixtureEmitter(object):
 
                 (total.load() / float(N)).store(component.gep(0, 0))
 
+            #@qy.if_(i % 16 == 0)
+            #def _():
+            qy.py_printf("completed EM iteration %i\n", i)
+
     def given(self, parameter, samples, out):
         """
         Compute the conditional distribution.

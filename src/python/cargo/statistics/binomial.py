@@ -53,28 +53,66 @@ class Binomial(object):
 
         return self._sample_dtype
 
+#def binomial_pdf(k, p, n):
+    #"""
+    #Compute the binomial PMF.
+    #"""
+
+    #name = "gsl_ran_binomial_pdf"
+
+    #if name in get_qy().module.global_variables:
+        #pdf = Function.get_named(name)
+    #else:
+        #import llvm.core
+
+        #from ctypes import c_uint
+
+        #pdf = Function.named(name, float, [c_uint, float, c_uint])
+
+        #pdf._value.add_attribute(llvm.core.ATTR_READONLY)
+        #pdf._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
+
+    #return pdf(k, p, n)
+
 def binomial_pdf(k, p, n):
     """
-    Compute the binomial PDF function.
+    Compute the binomial PMF.
     """
 
-    # XXX implement binomial_pdf ourselves?
-
-    name = "gsl_ran_binomial_pdf"
+    name = "binomial_pdf_ddd"
 
     if name in get_qy().module.global_variables:
         pdf = Function.get_named(name)
     else:
-        import llvm.core
+        @Function.define(float, [float, float, float])
+        def binomial_pdf_ddd(k, p, n):
+            _binomial_pdf(k, p, n)
 
-        from ctypes import c_uint
+    return binomial_pdf_ddd(k, p, n)
 
-        pdf = Function.named(name, float, [c_uint, float, c_uint])
+def _binomial_pdf(k, p, n):
+    """
+    Compute the binomial PMF.
+    """
 
-        pdf._value.add_attribute(llvm.core.ATTR_READONLY)
-        pdf._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
+    from qy.math import ln_choose
 
-    return pdf(k, p, n)
+    @qy.if_(k > n)
+    def _():
+        qy.return_(0.0)
+
+    @qy.if_(p == 0.0)
+    def _():
+        qy.return_(qy.select(k == 0.0, 1.0, 0.0))
+
+    @qy.if_(p == 1.0)
+    def _():
+        qy.return_(qy.select(k == n, 1.0, 0.0))
+
+    # else
+    v = ln_choose(n, k) + k * qy.log(p) + (n - k) * qy.log1p(-p)
+
+    qy.return_(qy.exp(v))
 
 class BinomialEmitter(object):
     """
