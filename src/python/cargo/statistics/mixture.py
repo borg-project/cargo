@@ -10,6 +10,7 @@ import qy
 from qy         import (
     get_qy,
     Function,
+    Variable,
     StridedArray,
     )
 from llvm.core  import (
@@ -178,8 +179,8 @@ class FiniteMixtureEmitter(object):
         Compute finite-mixture log-likelihood.
         """
 
-        total        = qy.stack_allocate(Type.double(), -numpy.inf, "total")
-        component_ll = qy.stack_allocate(Type.double())
+        total        = qy.stack_allocate(float, -numpy.inf, "total")
+        component_ll = qy.stack_allocate(float)
 
         @qy.for_(self._model._K)
         def _(index):
@@ -215,8 +216,6 @@ class FiniteMixtureEmitter(object):
                 out.using(out_data),
                 )
 
-            qy.return_()
-
         finite_mixture_ml(samples.data, weights.data, out.data)
 
     def _ml(self, samples, weights, out):
@@ -229,7 +228,8 @@ class FiniteMixtureEmitter(object):
         N = samples.shape[0]
 
         # generate a random initial state
-        total = qy.stack_allocate(float, 0.0)
+        total        = qy.stack_allocate(float, 0.0)
+        component_ll = qy.stack_allocate(float)
 
         @qy.for_(K)
         def _(k):
@@ -254,11 +254,18 @@ class FiniteMixtureEmitter(object):
             (p.load() / total.load()).store(p)
 
         # run EM until convergence
-        r_KN = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
+        # XXX this could become static storage
+        this_r_KN   = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
+        last_r_KN   = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
+
+        this_r_KN_data = Variable.set_to(this_r_KN.data)
+        last_r_KN_data = Variable.set_to(last_r_KN.data)
 
         @qy.for_(self._model._iterations)
         def _(i):
             # compute responsibilities
+            r_KN = this_r_KN.using(this_r_KN_data.value)
+
             @qy.for_(N)
             def _(n):
                 sample = samples.at(n)
@@ -305,15 +312,66 @@ class FiniteMixtureEmitter(object):
 
                 qy.value_from_any(0.0).store(total)
 
-                @qy.for_(samples.shape[0])
+                @qy.for_(N)
                 def _(n):
                     (total.load() + r_KN.at(k, n).data.load()).store(total)
 
                 (total.load() / float(N)).store(component.gep(0, 0))
 
-            #@qy.if_(i % 16 == 0)
-            #def _():
-            qy.py_printf("completed EM iteration %i\n", i)
+            # check for termination
+            last_r_KN = this_r_KN.using(last_r_KN_data.value)
+
+            @qy.if_(i > 0)
+            def _():
+                qy.value_from_any(0.0).store(total)
+
+                @qy.for_(K)
+                def _(k):
+                    @qy.for_(N)
+                    def _(n):
+                        delta = r_KN.at(k, n).data.load() - last_r_KN.at(k, n).data.load()
+
+                        (total.load() + abs(delta)).store(total)
+
+                @qy.if_(total.load() < 1e-12)
+                def _():
+                    qy.return_()
+
+            total_delta = total.load()
+
+            # swap the responsibility matrices
+            temp_r_KN_data_value = this_r_KN_data.value
+
+            this_r_KN_data.set(last_r_KN_data.value)
+            last_r_KN_data.set(temp_r_KN_data_value)
+
+            # compute the ll at this step
+            @qy.for_(N)
+            def _(n):
+                sample = samples.at(n)
+
+                qy.value_from_any(-numpy.inf).store(total)
+
+                @qy.for_(K)
+                def _(k):
+                    self._sub_emitter.ll(
+                        StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
+                        StridedArray.from_typed_pointer(sample.data),
+                        component_ll,
+                        )
+
+                    log_add_double(
+                        total.load(),
+                        qy.log(out.at(k).data.gep(0, 0).load()) + component_ll.load(),
+                        ) \
+                        .store(total)
+
+            total_ll = total.load()
+
+            # be informative
+            qy.py_printf("after EM step %i: delta %s; ll %s\n", i, total_delta, total_ll)
+
+        qy.return_()
 
     def given(self, parameter, samples, out):
         """

@@ -20,7 +20,7 @@ class Binomial(object):
     - sample    : uint32
     """
 
-    def __init__(self, estimation_n = None, epsilon = 0.0):
+    def __init__(self, estimation_n = None):
         """
         Initialize.
         """
@@ -28,7 +28,6 @@ class Binomial(object):
         self._parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
         self._sample_dtype    = numpy.dtype(numpy.int32)
         self._estimation_n    = estimation_n # XXX MASSIVE HACK; needs to go away
-        self._epsilon         = epsilon
 
     def get_emitter(self):
         """
@@ -53,44 +52,23 @@ class Binomial(object):
 
         return self._sample_dtype
 
-#def binomial_pdf(k, p, n):
-    #"""
-    #Compute the binomial PMF.
-    #"""
-
-    #name = "gsl_ran_binomial_pdf"
-
-    #if name in get_qy().module.global_variables:
-        #pdf = Function.get_named(name)
-    #else:
-        #import llvm.core
-
-        #from ctypes import c_uint
-
-        #pdf = Function.named(name, float, [c_uint, float, c_uint])
-
-        #pdf._value.add_attribute(llvm.core.ATTR_READONLY)
-        #pdf._value.add_attribute(llvm.core.ATTR_NO_UNWIND)
-
-    #return pdf(k, p, n)
-
-def binomial_pdf(k, p, n):
+def binomial_log_pdf(k, p, n):
     """
     Compute the binomial PMF.
     """
 
-    name = "binomial_pdf_ddd"
+    name = "binomial_log_pdf_ddd"
 
     if name in get_qy().module.global_variables:
         pdf = Function.get_named(name)
     else:
         @Function.define(float, [float, float, float])
-        def binomial_pdf_ddd(k, p, n):
-            _binomial_pdf(k, p, n)
+        def binomial_log_pdf_ddd(k, p, n):
+            _binomial_log_pdf(k, p, n)
 
-    return binomial_pdf_ddd(k, p, n)
+    return binomial_log_pdf_ddd(k, p, n)
 
-def _binomial_pdf(k, p, n):
+def _binomial_log_pdf(k, p, n):
     """
     Compute the binomial PMF.
     """
@@ -99,20 +77,17 @@ def _binomial_pdf(k, p, n):
 
     @qy.if_(k > n)
     def _():
-        qy.return_(0.0)
+        qy.return_(-numpy.inf)
 
     @qy.if_(p == 0.0)
     def _():
-        qy.return_(qy.select(k == 0.0, 1.0, 0.0))
+        qy.return_(qy.select(k == 0.0, 0.0, -numpy.inf))
 
     @qy.if_(p == 1.0)
     def _():
-        qy.return_(qy.select(k == n, 1.0, 0.0))
+        qy.return_(qy.select(k == n, 0.0, -numpy.inf))
 
-    # else
-    v = ln_choose(n, k) + k * qy.log(p) + (n - k) * qy.log1p(-p)
-
-    qy.return_(qy.exp(v))
+    qy.return_(ln_choose(n, k) + k * qy.log(p) + (n - k) * qy.log1p(-p))
 
 class BinomialEmitter(object):
     """
@@ -126,15 +101,6 @@ class BinomialEmitter(object):
 
         # members
         self._model = model
-
-        # link the GSL
-        import ctypes
-
-        from ctypes      import CDLL
-        from ctypes.util import find_library
-
-        CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
-        CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
 
     def ll(self, parameter, sample, out):
         """
@@ -161,12 +127,10 @@ class BinomialEmitter(object):
         Compute log probability under this distribution.
         """
 
-        qy.log(
-            binomial_pdf(
-                sample.data.load(),
-                parameter.data.gep(0, 0).load(),
-                parameter.data.gep(0, 1).load(),
-                ),
+        binomial_log_pdf(
+            sample.data.load(),
+            parameter.data.gep(0, 0).load(),
+            parameter.data.gep(0, 1).load(),
             ) \
             .store(out)
 
@@ -206,11 +170,16 @@ class BinomialEmitter(object):
             (total_k.load() + sample * weight).store(total_k)
             (total_w.load() + weight * float(self._model._estimation_n)).store(total_w)
 
-        final_ratio = \
-              (total_k.load() + self._model._epsilon) \
-            / (total_w.load() + self._model._epsilon)
+        numerator   = total_k.load()
+        denominator = total_w.load()
 
-        final_ratio.store(out.data.gep(0, 0))
+        @qy.if_else(denominator == 0.0)
+        def _(then):
+            if then:
+                qy.value_from_any(0.5).store(out.data.gep(0, 0))
+            else:
+                (numerator / denominator).store(out.data.gep(0, 0))
+
         qy.value_from_any(self._model._estimation_n).store(out.data.gep(0, 1))
 
     def given(self, parameter, samples, out):
@@ -273,15 +242,6 @@ class MixedBinomialEmitter(object):
 
         self._model = model
 
-        # link the GSL
-        import ctypes
-
-        from ctypes      import CDLL
-        from ctypes.util import find_library
-
-        CDLL(find_library("cblas"), ctypes.RTLD_GLOBAL)
-        CDLL(find_library("gsl"  ), ctypes.RTLD_GLOBAL)
-
     def ll(self, parameter, sample, out):
         """
         Compute log probability under this distribution.
@@ -318,7 +278,7 @@ class MixedBinomialEmitter(object):
             qy.assert_(n >= 0  , "invalid n = %s"           , n   )
             qy.assert_(k <= n  , "invalid k = %s (> n = %s)", k, n)
 
-        qy.log(binomial_pdf(k, p, n)).store(out)
+        binomial_log_pdf(k, p, n).store(out)
 
     def ml(self, samples, weights, out):
         """
@@ -363,10 +323,15 @@ class MixedBinomialEmitter(object):
             (total_k.load() + sample_k * weight).store(total_k)
             (total_n.load() + sample_n * weight).store(total_n)
 
-        epsilon = numpy.finfo(float).eps
-        ratio   = ((total_k.load() + epsilon) / (total_n.load() + epsilon)) / (1.0 / (1.0 - 2 * epsilon)) + epsilon
+        numerator   = total_k.load()
+        denominator = total_n.load()
 
-        ratio.store(out.data)
+        @qy.if_else(denominator == 0.0)
+        def _(then):
+            if then:
+                qy.value_from_any(0.5).store(out.data)
+            else:
+                (numerator / denominator).store(out.data)
 
     def given(self, parameter, samples, out):
         """
