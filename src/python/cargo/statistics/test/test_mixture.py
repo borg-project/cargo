@@ -4,17 +4,18 @@
 
 import numpy
 
-from numpy                     import (
+from numpy               import (
     ones,
     array,
     )
-from numpy.random              import RandomState
-from nose.tools                import (
+from numpy.random        import RandomState
+from nose.tools          import (
     assert_equal,
     assert_not_equal,
     assert_almost_equal,
     )
-from cargo.statistics          import (
+from cargo.testing       import assert_almost_equal_deep
+from cargo.statistics    import (
     Delta,
     ModelEngine,
     FiniteMixture,
@@ -75,6 +76,27 @@ def test_finite_mixture_ml():
     me = ModelEngine(FiniteMixture(MixedBinomial(), 2))
 
     assert_finite_mixture_ml_ok(me)
+
+def test_finite_mixture_map():
+    """
+    Test EM estimation of MAP finite mixture parameters.
+    """
+
+    engine = ModelEngine(FiniteMixture(MixedBinomial(), 2))
+
+    (e,) = \
+        engine.map(
+            [[(1, 1)] * 2],
+            [[(7, 8)] * 100 + [(1, 8)] * 200],
+            ones((1, 300)),
+            )
+
+    assert_almost_equal_deep(
+        e[numpy.argsort(e["p"])].tolist(),
+        [(1.0 / 3.0, 7.0 / 8.0),
+         (2.0 / 3.0, 1.0 / 8.0)],
+        places = 4,
+        )
 
 def test_finite_mixture_given():
     """

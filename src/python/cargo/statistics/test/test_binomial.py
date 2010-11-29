@@ -4,15 +4,14 @@
 
 import numpy
 
-from numpy                     import array
-from nose.tools                import assert_almost_equal
-from cargo.testing             import assert_almost_equal_deep
-from cargo.statistics          import (
+from numpy            import array
+from nose.tools       import assert_almost_equal
+from cargo.testing    import assert_almost_equal_deep
+from cargo.statistics import (
     Binomial,
     ModelEngine,
     MixedBinomial,
     )
-#from cargo.statistics.binomial import MixedBinomial
 
 def test_binomial_ll():
     """
@@ -50,6 +49,29 @@ def test_binomial_ml():
         [(0.75, 2), (0.50, 2)],
         )
 
+def test_binomial_map():
+    """
+    Test MAP estimation under the binomial distribution.
+    """
+
+    me = ModelEngine(Binomial(estimation_n = 2))
+
+    assert_almost_equal_deep(
+        me.map(
+            [(1   , 1   ),
+             (0.25, 0.75),
+             (2   , 3   )],
+            [[1, 2],
+             [1, 2],
+             [1, 2]],
+            numpy.ones((3, 2)),
+            ) \
+            .tolist(),
+        [(0.75     , 2),
+         (0.75     , 2),
+         (4.0 / 7.0, 2)],
+        )
+
 def test_mixed_binomial_ll():
     """
     Test log-probability computation in the mixed binomial distribution.
@@ -83,5 +105,26 @@ def test_mixed_binomial_ml():
             numpy.ones((2, 2)),
             ),
         [5.0 / 7.0, 11.0 / 12.0],
+        )
+
+def test_mixed_binomial_map():
+    """
+    Test MAP estimation under the mixed binomial distribution.
+    """
+
+    me = ModelEngine(MixedBinomial())
+
+    assert_almost_equal_deep(
+        me.map(
+            [(1   , 1   ),
+             (0.25, 0.75),
+             (2   , 3   )],
+            [[(1, 2), (2, 2)],
+             [(1, 2), (2, 2)],
+             [(1, 2), (2, 2)]],
+            numpy.ones((3, 2)),
+            ) \
+            .tolist(),
+        [0.75, 0.75, 4.0 / 7.0],
         )
 

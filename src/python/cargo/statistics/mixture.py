@@ -68,6 +68,7 @@ class FiniteMixture(object):
                     ],
                 (K,),
                 ))
+        self._prior_dtype = numpy.dtype((distribution.prior_dtype, (K,)))
 
     def get_emitter(self):
         """
@@ -91,6 +92,14 @@ class FiniteMixture(object):
         """
 
         return self._distribution.sample_dtype
+
+    @property
+    def prior_dtype(self):
+        """
+        Return the prior type.
+        """
+
+        return self._prior_dtype
 
     @property
     def K(self):
@@ -218,7 +227,28 @@ class FiniteMixtureEmitter(object):
 
         finite_mixture_ml(samples.data, weights.data, out.data)
 
-    def _ml(self, samples, weights, out):
+    # XXX def _ml
+
+    def map(self, prior, samples, weights, out):
+        """
+        Emit computation of the estimated MAP parameter.
+        """
+
+        @Function.define(
+            Type.void(),
+            [prior.data.type_, samples.data.type_, weights.data.type_, out.data.type_],
+            )
+        def finite_mixture_map(prior_data, samples_data, weights_data, out_data):
+            self._map(
+                prior.using(prior_data),
+                samples.using(samples_data),
+                weights.using(weights_data),
+                out.using(out_data),
+                )
+
+        finite_mixture_map(prior.data, samples.data, weights.data, out.data)
+
+    def _map(self, prior, samples, weights, out):
         """
         Emit computation of the estimated maximum-likelihood parameter.
         """
@@ -304,7 +334,8 @@ class FiniteMixtureEmitter(object):
             def _(k):
                 component = out.at(k).data
 
-                self._sub_emitter.ml(
+                self._sub_emitter.map(
+                    prior.at(k),
                     samples,
                     r_KN.at(k),
                     StridedArray.from_typed_pointer(component.gep(0, 1)),

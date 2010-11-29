@@ -145,6 +145,43 @@ class ModelEngine(object):
         # done
         return out
 
+    def map(self, priors, samples, weights, out = None):
+        """
+        Compute the estimated MAP parameter.
+        """
+
+        # arguments
+        (shape, (out, priors, samples, weights)) = \
+            semicast_arguments(
+                AA(out    , self._model.parameter_dtype, 0),
+                AA(priors , self._model.prior_dtype    , 0),
+                AA(samples, self._model.sample_dtype   , 1),
+                AA(weights, numpy.dtype(numpy.float64) , 1),
+                )
+
+        # computation
+        @emit_and_execute(optimize = self._optimize)
+        def _():
+            """
+            Emit the log-likelihood computation.
+            """
+
+            arrays = \
+                StridedArrays.from_numpy({
+                    "p" : priors,
+                    "s" : samples,
+                    "w" : weights,
+                    "o" : out,
+                    })
+            emitter = self._model.get_emitter()
+
+            @arrays.loop_all(len(shape))
+            def _(l):
+                emitter.map(l.arrays["p"], l.arrays["s"], l.arrays["w"], l.arrays["o"])
+
+        # done
+        return out
+
     def given(self, parameters, samples, out = None):
         """
         Compute the posterior parameter.

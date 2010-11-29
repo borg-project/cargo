@@ -16,7 +16,8 @@ class Tuple(object):
     A tuple of independent distributions.
 
     - parameter : {d0_parameter_t d0[d0_count]; d1_parameter_t d1[d1_count]; ...}
-    - sample    : {d0_sample_t d0[d0_count]; d1_sample_t d1[d1_count]; ...}
+    - sample    : {d0_sample_t    d0[d0_count]; d1_sample_t    d1[d1_count]; ...}
+    - prior     : {d0_prior_t     d0[d0_count]; d1_prior_t     d1[d1_count]; ...}
     """
 
     def __init__(self, distributions):
@@ -40,14 +41,17 @@ class Tuple(object):
         # parameter and sample types
         parameter_fields = []
         sample_fields    = []
+        prior_fields     = []
 
         for (i, (distribution, count)) in enumerate(self._distributions):
             field_name        = "d%i" % i
             parameter_fields += [(field_name, distribution.parameter_dtype, (count,))]
             sample_fields    += [(field_name, distribution.sample_dtype   , (count,))]
+            prior_fields     += [(field_name, distribution.prior_dtype    , (count,))]
 
         self._parameter_dtype = numpy.dtype(parameter_fields)
         self._sample_dtype    = numpy.dtype(sample_fields)
+        self._prior_dtype     = numpy.dtype(prior_fields)
 
     def get_emitter(self):
         """
@@ -79,6 +83,14 @@ class Tuple(object):
         """
 
         return self._sample_dtype
+
+    @property
+    def prior_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
+
+        return self._prior_dtype
 
 class TupleEmitter(object):
     """
@@ -142,6 +154,21 @@ class TupleEmitter(object):
             @qy.for_(count)
             def _(j):
                 self._emitters[i].ml(
+                    samples.extract(0, i, j),
+                    weights,
+                    StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
+                    )
+
+    def map(self, priors, samples, weights, out):
+        """
+        Emit computation of the estimated MAP parameter.
+        """
+
+        for (i, (_, count)) in enumerate(self._model._distributions):
+            @qy.for_(count)
+            def _(j):
+                self._emitters[i].map(
+                    priors.extract(0, i, j),
                     samples.extract(0, i, j),
                     weights,
                     StridedArray.from_typed_pointer(out.data.gep(0, i, j)),

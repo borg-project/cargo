@@ -51,7 +51,7 @@ def test_tuple_ll():
 
 def test_tuple_ml():
     """
-    Test parameter estimation under the tuple distribution.
+    Test ML parameter estimation under the tuple distribution.
     """
 
     from cargo.numpy import tolist_deeply
@@ -76,5 +76,36 @@ def test_tuple_ml():
                 ),
             ),
         ([(0.75, 1), (0.25, 1)], [(0.75, 1)]),
+        )
+
+def test_tuple_map():
+    """
+    Test MAP parameter estimation under the tuple distribution.
+    """
+
+    from cargo.numpy import tolist_deeply
+
+    model  = Tuple([(Binomial(estimation_n = 1), 2), (Binomial(estimation_n = 1), 1)])
+    engine = ModelEngine(model)
+
+    assert_almost_equal_deep(
+        tolist_deeply(
+            engine.map(
+                ([(2, 3), (2, 3)], [(2, 3)]),
+                [([0, 1], [0])] * 1 + [([1, 0], [1])] * 9,
+                numpy.ones(10),
+                ),
+            ),
+        ([(10.0 / 13.0, 1), (2.0 / 13.0, 1)], [(10.0 / 13.0, 1)]),
+        )
+    assert_almost_equal_deep(
+        tolist_deeply(
+            engine.map(
+                ([(2, 3), (2, 3)], [(2, 3)]),
+                [([0, 1], [0])] * 1 + [([1, 0], [1])] * 9,
+                [1.00] * 1 + [3.00] * 9,
+                ),
+            ),
+        ([(28.0 / 31.0, 1), (2.0 / 31.0, 1)], [(28.0 / 31.0, 1)]),
         )
 
