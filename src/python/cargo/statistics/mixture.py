@@ -12,6 +12,7 @@ from qy         import (
     Function,
     Variable,
     StridedArray,
+    StridedArrays,
     )
 from llvm.core  import (
     Type,
@@ -100,6 +101,14 @@ class FiniteMixture(object):
         """
 
         return self._prior_dtype
+
+    @property
+    def marginal_dtype(self):
+        """
+        Return the marginal dtype.
+        """
+
+        return self._distribution.average_dtype
 
     @property
     def K(self):
@@ -229,7 +238,7 @@ class FiniteMixtureEmitter(object):
 
     # XXX def _ml
 
-    def map(self, prior, samples, weights, out):
+    def map(self, prior, samples, weights, out, initializations = 16):
         """
         Emit computation of the estimated MAP parameter.
         """
@@ -244,33 +253,95 @@ class FiniteMixtureEmitter(object):
                 samples.using(samples_data),
                 weights.using(weights_data),
                 out.using(out_data),
+                initializations,
                 )
 
         finite_mixture_map(prior.data, samples.data, weights.data, out.data)
 
-    def _map(self, prior, samples, weights, out):
+    def _map_initialize(self, prior, samples, weights, out, initializations):
         """
-        Emit computation of the estimated maximum-likelihood parameter.
+        Emit parameter initialization for EM.
         """
 
-        # mise en place
+        # generate a random initial component assignment
         K = self._model._K
         N = samples.shape[0]
 
-        # generate a random initial state
-        total        = qy.stack_allocate(float, 0.0)
-        component_ll = qy.stack_allocate(float)
+        total   = qy.stack_allocate(float)
+        best_ll = qy.stack_allocate(float, -numpy.inf)
 
+        assigns      = StridedArray.heap_allocated(int, (K,))
+        best_assigns = StridedArray.heap_allocated(int, (K,))
+
+        @qy.for_(initializations)
+        def _(i):
+            @qy.for_(K)
+            def _(k):
+                # randomly assign the component
+                j         = qy.random_int(N)
+                component = StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1))
+
+                j.store(assigns.at(k).data)
+
+                self._sub_emitter.map(
+                    prior.at(k),
+                    samples.at(j).envelop(),
+                    weights.at(j).envelop(),
+                    component,
+                    )
+
+            # compute our total likelihood
+            qy.value_from_any(0.0).store(total)
+
+            @qy.for_(N)
+            def _(n):
+                sample = samples.at(n)
+
+                mixture_ll = total.load()
+
+                qy.value_from_any(-numpy.inf).store(total)
+
+                @qy.for_(K)
+                def _(k):
+                    component_ll = total.load()
+
+                    self._sub_emitter.ll(
+                        StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
+                        sample,
+                        total,
+                        )
+
+                    log_add_double(component_ll, total.load()).store(total)
+
+                (mixture_ll + total.load()).store(total)
+
+            # best observed so far?
+            @qy.if_(total.load() >= best_ll.load())
+            def _():
+                total.load().store(best_ll)
+
+                @qy.for_(K)
+                def _(k):
+                    assigns.at(k).data.load().store(best_assigns.at(k).data)
+
+        # recompute the best observed assignment
         @qy.for_(K)
         def _(k):
-            n = qy.random_int(N)
+            # randomly assign the component
+            j = assigns.at(k).data.load()
 
             self._sub_emitter.ml(
-                samples.at(n).envelop(),
-                weights.at(n).envelop(),
+                samples.at(j).envelop(),
+                weights.at(j).envelop(),
                 StridedArray.from_typed_pointer(out.at(k).data.gep(0, 1)),
                 )
 
+        qy.heap_free(assigns.data)
+        qy.heap_free(best_assigns.data)
+
+        # generate random initial component weights
+        @qy.for_(K)
+        def _(k):
             r = qy.random()
 
             r.store(out.at(k).data.gep(0, 0))
@@ -283,10 +354,24 @@ class FiniteMixtureEmitter(object):
 
             (p.load() / total.load()).store(p)
 
+    def _map(self, prior, samples, weights, out, initializations):
+        """
+        Emit computation of the estimated maximum-likelihood parameter.
+        """
+
+        # mise en place
+        K = self._model._K
+        N = samples.shape[0]
+
+        # generate some initial parameters
+        self._map_initialize(prior, samples, weights, out, initializations)
+
         # run EM until convergence
-        # XXX this could become static storage
-        this_r_KN   = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
-        last_r_KN   = StridedArray.heap_allocated(float, (K, N)) # XXX leaking heap space
+        total        = qy.stack_allocate(float)
+        component_ll = qy.stack_allocate(float)
+
+        this_r_KN = StridedArray.heap_allocated(float, (K, N))
+        last_r_KN = StridedArray.heap_allocated(float, (K, N))
 
         this_r_KN_data = Variable.set_to(this_r_KN.data)
         last_r_KN_data = Variable.set_to(last_r_KN.data)
@@ -366,7 +451,7 @@ class FiniteMixtureEmitter(object):
 
                 @qy.if_(total.load() < 1e-12)
                 def _():
-                    qy.return_()
+                    qy.break_()
 
             total_delta = total.load()
 
@@ -380,6 +465,8 @@ class FiniteMixtureEmitter(object):
             @qy.for_(N)
             def _(n):
                 sample = samples.at(n)
+
+                total_ll = total.load()
 
                 qy.value_from_any(-numpy.inf).store(total)
 
@@ -397,10 +484,16 @@ class FiniteMixtureEmitter(object):
                         ) \
                         .store(total)
 
+                (total_ll + total.load()).store(total)
+
             total_ll = total.load()
 
             # be informative
             qy.py_printf("after EM step %i: delta %s; ll %s\n", i, total_delta, total_ll)
+
+        # clean up
+        qy.heap_free(this_r_KN.data)
+        qy.heap_free(last_r_KN.data)
 
         qy.return_()
 
@@ -460,19 +553,12 @@ class FiniteMixtureEmitter(object):
 
         total_value = total.load()
 
-        @qy.if_else(total_value == -numpy.inf)
-        def _(then):
-            if then:
-                @qy.for_(K)
-                def _(k):
-                    qy.value_from_any(1.0 / K).store(out.at(k).data.gep(0, 0))
-            else:
-                @qy.for_(K)
-                def _(k):
-                    posterior_pi  = out.at(k).data.gep(0, 0)
-                    normalized_pi = posterior_pi.load() - total_value
+        @qy.for_(K)
+        def _(k):
+            posterior_pi  = out.at(k).data.gep(0, 0)
+            normalized_pi = posterior_pi.load() - total_value
 
-                    qy.exp(normalized_pi).store(posterior_pi)
+            qy.exp(normalized_pi).store(posterior_pi)
 
         # compute posterior component parameters
         @qy.for_(K)
@@ -486,68 +572,66 @@ class FiniteMixtureEmitter(object):
                 StridedArray.from_typed_pointer(posterior_parameter),
                 )
 
-#class RestartingML(object):
-    #"""
-    #Wrap a distribution with a restarting ML estimator.
-    #"""
+    def marginal(self, parameter, out):
+        """
+        Compute the marginal distribution.
+        """
 
-    #def __init__(self, distribution, restarts = 8):
-        #"""
-        #Initialize.
-        #"""
+        @Function.define(
+            Type.void(),
+            [parameter.data.type_, out.data.type_],
+            )
+        def finite_mixture_marginal(parameter_data, out_data):
+            self._marginal(
+                parameter.using(parameter_data),
+                out.using(out_data),
+                )
 
-        #self._distribution = distribution
-        #self._restarts     = restarts
+        finite_mixture_marginal(parameter.data, out.data)
 
-    #def rv(self, parameters, out, random = numpy.random):
-        #"""
-        #Make a draw from this mixture distribution.
-        #"""
+    def _marginal(self, parameter, out):
+        """
+        Compute the marginal distribution.
+        """
 
-        #return self._distribution.rv(parameters, out, random)
+        self._sub_emitter.average(
+            parameter.extract(0, 0),
+            parameter.extract(0, 1),
+            out,
+            )
 
-    #def ll(self, parameters, samples, out = None):
-        #"""
-        #Compute finite-mixture log-likelihood.
-        #"""
+        qy.return_()
 
-        #return self._distribution.ll(parameters, samples, out)
+def marginalize_mixture(mixture, parameters, out = None, optimize = True):
+    """
+    Marginalize out the mixture indices.
+    """
 
-    #def ml(self, samples, weights, out, random = numpy.random):
-        #"""
-        #Use EM to estimate mixture parameters.
-        #"""
+    # arguments
+    from cargo.statistics import (
+        ArrayArgument as AA,
+        semicast_arguments,
+        )
 
-        #raise NotImplementedError()
+    (shape, (out, parameters)) = \
+        semicast_arguments(
+            AA(out       , mixture.marginal_dtype , 0),
+            AA(parameters, mixture.parameter_dtype, 0),
+            )
 
-    #def given(self, parameters, samples, out = None):
-        #"""
-        #Return the conditional distribution.
-        #"""
+    # computation
+    @qy.emit_and_execute(optimize = optimize)
+    def _():
+        arrays = \
+            StridedArrays.from_numpy({
+                "p" : parameters,
+                "o" : out,
+                })
 
-        #return self._distribution.given(parameters, samples, out)
+        @arrays.loop_all(len(shape))
+        def _(l):
+            mixture.get_emitter().marginal(l.arrays["p"], l.arrays["o"])
 
-    #@property
-    #def distribution(self):
-        #"""
-        #Return the mixture components.
-        #"""
-
-        #return self._distribution
-
-    #@property
-    #def parameter_dtype(self):
-        #"""
-        #Return the parameter type.
-        #"""
-
-        #return self._distribution.parameter_dtype
-
-    #@property
-    #def sample_dtype(self):
-        #"""
-        #Return the sample type.
-        #"""
-
-        #return self._distribution.sample_dtype
+    # done
+    return out
 

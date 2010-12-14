@@ -52,6 +52,7 @@ class Tuple(object):
         self._parameter_dtype = numpy.dtype(parameter_fields)
         self._sample_dtype    = numpy.dtype(sample_fields)
         self._prior_dtype     = numpy.dtype(prior_fields)
+        self._average_dtype   = None
 
     def get_emitter(self):
         """
@@ -91,6 +92,22 @@ class Tuple(object):
         """
 
         return self._prior_dtype
+
+    @property
+    def average_dtype(self):
+        """
+        Type of distribution parameter(s).
+        """
+
+        if self._average_dtype is None:
+            average_fields = []
+
+            for (i, (distribution, count)) in enumerate(self._distributions):
+                average_fields += [("d%i" % i, distribution.average_dtype, (count,))]
+
+            self._average_dtype = numpy.dtype(average_fields)
+
+        return self._average_dtype
 
 class TupleEmitter(object):
     """
@@ -185,6 +202,20 @@ class TupleEmitter(object):
                 self._emitters[i].given(
                     StridedArray.from_typed_pointer(parameter.data.gep(0, i, j)),
                     samples.extract(0, i, j),
+                    StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
+                    )
+
+    def average(self, weights, parameters, out):
+        """
+        Return the conditional distribution.
+        """
+
+        for (i, (_, count)) in enumerate(self._model._distributions):
+            @qy.for_(count)
+            def _(j):
+                self._emitters[i].average(
+                    weights,
+                    parameters.extract(0, i, j),
                     StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
                     )
 

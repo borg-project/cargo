@@ -62,6 +62,14 @@ class Binomial(object):
 
         return self._prior_dtype
 
+    @property
+    def marginal_dtype(self):
+        """
+        Type of the marginal parameter.
+        """
+
+        return self._parameter_dtype
+
 def binomial_log_pdf(k, p, n):
     """
     Compute the binomial PMF.
@@ -229,9 +237,10 @@ class MixedBinomial(object):
         Initialize.
         """
 
-        self._parameter_dtype = numpy.dtype(numpy.float64)
+        self._parameter_dtype = numpy.dtype(float)
         self._sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
         self._prior_dtype     = numpy.dtype([("alpha", float), ("beta", float)])
+        self._average_dtype   = numpy.dtype(float)
 
     def get_emitter(self):
         """
@@ -263,6 +272,14 @@ class MixedBinomial(object):
         """
 
         return self._prior_dtype
+
+    @property
+    def average_dtype(self):
+        """
+        Type of the distribution prior.
+        """
+
+        return self._average_dtype
 
 class MixedBinomialEmitter(object):
     """
@@ -392,4 +409,38 @@ class MixedBinomialEmitter(object):
         """
 
         parameter.data.load().store(out.data)
+
+    def average(self, weights, parameters, out):
+        """
+        Emit computation of the average parameter.
+        """
+
+        @Function.define(
+            Type.void(),
+            [weights.data.type_, parameters.data.type_, out.data.type_],
+            )
+        def binomial_average(weights_data, parameters_data, out_data):
+            self._average(
+                weights.using(weights_data),
+                parameters.using(parameters_data),
+                out.using(out_data),
+                )
+
+        binomial_average(weights.data, parameters.data, out.data)
+
+    def _average(self, weights, parameters, out):
+        """
+        Emit computation of the average parameter.
+        """
+
+        qy.value_from_any(0.0).store(out.data)
+
+        @qy.for_(parameters.shape[0])
+        def _(n):
+            weight    = weights.at(n).data.load()
+            parameter = parameters.at(n).data.load()
+
+            (out.data.load() + weight * parameter).store(out.data)
+
+        qy.return_()
 

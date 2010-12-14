@@ -118,11 +118,11 @@ def test_finite_mixture_given_binomials():
 
     model  = FiniteMixture(MixedBinomial(), 2)
     engine = ModelEngine(model)
-    out    = engine.given([(0.25, 0.25), (0.75, 0.75)], [(1, 1)])
+    out    = engine.given([(0.25, 0.25), (0.75, 0.75)], [(1, 1), (2, 3)])
 
     assert_equal(out["c"].tolist(), [0.25, 0.75])
-    assert_almost_equal(out["p"][0], 0.1)
-    assert_almost_equal(out["p"][1], 0.9)
+    assert_almost_equal(out["p"][0], 0.03571429)
+    assert_almost_equal(out["p"][1], 0.9642857)
 
 def test_finite_mixture_given_enveloped():
     """
@@ -137,16 +137,15 @@ def test_finite_mixture_given_enveloped():
         assert_almost_equal(out["p"][i, 0], 0.0)
         assert_almost_equal(out["p"][i, 1], 1.0)
 
-#def test_restarting_ml():
-    #"""
-    #Test the restarting-ML distribution wrapper.
-    #"""
+def test_finite_mixture_marginal():
+    """
+    Test finite-mixture marginal computation.
+    """
 
-    #from cargo.statistics.mixture  import RestartingML
-    #from cargo.statistics.binomial import MixedBinomial
+    from cargo.statistics.mixture import marginalize_mixture
 
-    #m = FiniteMixture(MixedBinomial(epsilon = 0.0), 2)
-    #d = RestartingML(m)
+    model = FiniteMixture(MixedBinomial(), 2)
+    out   = marginalize_mixture(model, [[(0.25, 0.25), (0.75, 0.75)]])
 
-    #assert_finite_mixture_ml_ok(d)
+    assert_equal(out.tolist(), [0.625])
 

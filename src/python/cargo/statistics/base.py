@@ -145,7 +145,8 @@ class ModelEngine(object):
         # done
         return out
 
-    def map(self, priors, samples, weights, out = None):
+    # XXX build a better system for emitter-specific options
+    def map(self, priors, samples, weights, out = None, initializations = 16):
         """
         Compute the estimated MAP parameter.
         """
@@ -177,7 +178,7 @@ class ModelEngine(object):
 
             @arrays.loop_all(len(shape))
             def _(l):
-                emitter.map(l.arrays["p"], l.arrays["s"], l.arrays["w"], l.arrays["o"])
+                emitter.map(l.arrays["p"], l.arrays["s"], l.arrays["w"], l.arrays["o"], initializations = initializations)
 
         # done
         return out
