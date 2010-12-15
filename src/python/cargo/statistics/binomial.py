@@ -7,6 +7,7 @@ import qy
 
 from llvm.core import Type
 from qy        import (
+    Qy,
     get_qy,
     Function,
     StridedArray,
@@ -15,21 +16,18 @@ from qy        import (
 class Binomial(object):
     """
     Build low-level operations of the binomial distribution.
-
-    Relevant types:
-    - parameter : {float64 p; uint32 n;}
-    - sample    : uint32
     """
+
+    parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
+    sample_dtype    = numpy.dtype(numpy.int32)
+    prior_dtype     = numpy.dtype([("alpha", float), ("beta", float)])
 
     def __init__(self, estimation_n = None):
         """
         Initialize.
         """
 
-        self._parameter_dtype = numpy.dtype([("p", numpy.float64), ("n", numpy.uint32)])
-        self._sample_dtype    = numpy.dtype(numpy.int32)
-        self._prior_dtype     = numpy.dtype([("alpha", float), ("beta", float)])
-        self._estimation_n    = estimation_n # XXX MASSIVE HACK; needs to go away
+        self._estimation_n = estimation_n # XXX MASSIVE HACK; needs to go away
 
     def get_emitter(self):
         """
@@ -38,29 +36,12 @@ class Binomial(object):
 
         return BinomialEmitter(self)
 
-    @property
-    def parameter_dtype(self):
+    def ll(self, parameter, sample):
         """
-        Type of the distribution parameter.
-        """
-
-        return self._parameter_dtype
-
-    @property
-    def sample_dtype(self):
-        """
-        Type of the distribution sample.
+        Return the likelihood of the model parameter under sample.
         """
 
-        return self._sample_dtype
-
-    @property
-    def prior_dtype(self):
-        """
-        Type of the prior parameter.
-        """
-
-        return self._prior_dtype
+        return binomial_ll(parameter, sample)
 
     @property
     def marginal_dtype(self):
@@ -100,6 +81,63 @@ def binomial_log_pdf(k, p, n):
 
     return binomial_log_pdf_ddd(k, p, n)
 
+def binomial_ll(parameter, sample):
+    """
+    Return the likelihood of the model parameter under sample.
+    """
+
+    # compile our method body
+    from qy import (
+        Value,
+        type_from_any,
+        build_engine,
+        )
+
+    q = \
+        Qy(
+            return_type    = type_from_any(float)      ,
+            argument_types = [type_from_any(float)] * 3,
+            default_return = Value.from_any(numpy.nan) ,
+            )
+
+    with q.active() as bar:
+        q.return_(binomial_log_pdf(*q.main_body.argument_values))
+
+    engine = build_engine(q.module)
+
+    # define the python wrapper
+    from ctypes import (
+        CFUNCTYPE,
+        c_double,
+        )
+    prototype = CFUNCTYPE(c_double, c_double, c_double, c_double)
+    generated = prototype(engine.get_pointer_to_function(q.main))
+
+    from qy.support import raise_if_set
+
+    def wrapper(parameter, sample):
+        """
+        Return the likelihood of the model parameter under sample.
+        """
+
+        parameter = numpy.asarray(parameter, Binomial.parameter_dtype)
+
+        result = generated(sample, parameter["p"], parameter["n"])
+
+        raise_if_set()
+
+        return result
+
+    # don't let the engine be GCed
+    wrapper._engine = engine
+
+    # replace and compute
+    global binomial_ll
+
+    binomial_ll = wrapper
+
+    return binomial_ll(parameter, sample)
+
 class BinomialEmitter(object):
     """
     Build low-level operations of the binomial distribution.
@@ -122,28 +160,17 @@ class BinomialEmitter(object):
             Type.void(),
             [parameter.data.type_, sample.data.type_, out.type_],
             )
-        def binomial_ll(parameter_data, sample_data, out_data):
-            self._ll(
-                parameter.using(parameter_data),
-                sample.using(sample_data),
-                out_data,
-                )
+        def binomial_ll_emitted(parameter_data, sample_data, out_data):
+            binomial_log_pdf(
+                sample_data.load(),
+                parameter_data.gep(0, 0).load(),
+                parameter_data.gep(0, 1).load(),
+                ) \
+                .store(out_data)
 
             qy.return_()
 
-        binomial_ll(parameter.data, sample.data, out)
-
-    def _ll(self, parameter, sample, out):
-        """
-        Compute log probability under this distribution.
-        """
-
-        binomial_log_pdf(
-            sample.data.load(),
-            parameter.data.gep(0, 0).load(),
-            parameter.data.gep(0, 1).load(),
-            ) \
-            .store(out)
+        binomial_ll_emitted(parameter.data, sample.data, out)
 
     def ml(self, samples, weights, out):
         """
@@ -226,21 +253,12 @@ class BinomialEmitter(object):
 class MixedBinomial(object):
     """
     The "mixed binomial" distribution.
-
-    Relevant types:
-    - parameter : float64 p
-    - sample    : {uint32 k; uint32 n;}
     """
 
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        self._parameter_dtype = numpy.dtype(float)
-        self._sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
-        self._prior_dtype     = numpy.dtype([("alpha", float), ("beta", float)])
-        self._average_dtype   = numpy.dtype(float)
+    parameter_dtype = numpy.dtype(float)
+    sample_dtype    = numpy.dtype([("k", numpy.uint32), ("n", numpy.uint32)])
+    prior_dtype     = numpy.dtype([("alpha", float), ("beta", float)])
+    average_dtype   = numpy.dtype(float)
 
     def get_emitter(self):
         """
@@ -249,37 +267,14 @@ class MixedBinomial(object):
 
         return MixedBinomialEmitter(self)
 
-    @property
-    def parameter_dtype(self):
+    def ll(self, parameter, sample):
         """
-        Type of the distribution parameter.
-        """
-
-        return self._parameter_dtype
-
-    @property
-    def sample_dtype(self):
-        """
-        Type of the distribution sample.
+        Return the likelihood of the model parameter under sample.
         """
 
-        return self._sample_dtype
+        sample = numpy.asarray(sample, self.sample_dtype)
 
-    @property
-    def prior_dtype(self):
-        """
-        Type of the distribution prior.
-        """
-
-        return self._prior_dtype
-
-    @property
-    def average_dtype(self):
-        """
-        Type of the distribution prior.
-        """
-
-        return self._average_dtype
+        return binomial_ll((parameter, sample["n"]), sample["k"])
 
 class MixedBinomialEmitter(object):
     """

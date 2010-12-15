@@ -61,6 +61,23 @@ class Tuple(object):
 
         return TupleEmitter(self)
 
+    def ll(self, parameter, sample):
+        """
+        Return the likelihood of the model parameter under sample.
+        """
+
+        sample = numpy.asarray(sample, self.sample_dtype)
+
+        ll = 0.0
+
+        for (i, (distribution, count)) in enumerate(self.distributions):
+            for j in xrange(count):
+                name = "d%i" % i
+
+                ll += distribution.ll(parameter[name][j], sample[name][j])
+
+        return ll
+
     @property
     def distributions(self):
         """
@@ -218,28 +235,4 @@ class TupleEmitter(object):
                     parameters.extract(0, i, j),
                     StridedArray.from_typed_pointer(out.data.gep(0, i, j)),
                     )
-
-    #def rv(
-                          #self,
-        #ndarray           parameters, # ndim = 1
-        #ndarray           out,        # ndim = 2
-                          #random = numpy.random,
-        #):
-        #"""
-        #Return samples from this distribution.
-        #"""
-
-        ### arguments
-        ##assert parameters.shape[0] == out.shape[0]
-
-        ### computation
-        ##cdef size_t            i
-        ##cdef size_t            j
-        ##cdef BinomialParameter p
-
-        ##for i in xrange(out.shape[0]):
-            ##p         = parameters[i]
-            ##out[i, :] = random.binomial(p.n, p.p, out.shape[1])
-
-        #return out
 

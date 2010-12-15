@@ -78,6 +78,31 @@ class FiniteMixture(object):
 
         return FiniteMixtureEmitter(self)
 
+    def posterior(self, parameter, samples):
+        """
+        Return the posterior mixture weights.
+        """
+
+        # compute the component likelihoods
+        post = numpy.ndarray(self.K)
+
+        for i in xrange(self.K):
+            ll = parameter[i]["p"]
+
+            for j in xrange(len(samples)):
+                ll += self.distribution.ll(parameter[i]["c"], samples[j])
+
+            post[i] = ll
+
+        # normalize and exponentiate
+        from cargo.statistics.functions import log_plus_all
+
+        post[:] -= log_plus_all(post)
+
+        numpy.exp(post, post)
+
+        return post
+
     @property
     def parameter_dtype(self):
         """
@@ -138,39 +163,6 @@ class FiniteMixtureEmitter(object):
 
         self._model       = model
         self._sub_emitter = self._model.distribution.get_emitter()
-
-    #def rv(self, parameters, out, random = numpy.random):
-        #"""
-        #Make a draw from this mixture distribution.
-        #"""
-
-        ## identify the common prefix
-        #if self._distribution.sample_dtype.shape:
-            #out_prefix = out.shape[:-len(self._distribution.sample_dtype.shape)]
-        #else:
-            #out_prefix = out.shape
-
-        #selected = numpy.empty(out_prefix, dtype = self._distribution.parameter_dtype)
-
-        ## select the relevant components
-        #extension  = (1,) * (len(selected.shape) - len(parameters.shape)) + parameters.shape
-        #components = \
-            #numpy.reshape(
-                #parameters["c"],
-                #extension + self._distribution.parameter_dtype.shape,
-                #)
-        #mixing = numpy.reshape(parameters["p"], extension)
-        #less   = 1 + len(self._distribution.parameter_dtype.shape)
-        #re_max = tuple([s - 1 for s in components.shape[:-less]])
-
-        #for i in numpy.ndindex(selected.shape):
-            #re_i = tuple(map(min, re_max, i))
-            #j    = numpy.nonzero(random.multinomial(1, mixing[re_i]))
-
-            #selected[i] = components[re_i + j]
-
-        ## generate random variates
-        #return self._distribution.rv(selected, out, random)
 
     def ll(self, parameter, sample, out):
         """
@@ -601,37 +593,4 @@ class FiniteMixtureEmitter(object):
             )
 
         qy.return_()
-
-def marginalize_mixture(mixture, parameters, out = None, optimize = True):
-    """
-    Marginalize out the mixture indices.
-    """
-
-    # arguments
-    from cargo.statistics import (
-        ArrayArgument as AA,
-        semicast_arguments,
-        )
-
-    (shape, (out, parameters)) = \
-        semicast_arguments(
-            AA(out       , mixture.marginal_dtype , 0),
-            AA(parameters, mixture.parameter_dtype, 0),
-            )
-
-    # computation
-    @qy.emit_and_execute(optimize = optimize)
-    def _():
-        arrays = \
-            StridedArrays.from_numpy({
-                "p" : parameters,
-                "o" : out,
-                })
-
-        @arrays.loop_all(len(shape))
-        def _(l):
-            mixture.get_emitter().marginal(l.arrays["p"], l.arrays["o"])
-
-    # done
-    return out
 
