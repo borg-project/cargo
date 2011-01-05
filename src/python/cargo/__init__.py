@@ -2,6 +2,12 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log import (
+    get_logger,
+    enable_default_logging,
+    )
+from cargo.random import *
+
 def get_support_path(name):
     """
     Return the absolute path to a support file.
