@@ -7,6 +7,7 @@ from cargo.log import (
     enable_default_logging,
     )
 from cargo.random import *
+from cargo.iterators import *
 
 def get_support_path(name):
     """
