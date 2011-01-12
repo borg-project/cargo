@@ -2,13 +2,26 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+__all__ = [
+    "expandvars",
+    "expandpath",
+    "files_under",
+    "uncompressed",
+    "mkdtemp_scoped",
+    "decompress_if",
+    ]
+
 import os
 import os.path
+import pwd
 import errno
+import shutil
 import hashlib
+import tempfile
 import threading
 import mimetypes
 import subprocess
+import cargo
 
 from os           import (
     fsync,
@@ -337,23 +350,25 @@ def escape_for_latex(text):
             ("_", r"\_"))
 
 @contextmanager
-def mkdtemp_scoped(*args, **kwargs):
+def mkdtemp_scoped(prefix = None):
     """
-    Create a temporary directory, with support for cleanup.
+    Create, and then delete, a temporary directory.
     """
 
-    from shutil   import rmtree
-    from tempfile import mkdtemp
+    # provide a reasonable default prefix
+    if prefix is None:
+        prefix = "%s." % pwd.getpwuid(os.getuid())[0]
 
+    # create the context
     path = None
 
     try:
-        path = mkdtemp(*args, **kwargs)
+        path = tempfile.mkdtemp(prefix = prefix)
 
         yield path
     finally:
         if path is not None:
-            rmtree(path, ignore_errors = True)
+            shutil.rmtree(path, ignore_errors = True)
 
 @contextmanager
 def env_restored(unset = []):
@@ -375,4 +390,17 @@ def env_restored(unset = []):
     # then restore the preserved copy
     environ.clear()
     environ.update(old)
+
+@contextmanager
+def uncompressed(path):
+    """
+    Provide an uncompressed read-only file in a managed context.
+    """
+
+    with cargo.mkdtemp_scoped() as sandbox_path:
+        sandboxed_path    = os.path.join(sandbox_path, "uncompressed")
+        uncompressed_path = cargo.decompress_if(path, sandboxed_path)
+
+        with open(uncompressed_path) as opened:
+            yield opened
 

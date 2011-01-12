@@ -24,6 +24,8 @@ log       = get_logger(__name__, level = "NOTE")
 LaborBase = declarative_base()
 metadata  = LaborBase.metadata
 
+from cargo.tools.labor.submit import submit_workers_for
+
 def outsource_or_run(jobs, outsource, name = None, url = defaults.labor_url):
     """
     Outsource or run a set of jobs.

@@ -2,11 +2,13 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.io import *
 from cargo.log import (
     get_logger,
     enable_default_logging,
     )
 from cargo.random import *
+from cargo.profile import *
 from cargo.iterators import *
 
 def get_support_path(name):

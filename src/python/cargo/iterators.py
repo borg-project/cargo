@@ -4,21 +4,16 @@
 
 from __future__ import absolute_import
 
+import itertools
+import contextlib
 import numpy
-
-from contextlib import (
-    nested,
-    closing,
-    )
 
 def chunk(sequence, size):
     """
     Yield a sequence of chunks from sequence.
     """
 
-    from itertools import groupby
-
-    for (_, pairs) in groupby(enumerate(sequence), lambda (i, _): i / size):
+    for (_, pairs) in itertools.groupby(enumerate(sequence), lambda (i, _): i / size):
         yield (v for (_, v) in pairs)
 
 def divide(items, fraction = 0.5):
@@ -46,7 +41,7 @@ def closing_all(*args):
     Return a context manager closing the passed arguments.
     """
 
-    return nested(*[closing(f) for f in args])
+    return contextlib.nested(*[contextlib.closing(f) for f in args])
 
 def replace_all(string, *args):
     """
