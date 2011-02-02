@@ -17,6 +17,7 @@ install(
         testing.py
 		profile.py
 		labor.py
+		labor2.py
 		numpy.py
         defaults.py
     DESTINATION lib/cargo

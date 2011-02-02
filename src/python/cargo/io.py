@@ -3,16 +3,20 @@
 """
 
 __all__ = [
+    "read_named_csv",
+    "write_named_csv",
     "expandvars",
     "expandpath",
     "files_under",
     "uncompressed",
     "mkdtemp_scoped",
     "decompress_if",
+    "check_call_capturing",
     ]
 
 import os
 import os.path
+import csv
 import pwd
 import errno
 import shutil
@@ -21,12 +25,9 @@ import tempfile
 import threading
 import mimetypes
 import subprocess
+import collections
 import cargo
 
-from os           import (
-    fsync,
-    rename,
-    )
 from os.path      import (
     join,
     exists,
@@ -50,15 +51,13 @@ from subprocess   import (
 from contextlib   import contextmanager
 from cargo.errors import Raised
 
-def write_named_tuples_to_csv(path, tuples):
+def write_named_csv(file_, tuples):
     """
     Write a list of named tuples to a CSV file.
     """
 
-    from csv import writer as csv_writer
-
-    with open(path, "w") as file_:
-        writer = csv_writer(file_)
+    def write(csv_file):
+        writer = csv.writer(csv_file)
 
         if tuples:
             names = tuples[0]._fields
@@ -66,7 +65,45 @@ def write_named_tuples_to_csv(path, tuples):
             return
 
         writer.writerow(names)
-        writer.writerows(tuples)
+        writer.writerows(map(str, t) for t in tuples)
+
+    if isinstance(file_, str):
+        with open(file_, "w") as csv_file:
+            write(csv_file)
+    else:
+        write(file_)
+
+def read_named_csv(file_, Named = None, types = None, read_names = True):
+    """
+    Read named tuples from a CSV file.
+    """
+
+    def read(csv_file, Named, types):
+        reader = csv.reader(csv_file)
+
+        if read_names:
+            names = reader.next()
+
+            if Named is None:
+                Named = collections.namedtuple("TupleFromCSV", names)
+            elif set(names) != set(Named._fields):
+                raise RuntimeError("names in CSV file do not match")
+        else:
+            names = Named._fields
+
+        if types is None:
+            types = dict((f, lambda x: x) for f in names)
+
+        for line in reader:
+            yield Named(**dict((f, types[f](v)) for (f, v) in zip(names, line)))
+
+    if isinstance(file_, str):
+        with open(file_) as csv_file:
+            for row in read(csv_file, Named, types):
+                yield row
+    else:
+        for row in read(file_, Named, types):
+            yield row
 
 def cache_file(path, cache_dir = None, namespace = uuid4()):
     """
@@ -96,7 +133,7 @@ def cache_file(path, cache_dir = None, namespace = uuid4()):
         partial_path = "%s.partial" % cached_path
 
         copy2(path, partial_path)
-        rename(partial_path, cached_path)
+        os.rename(partial_path, cached_path)
 
         return cached_path
 
@@ -285,7 +322,7 @@ def decompress(ipath, opath, encoding = None):
             raise RuntimeError("uncompressed, or unsupported compression encoding")
 
         ofile.flush()
-        fsync(ofile.fileno())
+        os.fsync(ofile.fileno())
 
 def decompress_if(ipath, opath):
     """

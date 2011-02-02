@@ -8,13 +8,16 @@ if __name__ == "__main__":
 
     call(main)
 
+import os
+import os.path
+import cargo
+
 from uuid        import UUID
 from collections import namedtuple
 from plac        import annotations
-from cargo.log   import get_logger
 from cargo       import defaults
 
-log = get_logger(__name__, level = "NOTE")
+log = cargo.get_logger(__name__, level = "NOTE")
 
 CondorWorkerProcess = \
     namedtuple(
@@ -301,6 +304,7 @@ def submit_workers_for(
     Spawn condor workers.
     """
 
+    # submit the jobs
     submission = \
         CondorSubmission(
             matching     = matching,
@@ -312,6 +316,14 @@ def submit_workers_for(
     submission.add_many(workers, url)
     submission.prepare()
     submission.submit()
+
+    # provide a convenience symlink
+    link_path = "workers-latest"
+
+    if os.path.lexists(link_path):
+        os.unlink(link_path)
+
+    os.symlink(home, link_path)
 
 main = submit_workers_for
 

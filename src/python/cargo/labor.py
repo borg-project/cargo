@@ -2,6 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import cargo
+
 from uuid                       import uuid4
 from sqlalchemy                 import (
     Column,
@@ -14,13 +16,12 @@ from sqlalchemy                 import (
 from sqlalchemy.orm             import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from cargo                      import defaults
-from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_Engines,
     )
 
-log       = get_logger(__name__, level = "NOTE")
+log       = cargo.get_logger(__name__, level = "NOTE")
 LaborBase = declarative_base()
 metadata  = LaborBase.metadata
 
