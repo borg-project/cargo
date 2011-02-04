@@ -10,6 +10,7 @@ install(
         iterators.py
         json.py
         log.py
+        condor.py
         plot.py
         random.py
         sugar.py

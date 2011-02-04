@@ -9,15 +9,18 @@ if __name__ == "__main__":
 
     plac.call(main)
 
+import time
+import traceback
 import zmq
 import cargo
 
 logger = cargo.get_logger(__name__)
 
 @plac.annotations(
-    address = ("address of employer", "positional"),
+    req_address = ("address for requests", "positional"),
+    push_address = ("address for updates", "positional"),
     )
-def main(address):
+def main(req_address, push_address):
     """
     Do arbitrary distributed work.
     """
@@ -25,20 +28,36 @@ def main(address):
     cargo.enable_default_logging()
 
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    req_socket = context.socket(zmq.REQ)
+    req_socket.connect(req_address) 
+    push_socket = context.socket(zmq.PUSH)
+    push_socket.connect(push_address) 
 
-    socket.connect(address) 
+    try:
+        while True:
+            # get an assignment
+            req_socket.send_pyobj(None)
 
-    while True:
-        # get an assignment
-        socket.send_pyobj(("get", None, None))
+            response = req_socket.recv_pyobj()
 
-        (work_id, (work, work_args, work_kwargs)) = socket.recv_pyobj()
+            if response is None:
+                logger.info("received null assignment; terminating")
 
-        # complete the assignment
-        result = work(*work_args, **work_kwargs)
+                break
+            else:
+                # complete the assignment
+                (id_, (work, work_args, work_kwargs)) = response
 
-        # return the result
-        socket.send_pyobj(("give", work_id, result))
-        socket.recv_pyobj()
+                try:
+                    result = work(*work_args, **work_kwargs)
+                except BaseException, error:
+                    push_socket.send_pyobj(("bailed", id_, traceback.format_exc(error)))
+
+                    raise
+                else:
+                    push_socket.send_pyobj(("completed", id_, result))
+    finally:
+        req_socket.close()
+        push_socket.close()
+        context.term()
 
