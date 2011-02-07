@@ -36,7 +36,7 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
 
                 assigned.add(id_)
 
-                rep_socket.send_pyobj((id_, assignments[id_]))
+                rep_socket.send_pyobj((id_, assignments[id_][:3]))
 
                 logger.debug("handed out %s", id_)
             else:
@@ -58,7 +58,7 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
                 if id_ in assigned:
                     assigned.remove(id_)
 
-                    complete[id_] = handler(body)
+                    complete[id_] = handler(assignments[id_], body)
 
                     logger.debug("worker completed assignment %i", id_)
                 else:
@@ -67,15 +67,16 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
                 logger.warning("unknown update type: %s", update)
 
         logger.info(
-            "status: %i unassigned; %i assigned; %i complete",
+            "%i unassigned; %i assigned; %i complete (%.2f%%)",
             len(unassigned),
             len(assigned),
             len(complete),
+            len(complete) * 100.0/ len(assignments),
             )
 
     return [x for (_, x) in sorted(complete.items())]
 
-def distribute_labor(assignments, workers = 32, handler = lambda x: x):
+def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
     """
     Distribute computation to remote workers.
     """
@@ -117,13 +118,22 @@ def distribute_labor(assignments, workers = 32, handler = lambda x: x):
 
         logger.info("cleaned up zeromq context")
 
-def distribute_or_labor(assignments, workers, handler = lambda x: x):
+def distribute_or_labor(assignments, workers, handler = lambda _, x: x):
     """
     Distribute or compute locally.
     """
 
+    assignments = list(assignments)
+
     if workers > 0:
         return distribute_labor(assignments, workers, handler)
     else:
-        return [handler(call(*args, **kwargs)) for (call, args, kwargs) in assignments]
+        results = []
+
+        for assignment in assignments:
+            (call, args, kwargs) = assignment[:3]
+
+            results.append(handler(assignment, call(*args, **kwargs)))
+
+        return results
 

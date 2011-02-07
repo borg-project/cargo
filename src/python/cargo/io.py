@@ -11,6 +11,7 @@ __all__ = [
     "uncompressed",
     "mkdtemp_scoped",
     "decompress_if",
+    "call_capturing",
     "check_call_capturing",
     ]
 

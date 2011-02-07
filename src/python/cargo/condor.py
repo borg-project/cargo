@@ -7,6 +7,7 @@ import os
 import os.path
 import sys
 import datetime
+import subprocess
 import cargo
 import cStringIO as StringIO
 
@@ -151,10 +152,15 @@ def condor_rm(specifier):
 
     logger.info("killing condor jobs matched by %s", specifier)
 
-    cargo.check_call_capturing(["condor_rm", str(specifier)])
+    try:
+        cargo.check_call_capturing(["condor_rm", str(specifier)])
+    except subprocess.CalledProcessError:
+        return False
+    else:
+        return True
 
 def default_condor_home():
-    return "workers-%s" % datetime.datetime.now().replace(microsecond = 0).isoformat()
+    return "workers/%s" % datetime.datetime.now().replace(microsecond = 0).isoformat()
 
 def submit_condor_workers(
     workers,

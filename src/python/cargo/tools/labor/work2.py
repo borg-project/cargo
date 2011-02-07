@@ -9,12 +9,12 @@ if __name__ == "__main__":
 
     plac.call(main)
 
-import time
+#import time
 import traceback
 import zmq
 import cargo
 
-logger = cargo.get_logger(__name__)
+logger = cargo.get_logger(__name__, level = "NOTSET")
 
 @plac.annotations(
     req_address = ("address for requests", "positional"),
@@ -48,16 +48,28 @@ def main(req_address, push_address):
                 # complete the assignment
                 (id_, (work, work_args, work_kwargs)) = response
 
+                logger.info("working on assignment %i", id_)
+
                 try:
                     result = work(*work_args, **work_kwargs)
                 except BaseException, error:
+                    logger.info("error; bailing!")
+
                     push_socket.send_pyobj(("bailed", id_, traceback.format_exc(error)))
 
                     raise
                 else:
+                    logger.info("assignment %i complete", id_)
+
                     push_socket.send_pyobj(("completed", id_, result))
     finally:
+        logger.info("flushing sockets and terminating zeromq context")
+
+        #time.sleep(64)
+
         req_socket.close()
         push_socket.close()
         context.term()
+
+        logger.info("zeromq cleanup complete")
 
