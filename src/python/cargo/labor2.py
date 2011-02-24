@@ -4,12 +4,13 @@
 
 import socket
 import traceback
-import zmq
 import cargo
 
 logger = cargo.get_logger(__name__, level = "INFO")
 
 def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
+    import zmq
+
     # labor state
     ids = dict(enumerate(assignments))
     unassigned = set(ids)
@@ -77,9 +78,9 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
     return [x for (_, x) in sorted(complete.items())]
 
 def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
-    """
-    Distribute computation to remote workers.
-    """
+    """Distribute computation to remote workers."""
+
+    import zmq
 
     assignments = list(assignments)
 
@@ -119,9 +120,7 @@ def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
         logger.info("cleaned up zeromq context")
 
 def distribute_or_labor(assignments, workers, handler = lambda _, x: x):
-    """
-    Distribute or compute locally.
-    """
+    """Distribute or compute locally."""
 
     assignments = list(assignments)
 
@@ -131,7 +130,9 @@ def distribute_or_labor(assignments, workers, handler = lambda _, x: x):
         results = []
 
         for assignment in assignments:
-            (call, args, kwargs) = assignment[:3]
+            call = assignment[0]
+            args = assignment[1] if len(assignment) > 1 else []
+            kwargs = assignment[2] if len(assignment) > 2 else {}
 
             results.append(handler(assignment, call(*args, **kwargs)))
 

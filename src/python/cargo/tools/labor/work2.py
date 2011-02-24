@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     plac.call(main)
 
-#import time
+import time
 import traceback
 import zmq
 import cargo
@@ -46,7 +46,10 @@ def main(req_address, push_address):
                 break
             else:
                 # complete the assignment
-                (id_, (work, work_args, work_kwargs)) = response
+                (id_, assignment) = response
+                work = assignment[0]
+                work_args = assignment[1] if len(assignment) > 1 else []
+                work_kwargs = assignment[2] if len(assignment) > 2 else {}
 
                 logger.info("working on assignment %i", id_)
 
@@ -65,7 +68,7 @@ def main(req_address, push_address):
     finally:
         logger.info("flushing sockets and terminating zeromq context")
 
-        #time.sleep(64)
+        time.sleep(64) # XXX
 
         req_socket.close()
         push_socket.close()

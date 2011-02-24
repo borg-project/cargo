@@ -30,9 +30,9 @@ install(
 
 add_subdirectory(_files)
 add_subdirectory(sql)
-add_subdirectory(statistics)
+#add_subdirectory(statistics)
 add_subdirectory(test)
 add_subdirectory(unix)
 add_subdirectory(tools)
-add_subdirectory(gsl)
+#add_subdirectory(gsl)
 

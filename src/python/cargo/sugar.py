@@ -39,9 +39,7 @@ def value_by_name(name):
     return value
 
 def composed(outer):
-    """
-    Wrap a callable in a call to outer.
-    """
+    """Wrap a callable in a call to outer."""
 
     def decorator(inner):
         from functools import wraps
@@ -55,38 +53,30 @@ def composed(outer):
     return decorator
 
 def curry(callable, *args, **kwargs):
-    """
-    Very simple pickleable partial function application.
-
-    We'd use functools.partial if it could be pickled.
-    """
+    """Return a pickleable partially-applied function."""
 
     return Curried(callable, *args, **kwargs)
 
 class Curried(object):
     """
     A simple pickleable partially-applied callable.
+
+    We'd use functools.partial if it could be pickled.
     """
 
-    def __init__(self, callable, *args, **kwargs):
-        """
-        Initialize.
-        """
-
-        self.callable = callable
-        self.args     = args
-        self.kwargs   = kwargs
+    def __init__(self, call, *args, **kwargs):
+        self.call = call
+        self.args = args
+        self.kwargs = kwargs
 
     def __call__(self, *args, **kwargs):
-        """
-        Call the callable.
-        """
+        """Call the callable."""
 
         keyword = self.kwargs.copy()
 
         keyword.update(kwargs)
 
-        return self.callable(*(self.args + args), **keyword)
+        return self.call(*(self.args + args), **keyword)
 
 class ABC(object):
     """

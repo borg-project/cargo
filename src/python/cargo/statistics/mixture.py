@@ -319,7 +319,6 @@ class FiniteMixtureEmitter(object):
         # recompute the best observed assignment
         @qy.for_(K)
         def _(k):
-            # randomly assign the component
             j = assigns.at(k).data.load()
 
             self._sub_emitter.ml(
