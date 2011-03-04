@@ -1,22 +1,19 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
+
+import plac
 
 if __name__ == "__main__":
-    from plac                  import call
     from cargo.tools.triggered import main
 
-    call(main)
+    plac.call(main)
 
+import subprocess
 import pyinotify
+import cargo
 
-from plac      import annotations
-from pyinotify import ProcessEvent
-from cargo.log import get_logger
+logger = cargo.get_logger(__name__, level = "NOTSET")
 
-logger = get_logger(__name__, level = "NOTSET")
-
-class TriggerHandler(ProcessEvent):
+class TriggerHandler(pyinotify.ProcessEvent):
     """
     Handle relevant filesystem events.
     """
@@ -28,52 +25,58 @@ class TriggerHandler(ProcessEvent):
 
         logger.info("filesystem event: %s", event)
 
-def execute_command(command, tmux):
+def execute_command(command, tmux, window):
     """
     Execute the triggered command.
     """
 
-    from subprocess import call
-
     logger.info("executing triggered command")
 
     if tmux:
-        #call(["tmux", "-q", "setw", "window-status-fg", "green"])
-        call(["tmux", "-q", "display-message", "build active"])
+        if window is None:
+            subprocess.call(["tmux", "-q", "display-message", "command active"])
+        else:
+            subprocess.call(["tmux", "-q", "setw", "-t", str(window), "window-status-bg", "green"])
 
-    call(command)
+    status = subprocess.call(command)
 
     if tmux:
-        #call(["tmux", "-q", "setw", "window-status-fg", "default"])
-        call(["tmux", "-q", "display-message", "build complete"])
+        if window is None:
+            if status == 0:
+                message = "command successful"
+            else:
+                message = "command failed"
 
-@annotations(
-    path       = ("path to watch"                               ),
-    executable = ("triggered command"                           ),
-    arguments  = ("command arguments"                           ),
-    no_tmux    = ("disable tmux interaction", "option"          ),
-    timeout    = ("wait; coalesce events"   , "option", "t", int),
+            subprocess.call(["tmux", "-q", "display-message", message])
+        else:
+            if status == 0:
+                color = "default"
+            else:
+                color = "red"
+
+            subprocess.call(["tmux", "-q", "setw", "-t", str(window), "window-status-bg", color])
+
+@plac.annotations(
+    path = ("path to watch"),
+    executable = ("triggered command"),
+    arguments = ("command arguments"),
+    no_tmux = ("disable tmux interaction", "option"),
+    window = ("tmux window number", "option"),
+    timeout = ("wait; coalesce events", "option", "t", int),
     )
-def main(path, executable, no_tmux = False, timeout = 250, *arguments):
+def main(path, executable, no_tmux = False, timeout = 250, window = None, *arguments):
     """
     Run something in response to changes in a directory.
     """
 
     # enable logging
-    from cargo.log import enable_default_logging
-
-    enable_default_logging()
+    cargo.enable_default_logging()
 
     # prepare the notification framework
-    from pyinotify import (
-        Notifier,
-        WatchManager,
-        )
-
     command  = [executable] + list(arguments)
-    manager  = WatchManager()
+    manager  = pyinotify.WatchManager()
     handler  = TriggerHandler()
-    notifier = Notifier(manager, handler)
+    notifier = pyinotify.Notifier(manager, handler)
 
     manager.add_watch(
         path,
@@ -82,19 +85,23 @@ def main(path, executable, no_tmux = False, timeout = 250, *arguments):
         )
 
     # watch for and respond to events
-    while True:
-        triggered = notifier.check_events()
+    try:
+        while True:
+            triggered = notifier.check_events()
 
-        if triggered:
-            # coalesce events
-            notifier.read_events()
-            notifier.process_events()
+            if triggered:
+                # coalesce events
+                notifier.read_events()
+                notifier.process_events()
 
-            if timeout is not None:
-                while notifier.check_events(timeout = timeout):
-                    notifier.read_events()
-                    notifier.process_events()
+                if timeout is not None:
+                    while notifier.check_events(timeout = timeout):
+                        notifier.read_events()
+                        notifier.process_events()
 
-            # run the command
-            execute_command(command, not no_tmux)
+                # run the command
+                execute_command(command, not no_tmux, window)
+    finally:
+        if not no_tmux:
+            subprocess.call(["tmux", "-q", "setw", "-t", str(window), "window-status-bg", "default"])
 
