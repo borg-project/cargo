@@ -57,7 +57,7 @@ def spawn_pipe_session(arguments, environment = {}):
             close_fds  = True,
             stdin      = subprocess.PIPE,
             stdout     = subprocess.PIPE,
-            stderr     = subprocess.PIPE,
+            stderr     = open("/dev/null", "w"), # XXX
             preexec_fn = partial(_child_preexec, environment),
             )
 

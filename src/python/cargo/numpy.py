@@ -5,6 +5,7 @@
 from __future__ import absolute_import
 
 import numpy
+import contextlib
 
 def tolist_deeply(value):
     """
@@ -68,4 +69,23 @@ def semicast(*arrays):
 
     # done
     return (pre_shape, casts)
+
+def pretty_probability(p):
+    return " C" if p >= 0.995 else "{0:02.0f}".format(p * 100.0)
+
+def pretty_probability_row(row):
+    return " ".join(map(pretty_probability, row))
+
+def pretty_probability_matrix(matrix):
+    return "\n".join(map(pretty_probability_row, matrix))
+
+@contextlib.contextmanager
+def numpy_printing(**kwargs):
+    old = numpy.get_printoptions()
+
+    numpy.set_printoptions(**kwargs)
+
+    yield
+
+    numpy.set_printoptions(**old)
 

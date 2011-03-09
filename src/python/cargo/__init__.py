@@ -12,8 +12,10 @@ from cargo.log import (
 from cargo.condor import *
 from cargo.labor2 import *
 from cargo.sugar import *
+from cargo.numpy import *
 from cargo.random import *
 from cargo.profile import *
+from cargo.temporal import *
 from cargo.iterators import *
 
 def get_support_path(name):
