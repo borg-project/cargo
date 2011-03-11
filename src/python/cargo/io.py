@@ -154,19 +154,13 @@ def files_under(path, pattern = "*"):
     """
 
     # walk the directory tree
-    from os      import walk
-    from os.path import (
-        join,
-        isfile,
-        )
-
-    if isfile(path):
+    if os.path.isfile(path):
         walked = [path]
     else:
         def walk_path():
-            for (p, _, f) in walk(path):
+            for (p, _, f) in os.walk(path, followlinks = True):
                 for n in f:
-                    yield join(p, n)
+                    yield os.path.join(p, n)
 
         walked = walk_path()
 
