@@ -57,7 +57,7 @@ def spawn_pipe_session(arguments, environment = {}):
             close_fds  = True,
             stdin      = subprocess.PIPE,
             stdout     = subprocess.PIPE,
-            stderr     = open("/dev/null", "w"), # XXX
+            stderr     = subprocess.PIPE,
             preexec_fn = partial(_child_preexec, environment),
             )
 
@@ -122,19 +122,4 @@ def kill_session(sid, number):
 
         if exit_code not in (0, 1):
             raise RuntimeError("pkill failure")
-
-def main():
-    """
-    Run a child under a pty.
-    """
-
-    (child_pid, child_fd) = spawn_pty_session(sys.argv[1:])
-
-    while True:
-        data = os.read(child_fd, 1024)
-
-        if data is None:
-            break
-        else:
-            print data,
 
