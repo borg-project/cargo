@@ -63,7 +63,7 @@ def spawn_pipe_session(arguments, environment = {}):
 
     popened.stdin.close()
 
-    return popened
+    return (popened, (popened.stdout.fileno(), popened.stderr.fileno()))
 
 def spawn_pty_session(arguments, environment = {}):
     """
@@ -92,7 +92,7 @@ def spawn_pty_session(arguments, environment = {}):
 
         os.close(slave_fd)
 
-        return popened
+        return (popened, (master_fd, popened.stderr.fileno()))
     except:
         raised = Raised()
 
