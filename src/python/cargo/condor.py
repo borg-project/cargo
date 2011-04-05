@@ -14,17 +14,13 @@ import cStringIO as StringIO
 logger = cargo.get_logger(__name__, level = "INFO")
 
 class CondorSubmission(object):
-    """
-    Stream output to a Condor submission file.
-    """
+    """Stream output to a Condor submission file."""
 
     def __init__(self):
         self._out = StringIO.StringIO()
 
     def blank(self, lines = 1):
-        """
-        Write a blank line or many.
-        """
+        """Write a blank line or many."""
 
         for i in xrange(lines):
             self._out.write("\n")
@@ -32,27 +28,21 @@ class CondorSubmission(object):
         return self
 
     def pair(self, name, value):
-        """
-        Write a variable assignment line.
-        """
+        """Write a variable assignment line."""
 
         self._out.write("%s = %s\n" % (name, value))
 
         return self
 
     def pairs(self, **kwargs):
-        """
-        Write a block of variable assignment lines.
-        """
+        """Write a block of variable assignment lines."""
 
         self.pairs_dict(kwargs)
 
         return self
 
     def pairs_dict(self, pairs):
-        """
-        Write a block of variable assignment lines.
-        """
+        """Write a block of variable assignment lines."""
 
         max_len = max(len(k) for (k, _) in pairs.iteritems())
 
@@ -62,9 +52,7 @@ class CondorSubmission(object):
         return self
 
     def environment(self, **kwargs):
-        """
-        Write an environment assignment line.
-        """
+        """Write an environment assignment line."""
 
         self._out.write("environment = \\\n")
 
@@ -81,9 +69,7 @@ class CondorSubmission(object):
         return self
 
     def header(self, header):
-        """
-        Write commented header text.
-        """
+        """Write commented header text."""
 
         dashes = "-" * len(header)
 
@@ -94,18 +80,14 @@ class CondorSubmission(object):
         return self
 
     def comment(self, comment):
-        """
-        Write a line of commented text.
-        """
+        """Write a line of commented text."""
 
         self._out.write("# %s\n" % comment)
 
         return self
 
     def queue(self, count):
-        """
-        Write a queue instruction.
-        """
+        """Write a queue instruction."""
 
         self._out.write("Queue %i\n" % count)
 
@@ -113,28 +95,16 @@ class CondorSubmission(object):
 
     @property
     def contents(self):
-        """
-        The raw contents of the file.
-        """
+        """The raw contents of the file."""
 
         return self._out.getvalue()
 
 def condor_submit(submit_path):
-    """
-    Submit to condor; return the cluster number.
-    """
+    """Submit to condor; return the cluster number."""
 
-    (stdout, stderr) = \
-        cargo.check_call_capturing([
-            "/usr/bin/env",
-            "condor_submit",
-            submit_path,
-            ])
-    match = \
-        re.match(
-            r"(\d+) job\(s\) submitted to cluster (\d+)\.",
-            stdout.splitlines()[-1],
-            )
+    (stdout, stderr) = cargo.check_call_capturing(["/usr/bin/env", "condor_submit", submit_path])
+    expression = r"(\d+) job\(s\) submitted to cluster (\d+)\."
+    match = re.match(expression , stdout.splitlines()[-1])
 
     if match:
         (jobs, cluster) = map(int, match.groups())
@@ -146,9 +116,7 @@ def condor_submit(submit_path):
         raise RuntimeError("failed to submit to condor:%s" % stdout)
 
 def condor_rm(specifier):
-    """
-    Kill condor jobs.
-    """
+    """Kill condor jobs."""
 
     logger.info("killing condor jobs matched by %s", specifier)
 
