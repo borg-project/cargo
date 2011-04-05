@@ -4,7 +4,7 @@
 
 import os
 import re
-import sys
+import datetime
 
 class ProcFileParseError(RuntimeError):
     """
@@ -73,12 +73,7 @@ class ProcessStat(object):
     __stat_res = [re.compile(s) for s in __stat_re_strings]
 
     def __init__(self, pid):
-        """
-        Fetch data from /proc/<pid>/stat and parse it.
-        """
-
-        # read and parse the file
-        from itertools import izip
+        """Read and parse /proc/<pid>/stat."""
 
         with open("/proc/%i/stat" % pid) as file:
             stat = file.read()
@@ -117,24 +112,16 @@ class ProcessStat(object):
 
     @staticmethod
     def in_session(sid):
-        """
-        Iterate over all processes in session C{sid}.
-
-        @see: ProcessStat.all()
-        """
+        """Iterate over all processes in a session."""
 
         for process in ProcessStat.all():
             if process.sid == sid:
                 yield process
 
     def __ticks_to_timedelta(self, ticks):
-        """
-        Convert kernel clock ticks to a Python timedelta value.
-        """
+        """Convert kernel clock ticks to a Python timedelta value."""
 
-        from datetime import timedelta
-
-        return timedelta(seconds = float(ticks) / self.__ticks_per_second)
+        return datetime.timedelta(seconds = float(ticks) / self.__ticks_per_second)
 
     # expose the relevant fields
     pid                 = property(lambda self: int(self.__d["pid"]))
@@ -178,4 +165,10 @@ class ProcessStat(object):
     io_delay            = property(lambda self: long(self.__d["blkio"]))
     guest_time          = property(lambda self: self.__ticks_to_timedelta(self.__d["gtime"]))
     child_guest_time    = property(lambda self: self.__ticks_to_timedelta(self.__d["cgtime"]))
+
+def get_pid_utime(pid):
+    return ProcessStat(pid).user_time
+
+def get_sid_utime(sid):
+    return sum(p.user_time for p in ProcessStat.in_session(sid))
 

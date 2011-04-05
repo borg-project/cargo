@@ -12,8 +12,7 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
     import zmq
 
     # labor state
-    ids = dict(enumerate(assignments))
-    unassigned = set(ids)
+    unassigned = set(xrange(len(assignments)))
     assigned = set()
     complete = {}
 
@@ -55,6 +54,7 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
                     unassigned.add(id_)
 
                 logger.warning("worker bailed on assignment %i with:\n%s", id_, body)
+                logger.warning("assignment was: %s", assignments[id_])
             elif update == "completed":
                 if id_ in assigned:
                     assigned.remove(id_)

@@ -20,6 +20,7 @@ install(
 		labor.py
 		labor2.py
 		numpy.py
+        concurrent.py
         defaults.py
     DESTINATION lib/cargo
     )

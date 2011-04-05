@@ -17,6 +17,8 @@ from cargo.random import *
 from cargo.profile import *
 from cargo.temporal import *
 from cargo.iterators import *
+from cargo.testing import *
+from cargo.concurrent import *
 
 def get_support_path(name):
     """

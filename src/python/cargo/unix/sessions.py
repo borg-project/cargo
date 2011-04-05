@@ -84,8 +84,6 @@ def kill_session(sid, number):
 
     Theoretically imperfect, but should be consistently effective---almost
     certainly paranoid overkill---in practice.
-
-    @return: The number of processes signaled.
     """
 
     # why do we pkill multiple times? because we're crazy.
