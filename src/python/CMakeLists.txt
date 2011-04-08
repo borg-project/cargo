@@ -3,13 +3,11 @@
 #
 
 find_package(Numpy REQUIRED)
-find_package(PythonLibs REQUIRED)
-#find_package(GSL REQUIRED)
+find_package(PythonHeaders REQUIRED)
 
 include_directories(
     ${NUMPY_INCLUDE_DIRS}
-    ${PYTHON_INCLUDE_DIRS}
-    #${GSL_INCLUDE_DIRS}
+    ${PYTHON_INCLUDE_DIRS} # should be last
     )
 
 #
