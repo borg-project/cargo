@@ -17,7 +17,6 @@ install(
         temporal.py
         testing.py
 		profile.py
-		labor.py
 		labor2.py
 		numpy.py
         concurrent.py

@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
@@ -19,11 +17,10 @@ logger = cargo.get_logger(__name__, level = "NOTSET")
 @plac.annotations(
     req_address = ("address for requests", "positional"),
     push_address = ("address for updates", "positional"),
+    period = ("new-work poll period (s)", "option", None, float),
     )
-def main(req_address, push_address):
-    """
-    Do arbitrary distributed work.
-    """
+def main(req_address, push_address, period = 8):
+    """Do arbitrary distributed work."""
 
     cargo.enable_default_logging()
 
@@ -36,35 +33,34 @@ def main(req_address, push_address):
     try:
         while True:
             # get an assignment
-            req_socket.send_pyobj(None)
+            req_socket.send(bytes())
 
-            response = req_socket.recv_pyobj()
+            response = cargo.recv_pyobj_gz(req_socket)
 
             if response is None:
-                logger.info("received null assignment; terminating")
+                logger.info("received null assignment; sleeping for %i s", period)
 
-                break
+                time.sleep(period)
             else:
                 # complete the assignment
-                (id_, assignment) = response
-                work = assignment[0]
-                work_args = assignment[1] if len(assignment) > 1 else []
-                work_kwargs = assignment[2] if len(assignment) > 2 else {}
+                (key, task) = response
 
-                logger.info("working on assignment %i", id_)
+                logger.info("working on task %s", key)
 
                 try:
-                    result = work(*work_args, **work_kwargs)
+                    result = task()
                 except BaseException, error:
-                    logger.info("error; bailing!")
+                    description = traceback.format_exc(error)
 
-                    push_socket.send_pyobj(("bailed", id_, traceback.format_exc(error)))
+                    logger.info("error! bailing on task %s with:\n%s", key, description)
 
-                    raise
+                    cargo.send_pyobj_gz(push_socket, ("bailed", key, description))
+
+                    time.sleep(4) # a gesture toward avoiding a failure stampede
                 else:
-                    logger.info("assignment %i complete", id_)
+                    logger.info("task %s complete", key)
 
-                    push_socket.send_pyobj(("completed", id_, result))
+                    cargo.send_pyobj_gz(push_socket, ("completed", key, result))
     finally:
         logger.info("flushing sockets and terminating zeromq context")
 

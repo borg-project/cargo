@@ -10,21 +10,25 @@ __all__ = [
     "files_under",
     "uncompressed",
     "mkdtemp_scoped",
-    "decompress_if",
     "call_capturing",
     "check_call_capturing",
+    "openz",
+    "escape_for_latex",
     ]
 
 import os
 import os.path
+import bz2
 import csv
 import pwd
+import gzip
 import errno
 import shutil
 import hashlib
 import tempfile
 import threading
 import mimetypes
+import contextlib
 import subprocess
 import collections
 import cargo
@@ -49,7 +53,6 @@ from subprocess   import (
     Popen,
     check_call,
     )
-from contextlib   import contextmanager
 from cargo.errors import Raised
 
 def write_named_csv(file_, tuples):
@@ -241,44 +244,24 @@ def unset_all(*args):
     for name in args:
         del environ[name]
 
-def guess_encoding(path):
-    """
-    Guess a file's (compression) encoding.
+def openz(path, mode = "rb", closing = True):
+    """Open a file, transparently [de]compressing it if a known extension is present."""
 
-    Uses the system MIME type database to detect the presence and type of
-    compression encoding, if any. This method is not perfect, but should
-    correctly handle common cases.
-    """
+    (_, extension) = os.path.splitext(path)
 
-    # bloody hack
-    if ".xz" not in mimetypes.encodings_map:
-        mimetypes.encodings_map[".xz"] = "xz"
-
-    (mime_type, encoding) = mimetypes.guess_type(path)
-
-    return encoding
-
-def openz(path, mode = "r"):
-    """
-    Open a file, transparently [de]compressing it if a known compression extension is present.
-    """
-
-    encoding = guess_encoding(path)
-
-    if encoding == "bzip2":
-        from bz2 import BZ2File
-
-        return BZ2File(path, mode)
-    elif encoding == "gzip":
-        from gzip import GzipFile
-
-        return GzipFile(path, mode)
-    elif encoding == "xz":
+    if extension == ".bz2":
+        file_ = bz2.BZ2File(path, mode)
+    elif extension == ".gz":
+        file_ = gzip.GzipFile(path, mode)
+    elif extension == ".xz":
         raise NotImplementedError()
-    elif encoding is None:
-        return open(path, mode)
     else:
-        raise RuntimeError("unsupported file encoding")
+        file_ = open(path, mode)
+
+    if closing:
+        return contextlib.closing(file_)
+    else:
+        return file_
 
 def xzed(bytes):
     """
@@ -299,19 +282,16 @@ def unxzed(bytes):
     return stdout
 
 def decompress(ipath, opath, encoding = None):
-    """
-    Attempt to decompress the compressed file, writing to an output path.
-    """
+    """Attempt to decompress the compressed file, writing to an output path."""
 
-    if encoding is None:
-        encoding = guess_encoding(ipath)
+    (_, extension) = os.path.splitext(path)
 
     with open(opath, "w") as ofile:
-        if encoding == "bzip2":
+        if extension == ".bz2":
             check_call(["bunzip2", "-c", ipath], stdout = ofile)
-        elif encoding == "gzip":
+        elif extension == ".gz":
             check_call(["gunzip", "-c", ipath], stdout = ofile)
-        elif encoding == "xz":
+        elif extension == ".xz":
             check_call(["unxz", "-c", ipath], stdout = ofile)
         else:
             raise RuntimeError("uncompressed, or unsupported compression encoding")
@@ -319,19 +299,17 @@ def decompress(ipath, opath, encoding = None):
         ofile.flush()
         os.fsync(ofile.fileno())
 
-def decompress_if(ipath, opath):
-    """
-    Attempt to decompress the file, if compressed; return path used.
-    """
+#def decompress_if(ipath, opath):
+    #"""Attempt to decompress the file, if compressed; return path used."""
 
-    encoding = guess_encoding(ipath)
+    #encoding = guess_encoding(ipath)
 
-    if encoding is None:
-        return ipath
-    else:
-        decompress(ipath, opath, encoding)
+    #if encoding is None:
+        #return ipath
+    #else:
+        #decompress(ipath, opath, encoding)
 
-        return opath
+        #return opath
 
 def hash_file(path, algorithm_name = None):
     """
@@ -376,12 +354,12 @@ def escape_for_latex(text):
     """
 
     return \
-        replace_all(
+        cargo.replace_all(
             text,
             ("%", r"\%"),
             ("_", r"\_"))
 
-@contextmanager
+@contextlib.contextmanager
 def mkdtemp_scoped(prefix = None):
     """
     Create, and then delete, a temporary directory.
@@ -402,7 +380,7 @@ def mkdtemp_scoped(prefix = None):
         if path is not None:
             shutil.rmtree(path, ignore_errors = True)
 
-@contextmanager
+@contextlib.contextmanager
 def env_restored(unset = []):
     """
     Create a temporary directory, with support for cleanup.
@@ -423,7 +401,7 @@ def env_restored(unset = []):
     environ.clear()
     environ.update(old)
 
-@contextmanager
+@contextlib.contextmanager
 def uncompressed(path):
     """
     Provide an uncompressed read-only file in a managed context.

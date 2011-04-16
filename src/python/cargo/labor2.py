@@ -1,20 +1,65 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import uuid
+import zlib
 import socket
 import traceback
+import cPickle as pickle
 import cargo
 
 logger = cargo.get_logger(__name__, level = "INFO")
 
-def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
+class Task(object):
+    """One unit of distributable work."""
+
+    def __init__(self, call, args = [], kwargs = {}, extra = None):
+        self.call = call
+        self.args = args
+        self.kwargs = kwargs
+        self.extra = extra
+
+    def __call__(self):
+        return self.call(*self.args, **self.kwargs)
+
+    def __iter__(self):
+        yield self.call
+        yield self.args
+        yield self.kwargs
+        yield self.extra
+
+class ParentTask(Task):
+    """One unit of distributable work."""
+
+def task_from_request(request):
+    """Build a task, if necessary."""
+
+    if isinstance(request, Task):
+        return request
+    else:
+        return Task(*request)
+
+def send_pyobj_gz(socket, message):
+    pickled = pickle.dumps(message)
+    compressed = zlib.compress(pickled)
+
+    socket.send(compressed)
+
+def recv_pyobj_gz(socket):
+    compressed = socket.recv()
+    decompressed = zlib.decompress(compressed)
+    unpickled = pickle.loads(decompressed)
+
+    return unpickled
+
+def distribute_labor_on(task_list, handler, rep_socket, pull_socket):
     import zmq
 
     # labor state
-    unassigned = set(xrange(len(assignments)))
-    assigned = set()
-    complete = {}
+    unassigned = dict((uuid.uuid4(), task) for task in task_list)
+    assigned = {}
+
+    seen_count = len(task_list)
+    done_count = 0
 
     # messaging preparation
     poller = zmq.Poller()
@@ -23,47 +68,53 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
     poller.register(pull_socket, zmq.POLLIN)
 
     # distribute work
-    while unassigned or assigned:
+    while assigned or unassigned:
         events = dict(poller.poll())
 
         # handle a request
         if rep_socket in events and events[rep_socket] == zmq.POLLIN:
-            rep_socket.recv_pyobj()
+            rep_socket.recv()
 
             # respond with an assignment
             if unassigned:
-                id_ = unassigned.pop()
+                (key, task) = unassigned.popitem()
 
-                assigned.add(id_)
+                assigned[key] = task
 
-                rep_socket.send_pyobj((id_, assignments[id_][:3]))
+                send_pyobj_gz(rep_socket, (key, task))
 
-                logger.debug("handed out %s", id_)
+                logger.debug("handed out %s", key)
             else:
-                rep_socket.send_pyobj(None)
+                send_pyobj_gz(rep_socket, None)
 
                 logger.debug("handed out nothing")
 
         # handle an update
         if pull_socket in events and events[pull_socket] == zmq.POLLIN:
-            (update, id_, body) = pull_socket.recv_pyobj()
+            (update, key, body) = recv_pyobj_gz(pull_socket)
 
             if update == "bailed":
-                if id_ in assigned:
-                    assigned.remove(id_)
-                    unassigned.add(id_)
+                if key in assigned:
+                    unassigned[key] = assigned.pop(key)
 
-                logger.warning("worker bailed on assignment %i with:\n%s", id_, body)
-                logger.warning("assignment was: %s", assignments[id_])
+                logger.warning("worker bailed on task %s with:\n%s", key, body)
             elif update == "completed":
-                if id_ in assigned:
-                    assigned.remove(id_)
+                if key in assigned:
+                    task = assigned.pop(key)
 
-                    complete[id_] = handler(assignments[id_], body)
+                    done_count += 1
 
-                    logger.debug("worker completed assignment %i", id_)
+                    if isinstance(task, ParentTask):
+                        for child in map(task_from_request, body):
+                            unassigned[uuid.uuid4()] = child
+
+                            seen_count += 1
+                    else:
+                        handler(task, body)
+
+                    logger.debug("worker completed task %s", key)
                 else:
-                    logger.debug("worker completed assignment %i (dup)", id_)
+                    logger.debug("worker completed task %i (dup)", key)
             else:
                 logger.warning("unknown update type: %s", update)
 
@@ -71,20 +122,16 @@ def distribute_labor_on(assignments, handler, rep_socket, pull_socket):
             "%i unassigned; %i assigned; %i complete (%.2f%%)",
             len(unassigned),
             len(assigned),
-            len(complete),
-            len(complete) * 100.0/ len(assignments),
+            done_count,
+            done_count * 100.0 / seen_count,
             )
 
-    return [x for (_, x) in sorted(complete.items())]
-
-def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
+def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     """Distribute computation to remote workers."""
 
     import zmq
 
-    assignments = list(assignments)
-
-    logger.info("distributing %i assignments to %i workers", len(assignments), workers)
+    logger.info("distributing %i tasks to %i workers", len(tasks), workers)
 
     # prepare zeromq
     context = zmq.Context()
@@ -105,7 +152,7 @@ def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
             )
 
     try:
-        return distribute_labor_on(assignments, handler, rep_socket, pull_socket)
+        return distribute_labor_on(tasks, handler, rep_socket, pull_socket)
     finally:
         # clean up condor jobs
         cargo.condor_rm(cluster)
@@ -119,22 +166,21 @@ def distribute_labor(assignments, workers = 32, handler = lambda _, x: x):
 
         logger.info("cleaned up zeromq context")
 
-def distribute_or_labor(assignments, workers, handler = lambda _, x: x):
+def do_or_distribute(requests, workers, handler = lambda _, x: x):
     """Distribute or compute locally."""
 
-    assignments = list(assignments)
+    tasks = map(task_from_request, requests)
 
     if workers > 0:
-        return distribute_labor(assignments, workers, handler)
+        return distribute_labor(tasks, workers, handler)
     else:
-        results = []
+        while tasks:
+            task = tasks.pop()
+            result = task()
 
-        for assignment in assignments:
-            call = assignment[0]
-            args = assignment[1] if len(assignment) > 1 else []
-            kwargs = assignment[2] if len(assignment) > 2 else {}
-
-            results.append(handler(assignment, call(*args, **kwargs)))
-
-        return results
+            if isinstance(task, ParentTask):
+                for child in map(task_from_request, result):
+                    tasks.append(child)
+            else:
+                handler(task, result)
 
