@@ -1,0 +1,12 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "triggered.py",
+            ],
+        install_path = "${PREFIX}/lib/cargo/tools",
+        )
+
+    context.recurse("labor")
+    context.recurse("sql")
+

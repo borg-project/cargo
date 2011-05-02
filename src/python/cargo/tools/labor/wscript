@@ -1,0 +1,9 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "work2.py",
+            ],
+        install_path = "${PREFIX}/lib/cargo/tools/labor",
+        )
+

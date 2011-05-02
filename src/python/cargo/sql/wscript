@@ -1,0 +1,12 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "actions.py",
+            "alchemy.py",
+            ],
+        install_path = "${PREFIX}/lib/cargo/sql",
+        )
+
+    context.recurse("test")
+
