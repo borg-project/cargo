@@ -4,6 +4,7 @@ import uuid
 import zlib
 import socket
 import traceback
+import collections
 import cPickle as pickle
 import cargo
 
@@ -12,11 +13,12 @@ logger = cargo.get_logger(__name__, level = "INFO")
 class Task(object):
     """One unit of distributable work."""
 
-    def __init__(self, call, args = [], kwargs = {}, extra = None):
+    def __init__(self, call, args = [], kwargs = {}, extra = None, idempotent = True):
         self.call = call
         self.args = args
         self.kwargs = kwargs
         self.extra = extra
+        self.idempotent = idempotent
 
     def __call__(self):
         return self.call(*self.args, **self.kwargs)
@@ -30,17 +32,22 @@ class Task(object):
 class ParentTask(Task):
     """One unit of distributable work."""
 
+    def __init__(self, call, args = [], kwargs = {}, extra = None, idempotent = False):
+        Task.__init__(self, call, args, kwargs, extra, idempotent)
+
 def task_from_request(request):
     """Build a task, if necessary."""
 
     if isinstance(request, Task):
         return request
+    elif isinstance(request, collections.Mapping):
+        return Task(**mapping)
     else:
         return Task(*request)
 
 def send_pyobj_gz(socket, message):
     pickled = pickle.dumps(message)
-    compressed = zlib.compress(pickled)
+    compressed = zlib.compress(pickled, 1)
 
     socket.send(compressed)
 
@@ -76,18 +83,26 @@ def distribute_labor_on(task_list, handler, rep_socket, pull_socket):
             rep_socket.recv()
 
             # respond with an assignment
+            task = None
+
             if unassigned:
                 (key, task) = unassigned.popitem()
+            elif assigned:
+                eligible = filter(lambda (_, t): t.idempotent, assigned.items())
 
+                if eligible:
+                    (key, task) = cargo.grab(eligible)
+
+            if task is None:
+                send_pyobj_gz(rep_socket, None)
+
+                logger.debug("handed out nothing")
+            else:
                 assigned[key] = task
 
                 send_pyobj_gz(rep_socket, (key, task))
 
                 logger.debug("handed out %s", key)
-            else:
-                send_pyobj_gz(rep_socket, None)
-
-                logger.debug("handed out nothing")
 
         # handle an update
         if pull_socket in events and events[pull_socket] == zmq.POLLIN:

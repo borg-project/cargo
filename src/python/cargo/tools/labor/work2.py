@@ -8,6 +8,8 @@ if __name__ == "__main__":
     plac.call(main)
 
 import time
+import numpy
+import random
 import traceback
 import zmq
 import cargo
@@ -45,7 +47,10 @@ def main(req_address, push_address, period = 8):
                 # complete the assignment
                 (key, task) = response
 
-                logger.info("working on task %s", key)
+                logger.info("starting task %s", key)
+
+                numpy.random.seed(abs(hash(key)))
+                random.seed(numpy.random.randint(2**32))
 
                 try:
                     result = task()
@@ -58,7 +63,7 @@ def main(req_address, push_address, period = 8):
 
                     time.sleep(4) # a gesture toward avoiding a failure stampede
                 else:
-                    logger.info("task %s complete", key)
+                    logger.info("finished task %s", key)
 
                     cargo.send_pyobj_gz(push_socket, ("completed", key, result))
     finally:
