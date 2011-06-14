@@ -4,6 +4,8 @@ cargo/test/io.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import os.path
+
 from nose.tools import (
     eq_,
     timed,
@@ -82,13 +84,12 @@ def test_call_capturing():
     """
 
     from nose.tools import assert_equal
-    from cargo      import get_support_path
     from cargo.io   import call_capturing
 
     (stdout, stderr, code) = \
         call_capturing(
             [
-                get_support_path("for_tests/echo_and_exit"),
+                os.path.join(os.path.dirname(__file__), "echo_and_exit"),
                 "foo bar baz",
                 "42",
                 ]
@@ -104,13 +105,12 @@ def test_check_call_capturing_zero():
     """
 
     from nose.tools import assert_equal
-    from cargo      import get_support_path
     from cargo.io   import check_call_capturing
 
     (stdout, stderr) = \
         check_call_capturing(
             [
-                get_support_path("for_tests/echo_and_exit"),
+                os.path.join(os.path.dirname(__file__), "echo_and_exit"),
                 "foo bar baz",
                 "0",
                 ]
@@ -125,12 +125,11 @@ def test_check_call_capturing_nonzero():
     Test checked-and-capturing execution of a failing subprocess.
     """
 
-    from cargo      import get_support_path
     from cargo.io   import check_call_capturing
 
     check_call_capturing(
         [
-            get_support_path("for_tests/echo_and_exit"),
+            os.path.join(os.path.dirname(__file__), "echo_and_exit"),
             "foo bar baz",
             "42",
             ]

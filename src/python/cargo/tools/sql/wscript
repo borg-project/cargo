@@ -1,0 +1,13 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "copy.py",
+            "describe.py",
+            "prune.py",
+            ],
+        install_path = "${PREFIX}/lib/cargo/tools/sql",
+        )
+
+    context.recurse("test")
+
