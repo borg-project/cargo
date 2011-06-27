@@ -4,6 +4,6 @@ def build(context):
             "__init__.py",
             "test_alchemy.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/sql/test",
+        install_path = "${PYTHONDIR}/cargo/sql/test",
         )
 

@@ -38,7 +38,7 @@ def build(context):
             "temporal.py",
             "testing.py",
             ],
-        install_path = "${PREFIX}/lib/cargo",
+        install_path = "${PYTHONDIR}/cargo",
         )
 
     context.recurse("sql")

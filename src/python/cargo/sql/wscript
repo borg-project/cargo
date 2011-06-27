@@ -5,7 +5,7 @@ def build(context):
             "actions.py",
             "alchemy.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/sql",
+        install_path = "${PYTHONDIR}/cargo/sql",
         )
 
     context.recurse("test")

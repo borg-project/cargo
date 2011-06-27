@@ -4,7 +4,7 @@ def build(context):
             "__init__.py",
             "triggered.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/tools",
+        install_path = "${PYTHONDIR}/cargo/tools",
         )
 
     context.recurse("labor")

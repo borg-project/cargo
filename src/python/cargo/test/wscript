@@ -10,6 +10,6 @@ def build(context):
             "test_sugar.py",
             "test_temporal.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/test",
+        install_path = "${PYTHONDIR}/cargo/test",
         )
 

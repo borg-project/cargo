@@ -4,6 +4,6 @@ def build(context):
             "__init__.py",
             "work2.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/tools/labor",
+        install_path = "${PYTHONDIR}/cargo/tools/labor",
         )
 

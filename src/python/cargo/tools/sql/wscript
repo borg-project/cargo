@@ -6,7 +6,7 @@ def build(context):
             "describe.py",
             "prune.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/tools/sql",
+        install_path = "${PYTHONDIR}/cargo/tools/sql",
         )
 
     context.recurse("test")

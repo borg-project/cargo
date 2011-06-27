@@ -6,6 +6,6 @@ def build(context):
             "proc.py",
             "sessions.py",
             ],
-        install_path = "${PREFIX}/lib/cargo/unix",
+        install_path = "${PYTHONDIR}/cargo/unix",
         )
 
