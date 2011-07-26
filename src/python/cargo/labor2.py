@@ -1,10 +1,13 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+from __future__ import absolute_import
+
 import sys
 import time
 import uuid
 import zlib
 import socket
+import random
 import collections
 import cPickle as pickle
 import cargo
@@ -91,14 +94,14 @@ class TaskState(object):
         """Score this task according to work urgency."""
 
         if self.done:
-            return (sys.maxint, sys.maxint, self.task.key)
+            return (sys.maxint, sys.maxint, random.random())
         if len(self.working) == 0:
-            return (0, 0, self.task.key)
+            return (0, 0, random.random())
         else:
             return (
                 len(self.working),
                 max(wstate.timestamp for wstate in self.working),
-                self.task.key,
+                random.random(),
                 )
 
 class WorkerState(object):
@@ -133,12 +136,14 @@ class WorkerState(object):
     def set_interruption(self):
         """Change worker state in response to interruption."""
 
-        self.assigned.working.remove(self)
+        if self.assigned is not None:
+            self.assigned.working.remove(self)
 
     def set_error(self):
         """Change worker state in response to error."""
 
-        self.assigned.working.remove(self)
+        if self.assigned is not None:
+            self.assigned.working.remove(self)
 
 def distribute_labor_on(task_list, handler, rep_socket):
     import zmq
@@ -176,6 +181,8 @@ def distribute_labor_on(task_list, handler, rep_socket):
             continue
 
         message = recv_pyobj_gz(rep_socket)
+
+        logger.debug("%s from %s", type(message), message.sender)
 
         # and respond to them
         if isinstance(message, ApplyMessage):

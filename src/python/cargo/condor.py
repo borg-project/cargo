@@ -116,7 +116,7 @@ def condor_submit(submit_path):
 def condor_rm(specifier):
     """Kill condor job(s)."""
 
-    logger.info("killing condor jobs matched by %s", specifier)
+    logger.debug("killing condor jobs matched by %s", specifier)
 
     try:
         cargo.check_call_capturing(["condor_rm", str(specifier)])
@@ -128,7 +128,7 @@ def condor_rm(specifier):
 def condor_hold(specifiers):
     """Hold condor job(s)."""
 
-    logger.info("holding condor job(s) matched by %s", specifiers)
+    logger.debug("holding condor job(s) matched by %s", specifiers)
 
     try:
         cargo.check_call_capturing(["condor_hold"] + map(str, specifiers))
@@ -140,7 +140,7 @@ def condor_hold(specifiers):
 def condor_release(specifiers):
     """Release condor job(s)."""
 
-    logger.info("releasing condor job(s) matched by %s", specifiers)
+    logger.debug("releasing condor job(s) matched by %s", specifiers)
 
     try:
         cargo.check_call_capturing(["condor_release"] + map(str, specifiers))
