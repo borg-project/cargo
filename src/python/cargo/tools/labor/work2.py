@@ -17,62 +17,89 @@ import cargo
 logger = cargo.get_logger(__name__, level = "NOTSET")
 
 @plac.annotations(
-    req_address = ("address for requests", "positional"),
-    push_address = ("address for updates", "positional"),
-    period = ("new-work poll period (s)", "option", None, float),
+    req_address = ("zeromq address of master"),
+    condor_id = ("condor process specifier"),
     )
-def main(req_address, push_address, period = 8):
+def main(req_address, condor_id):
     """Do arbitrary distributed work."""
 
     cargo.enable_default_logging()
 
+    # connect to the work server
     context = zmq.Context()
+
     req_socket = context.socket(zmq.REQ)
+
     req_socket.connect(req_address) 
-    push_socket = context.socket(zmq.PUSH)
-    push_socket.connect(push_address) 
+
+    # enter the work loop
+    task = None
 
     try:
         while True:
             # get an assignment
-            req_socket.send(bytes())
+            if task is None:
+                cargo.send_pyobj_gz(
+                    req_socket,
+                    cargo.labor2.ApplyMessage(condor_id),
+                    )
 
-            response = cargo.recv_pyobj_gz(req_socket)
+                task = cargo.recv_pyobj_gz(req_socket)
 
-            if response is None:
-                logger.info("received null assignment; sleeping for %i s", period)
+                if task is None:
+                    logger.info("received null assignment; terminating")
 
-                time.sleep(period)
-            else:
-                # complete the assignment
-                (key, task) = response
+                    break
 
-                logger.info("starting task %s", key)
+            # complete the assignment
+            try:
+                seed = abs(hash(task.key))
 
-                numpy.random.seed(abs(hash(key)))
+                logger.info("setting PRNG seed to %s", seed)
+
+                numpy.random.seed(seed)
                 random.seed(numpy.random.randint(2**32))
 
-                try:
-                    result = task()
-                except BaseException, error:
-                    description = traceback.format_exc(error)
+                logger.info("starting work on task %s", task.key)
 
-                    logger.info("error! bailing on task %s with:\n%s", key, description)
+                result = task()
+            except KeyboardInterrupt, error:
+                logger.warning("interruption during task %s", task.key)
 
-                    cargo.send_pyobj_gz(push_socket, ("bailed", key, description))
+                cargo.send_pyobj_gz(
+                    req_socket,
+                    cargo.labor2.InterruptedMessage(condor_id, task.key),
+                    )
+                cargo.recv()
 
-                    time.sleep(4) # a gesture toward avoiding a failure stampede
-                else:
-                    logger.info("finished task %s", key)
+                break
+            except BaseException, error:
+                description = traceback.format_exc(error)
 
-                    cargo.send_pyobj_gz(push_socket, ("completed", key, result))
+                logger.warning("error during task %s:\n%s", task.key, description)
+
+                cargo.send_pyobj_gz(
+                    req_socket,
+                    cargo.labor2.ErrorMessage(condor_id, task.key, description),
+                    )
+                cargo.recv()
+
+                break
+            else:
+                logger.info("finished task %s", task.key)
+
+                cargo.send_pyobj_gz(
+                    req_socket,
+                    cargo.labor2.DoneMessage(condor_id, task.key, result),
+                    )
+
+                task = cargo.recv_pyobj_gz(req_socket)
     finally:
         logger.info("flushing sockets and terminating zeromq context")
 
-        time.sleep(64) # XXX
+        time.sleep(64) # XXX shouldn't be necessary
 
         req_socket.close()
-        push_socket.close()
         context.term()
 
         logger.info("zeromq cleanup complete")

@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import re
 import os
@@ -116,12 +114,36 @@ def condor_submit(submit_path):
         raise RuntimeError("failed to submit to condor:%s" % stdout)
 
 def condor_rm(specifier):
-    """Kill condor jobs."""
+    """Kill condor job(s)."""
 
     logger.info("killing condor jobs matched by %s", specifier)
 
     try:
         cargo.check_call_capturing(["condor_rm", str(specifier)])
+    except subprocess.CalledProcessError:
+        return False
+    else:
+        return True
+
+def condor_hold(specifiers):
+    """Hold condor job(s)."""
+
+    logger.info("holding condor job(s) matched by %s", specifiers)
+
+    try:
+        cargo.check_call_capturing(["condor_hold"] + map(str, specifiers))
+    except subprocess.CalledProcessError:
+        return False
+    else:
+        return True
+
+def condor_release(specifiers):
+    """Release condor job(s)."""
+
+    logger.info("releasing condor job(s) matched by %s", specifiers)
+
+    try:
+        cargo.check_call_capturing(["condor_release"] + map(str, specifiers))
     except subprocess.CalledProcessError:
         return False
     else:
@@ -133,7 +155,6 @@ def default_condor_home():
 def submit_condor_workers(
     workers,
     req_address,
-    push_address,
     matching = cargo.defaults.condor_matching,
     description = "distributed Python worker process(es)",
     group = "GRAD",
@@ -187,8 +208,6 @@ def submit_condor_workers(
         .blank() \
         .environment(
             CARGO_LOG_FILE_PREFIX = "log",
-            CONDOR_CLUSTER = "$(Cluster)",
-            CONDOR_PROCESS = "$(Process)",
             PATH = os.environ.get("PATH", ""),
             PYTHONPATH = os.environ.get("PYTHONPATH", ""),
             LD_LIBRARY_PATH = os.environ.get("LD_LIBRARY_PATH", ""),
@@ -201,12 +220,12 @@ def submit_condor_workers(
         .blank()
 
     for working_path in working_paths:
-        arg_format = '"-c \'%s ""$0"" $@\' -m cargo.tools.labor.work2 %s %s"'
+        arg_format = '"-c \'%s ""$0"" $@\' -m cargo.tools.labor.work2 %s $(Cluster).$(Process)"'
 
         submit \
             .pairs(
                 Initialdir = working_path,
-                Arguments = arg_format % (sys.executable, req_address, push_address),
+                Arguments = arg_format % (sys.executable, req_address),
                 ) \
             .queue(1) \
             .blank()
