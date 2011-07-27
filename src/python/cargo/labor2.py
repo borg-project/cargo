@@ -33,6 +33,9 @@ class ApplyMessage(object):
     def __init__(self, sender):
         self.sender = sender
 
+    def get_summary(self):
+        return "worker {0} requested a job".format(self.sender)
+
 class ErrorMessage(object):
     """An error occurred in a task."""
 
@@ -41,12 +44,18 @@ class ErrorMessage(object):
         self.key = key
         self.description = description
 
+    def get_summary(self):
+        return "worker {0} encountered error \"{1}\"".format(self.sender, self.description.splitlines()[0])
+
 class InterruptedMessage(object):
     """A worker was interrupted."""
 
     def __init__(self, sender, key):
         self.sender = sender
         self.key = key
+
+    def get_summary(self):
+        return "worker {0} was interrupted".format(self.sender)
 
 class DoneMessage(object):
     """A task was completed."""
@@ -56,6 +65,9 @@ class DoneMessage(object):
         self.key = key
         self.result = result
 
+    def get_summary(self):
+        return "worker {0} finished job {1}".format(self.sender, self.key)
+
 class Task(object):
     """One unit of distributable work."""
 
@@ -63,7 +75,7 @@ class Task(object):
         self.call = call
         self.args = args
         self.kwargs = kwargs
-        self.key = uuid.uuid4()
+        self.key = id(self)
 
     def __hash__(self):
         return hash(self.key)
@@ -139,11 +151,18 @@ class WorkerState(object):
         if self.assigned is not None:
             self.assigned.working.remove(self)
 
+            self.assigned = None
+
     def set_error(self):
         """Change worker state in response to error."""
 
         if self.assigned is not None:
             self.assigned.working.remove(self)
+
+            self.assigned = None
+
+class Manager(object):
+    pass
 
 def distribute_labor_on(task_list, handler, rep_socket):
     import zmq
@@ -182,7 +201,12 @@ def distribute_labor_on(task_list, handler, rep_socket):
 
         message = recv_pyobj_gz(rep_socket)
 
-        logger.debug("%s from %s", type(message), message.sender)
+        logger.info(
+            "[%s/%i] %s",
+            str(done_count()).rjust(len(str(len(tstates))), "0"),
+            len(tstates),
+            message.get_summary(),
+            )
 
         # and respond to them
         if isinstance(message, ApplyMessage):
@@ -229,23 +253,11 @@ def distribute_labor_on(task_list, handler, rep_socket):
 
             rep_socket.send(bytes())
         elif isinstance(message, ErrorMessage):
-            logger.warning("worker %s hit error on %s:\n%s", message.sender, key, message.description)
-
             wstates[message.sender].set_error()
 
             rep_socket.send(bytes())
         else:
-            logger.warning("unknown message type: %s", type(message))
-
-        # be informative
-        count = done_count()
-
-        logger.info(
-            "%i of %i tasks complete (%.2f%%)",
-            count,
-            len(tstates),
-            count * 100.0 / len(tstates),
-            )
+            assert False
 
 def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     """Distribute computation to remote workers."""
@@ -259,7 +271,7 @@ def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     rep_socket = context.socket(zmq.REP)
     rep_port = rep_socket.bind_to_random_port("tcp://*")
 
-    logger.info("listening on port %i", rep_port)
+    logger.debug("listening on port %i", rep_port)
 
     # launch condor jobs
     cluster = cargo.submit_condor_workers(workers, "tcp://%s:%i" % (socket.getfqdn(), rep_port))
