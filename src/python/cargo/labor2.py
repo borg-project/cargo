@@ -198,7 +198,7 @@ class Manager(object):
         poller.register(self.rep_socket, zmq.POLLIN)
 
         # receive
-        while self.next_task() is not None:
+        while self.unfinished_count() > 0:
             events = dict(poller.poll())
 
             assert events.get(self.rep_socket) == zmq.POLLIN
@@ -222,6 +222,7 @@ class Manager(object):
 
             if isinstance(message, ApplyMessage):
                 # task request
+                sender.disassociate()
                 sender.set_assigned(self.next_task())
 
                 send_pyobj_gz(self.rep_socket, sender.assigned.task)
@@ -275,6 +276,11 @@ class Manager(object):
         """Return the number of completed tasks."""
 
         return sum(1 for t in self.tstates.itervalues() if t.done)
+
+    def unfinished_count(self):
+        """Return the number of unfinished tasks."""
+
+        return sum(1 for t in self.tstates.itervalues() if not t.done)
 
 def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     """Distribute computation to remote workers."""
