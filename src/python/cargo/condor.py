@@ -4,6 +4,7 @@ import re
 import os
 import os.path
 import sys
+import time
 import datetime
 import subprocess
 import cargo
@@ -130,12 +131,7 @@ def condor_hold(specifiers):
 
     logger.debug("holding condor job(s) matched by %s", specifiers)
 
-    try:
-        cargo.check_call_capturing(["condor_hold"] + map(str, specifiers))
-    except subprocess.CalledProcessError:
-        return False
-    else:
-        return True
+    cargo.check_call_capturing(["/usr/bin/env", "condor_hold"] + map(str, specifiers))
 
 def condor_release(specifiers):
     """Release condor job(s)."""

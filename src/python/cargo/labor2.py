@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import os
 import sys
 import time
 import uuid
@@ -27,46 +28,59 @@ def recv_pyobj_gz(zmq_socket):
 
     return unpickled
 
-class ApplyMessage(object):
-    """A worker wants a unit of work."""
+class Message(object):
+    """Message from a worker."""
 
     def __init__(self, sender):
         self.sender = sender
+        self.host = socket.gethostname()
+        self.pid = os.getpid()
+
+    def make_summary(self, text):
+        return "worker {0} (pid {1} on {2}) {3}".format(self.sender, self.pid, self.host, text)
+
+class ApplyMessage(Message):
+    """A worker wants a unit of work."""
 
     def get_summary(self):
-        return "worker {0} requested a job".format(self.sender)
+        return self.make_summary("requested a job")
 
-class ErrorMessage(object):
+class ErrorMessage(Message):
     """An error occurred in a task."""
 
     def __init__(self, sender, key, description):
-        self.sender = sender
+        Message.__init__(self, sender)
+
         self.key = key
         self.description = description
 
     def get_summary(self):
-        return "worker {0} encountered error \"{1}\"".format(self.sender, self.description.splitlines()[0])
+        brief = self.description.splitlines()[0]
 
-class InterruptedMessage(object):
+        return self.make_summary("encountered an error ({0})".format(brief))
+
+class InterruptedMessage(Message):
     """A worker was interrupted."""
 
     def __init__(self, sender, key):
-        self.sender = sender
+        Message.__init__(self, sender)
+
         self.key = key
 
     def get_summary(self):
-        return "worker {0} was interrupted".format(self.sender)
+        return self.make_summary("was interrupted")
 
-class DoneMessage(object):
+class DoneMessage(Message):
     """A task was completed."""
 
     def __init__(self, sender, key, result):
-        self.sender = sender
+        Message.__init__(self, sender)
+
         self.key = key
         self.result = result
 
     def get_summary(self):
-        return "worker {0} finished job {1}".format(self.sender, self.key)
+        return self.make_summary("finished job {0}".format(self.key))
 
 class Task(object):
     """One unit of distributable work."""
@@ -103,7 +117,7 @@ class TaskState(object):
         self.working = set()
 
     def score(self):
-        """Score this task according to work urgency."""
+        """Score the urgency of this task."""
 
         if self.done:
             return (sys.maxint, sys.maxint, random.random())
@@ -137,8 +151,7 @@ class WorkerState(object):
     def set_assigned(self, tstate):
         """Change worker state in response to assignment."""
 
-        if self.assigned is not None:
-            self.assigned.working.remove(self)
+        self.disassociate()
 
         self.assigned = tstate
         self.timestamp = time.time()
@@ -148,13 +161,15 @@ class WorkerState(object):
     def set_interruption(self):
         """Change worker state in response to interruption."""
 
-        if self.assigned is not None:
-            self.assigned.working.remove(self)
-
-            self.assigned = None
+        self.disassociate()
 
     def set_error(self):
         """Change worker state in response to error."""
+
+        self.disassociate()
+
+    def disassociate(self):
+        """Disassociate from the current job."""
 
         if self.assigned is not None:
             self.assigned.working.remove(self)
@@ -162,102 +177,104 @@ class WorkerState(object):
             self.assigned = None
 
 class Manager(object):
-    pass
+    """Manage distributed work."""
 
-def distribute_labor_on(task_list, handler, rep_socket):
-    import zmq
+    def __init__(self, task_list, handler, rep_socket):
+        """Initialize."""
 
-    # manage worker and task states
-    tstates = dict((t.key, TaskState(t)) for t in task_list)
-    wstates = {}
+        self.handler = handler
+        self.rep_socket = rep_socket
+        self.tstates = dict((t.key, TaskState(t)) for t in task_list)
+        self.wstates = {}
 
-    def next_task():
-        tstate = min(tstates.itervalues(), key = TaskState.score)
+    def manage(self):
+        """Manage workers and tasks."""
+
+        # prepare
+        import zmq
+
+        poller = zmq.Poller()
+
+        poller.register(self.rep_socket, zmq.POLLIN)
+
+        # receive
+        while self.next_task() is not None:
+            events = dict(poller.poll())
+
+            assert events.get(self.rep_socket) == zmq.POLLIN
+
+            message = recv_pyobj_gz(self.rep_socket)
+
+            # and respond
+            logger.info(
+                "[%s/%i] %s",
+                str(self.done_count()).rjust(len(str(len(self.tstates))), "0"),
+                len(self.tstates),
+                message.get_summary(),
+                )
+
+            sender = self.wstates.get(message.sender)
+
+            if sender is None:
+                sender = WorkerState(message.sender)
+
+                self.wstates[sender.condor_id] = sender
+
+            if isinstance(message, ApplyMessage):
+                # task request
+                sender.set_assigned(self.next_task())
+
+                send_pyobj_gz(self.rep_socket, sender.assigned.task)
+            elif isinstance(message, DoneMessage):
+                # task result
+                finished = sender.assigned
+                was_done = sender.set_done()
+
+                assert finished.task.key == message.key
+
+                working_ids = [ws.condor_id for ws in finished.working]
+
+                if working_ids:
+                    cargo.condor_hold(working_ids)
+
+                selected = self.next_task()
+
+                if selected is None:
+                    send_pyobj_gz(self.rep_socket, None)
+                else:
+                    sender.set_assigned(selected)
+
+                    send_pyobj_gz(self.rep_socket, selected.task)
+
+                if not was_done:
+                    self.handler(finished.task, message.result)
+            elif isinstance(message, InterruptedMessage):
+                # worker interruption
+                sender.set_interruption()
+
+                self.rep_socket.send(bytes())
+            elif isinstance(message, ErrorMessage):
+                # worker exception
+                sender.set_error()
+
+                self.rep_socket.send(bytes())
+            else:
+                assert False
+
+    def next_task(self):
+        """Select the next task on which to work."""
+
+        tstate = min(self.tstates.itervalues(), key = TaskState.score)
 
         if tstate.done:
             return None
         else:
             return tstate
 
-    def done_count():
-        count = 0
+    def done_count(self):
+        """Return the number of completed tasks."""
 
-        for tstate in tstates.itervalues():
-            if tstate.done:
-                count += 1
-
-        return count
-
-    # receive messages
-    poller = zmq.Poller()
-
-    poller.register(rep_socket, zmq.POLLIN)
-
-    while next_task() is not None:
-        events = dict(poller.poll())
-
-        if events.get(rep_socket) != zmq.POLLIN:
-            continue
-
-        message = recv_pyobj_gz(rep_socket)
-
-        logger.info(
-            "[%s/%i] %s",
-            str(done_count()).rjust(len(str(len(tstates))), "0"),
-            len(tstates),
-            message.get_summary(),
-            )
-
-        # and respond to them
-        if isinstance(message, ApplyMessage):
-            wstate = wstates.get(message.sender)
-
-            if wstate is None:
-                wstate = WorkerState(message.sender)
-
-                wstates[message.sender] = wstate
-
-            wstate.set_assigned(next_task())
-
-            send_pyobj_gz(rep_socket, wstate.assigned.task)
-        elif isinstance(message, DoneMessage):
-            wstate = wstates[message.sender]
-
-            assert wstate.assigned.task.key == message.key
-
-            done_tstate = wstate.assigned
-            was_done = wstate.set_done()
-
-            working_ids = [ws.condor_id for ws in done_tstate.working]
-
-            if working_ids:
-                cargo.condor_hold(working_ids)
-                cargo.condor_release(working_ids)
-
-            for other_wstate in list(done_tstate.working):
-                other_wstate.set_done()
-
-            next_tstate = next_task()
-
-            if next_tstate is None:
-                send_pyobj_gz(rep_socket, None)
-            else:
-                wstate.set_assigned(next_tstate)
-
-                send_pyobj_gz(rep_socket, next_tstate.task)
-
-            if not was_done:
-                handler(done_tstate.task, message.result)
-        elif isinstance(message, InterruptedMessage):
-            wstates[message.sender].set_interruption()
-
-            rep_socket.send(bytes())
-        elif isinstance(message, ErrorMessage):
-            wstates[message.sender].set_error()
-
-            rep_socket.send(bytes())
-        else:
-            assert False
+        return sum(1 for t in self.tstates.itervalues() if t.done)
 
 def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     """Distribute computation to remote workers."""
@@ -277,7 +294,7 @@ def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     cluster = cargo.submit_condor_workers(workers, "tcp://%s:%i" % (socket.getfqdn(), rep_port))
 
     try:
-        return distribute_labor_on(tasks, handler, rep_socket)
+        return Manager(tasks, handler, rep_socket).manage()
     finally:
         # clean up condor jobs
         cargo.condor_rm(cluster)
