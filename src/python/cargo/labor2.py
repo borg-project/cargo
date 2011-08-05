@@ -55,7 +55,7 @@ class ErrorMessage(Message):
         self.description = description
 
     def get_summary(self):
-        brief = self.description.splitlines()[0]
+        brief = self.description.splitlines()[-1]
 
         return self.make_summary("encountered an error ({0})".format(brief))
 
@@ -300,18 +300,22 @@ def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
     cluster = cargo.submit_condor_workers(workers, "tcp://%s:%i" % (socket.getfqdn(), rep_port))
 
     try:
-        return Manager(tasks, handler, rep_socket).manage()
+        # XXX workaround for bizarre pyzmq sigint behavior
+        try:
+            return Manager(tasks, handler, rep_socket).manage()
+        except KeyboardInterrupt:
+            raise
     finally:
         # clean up condor jobs
         cargo.condor_rm(cluster)
 
-        logger.info("cleaned up condor jobs")
+        logger.info("removed condor jobs")
 
         # clean up zeromq
         rep_socket.close()
         context.term()
 
-        logger.info("cleaned up zeromq context")
+        logger.info("terminated zeromq context")
 
 def do_or_distribute(requests, workers, handler = lambda _, x: x):
     """Distribute or compute locally."""
