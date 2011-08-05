@@ -118,7 +118,7 @@ class TTY_VerboseFormatter(Formatter):
     A verbose log formatter for console output.
     """
 
-    _DATE_FORMAT = "%y%m%d%H%M%S"
+    _DATE_FORMAT = "%H:%M:%S"
     _TIME_COLOR  = "\x1b[34m"
     _NAME_COLOR  = "\x1b[35m"
     _LEVEL_COLOR = "\x1b[33m"
@@ -144,11 +144,10 @@ class TTY_VerboseFormatter(Formatter):
             # FIXME do nice block formatting, increasing column sizes as necessary
             if curses.tigetnum("colors") > 2:
                 format = \
-                    "%s%%(name)s%s - %s%%(levelname)s%s - %%(message)s" % (
+                    "%s%%(asctime)s%s %%(message)s" % (
                         TTY_VerboseFormatter._NAME_COLOR,
                         TTY_VerboseFormatter._COLOR_END,
-                        TTY_VerboseFormatter._LEVEL_COLOR,
-                        TTY_VerboseFormatter._COLOR_END)
+                        )
 
         if format is None:
             format = "%(name)s - %(levelname)s - %(message)s"
@@ -161,7 +160,7 @@ class VerboseFileFormatter(Formatter):
     A verbose log formatter for file output.
     """
 
-    _FORMAT      = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    _FORMAT      = "%(asctime)s - %(levelno)s - %(message)s"
     _DATE_FORMAT = "%y%m%d%H%M%S"
 
     def __init__(self):
