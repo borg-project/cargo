@@ -70,7 +70,7 @@ def main(req_address, condor_id):
                     req_socket,
                     cargo.labor2.InterruptedMessage(condor_id, task.key),
                     )
-                cargo.recv()
+                req_socket.recv()
 
                 break
             except BaseException, error:
@@ -82,7 +82,7 @@ def main(req_address, condor_id):
                     req_socket,
                     cargo.labor2.ErrorMessage(condor_id, task.key, description),
                     )
-                cargo.recv()
+                req_socket.recv()
 
                 break
             else:
