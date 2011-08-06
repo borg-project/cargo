@@ -5,10 +5,10 @@ from __future__ import absolute_import
 import os
 import sys
 import time
-import uuid
 import zlib
 import socket
 import random
+import subprocess
 import collections
 import cPickle as pickle
 import cargo
@@ -236,7 +236,10 @@ class Manager(object):
                 working_ids = [ws.condor_id for ws in finished.working]
 
                 if working_ids:
-                    cargo.condor_hold(working_ids)
+                    try:
+                        cargo.condor_hold(working_ids)
+                    except subprocess.CalledProcessError:
+                        logging.warning("unable to hold %s", working_ids)
 
                 selected = self.next_task()
 
