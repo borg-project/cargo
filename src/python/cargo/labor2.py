@@ -239,7 +239,7 @@ class Manager(object):
                     try:
                         cargo.condor_hold(working_ids)
                     except subprocess.CalledProcessError:
-                        logging.warning("unable to hold %s", working_ids)
+                        logger.warning("unable to hold %s", working_ids)
 
                 selected = self.next_task()
 
