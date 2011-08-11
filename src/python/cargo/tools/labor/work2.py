@@ -15,7 +15,7 @@ import cargo
 
 logger = cargo.get_logger(__name__, level = "NOTSET")
 
-def work_once(req_socket, task):
+def work_once(condor_id, req_socket, task):
     """Request and/or complete a single unit of work."""
 
     # get an assignment
@@ -76,14 +76,14 @@ def work_once(req_socket, task):
 
     return None
 
-def work_loop(req_socket):
+def work_loop(condor_id, req_socket):
     """Repeatedly request and complete units of work."""
 
     task = None
 
     while True:
         try:
-            task = work_once(req_socket, task)
+            task = work_once(condor_id, req_socket, task)
         except Exception:
             raise
 
@@ -110,7 +110,7 @@ def main(req_address, condor_id):
 
     # enter the work loop
     try:
-        work_loop(req_socket)
+        work_loop(condor_id, req_socket)
     finally:
         logger.info("flushing sockets and terminating zeromq context")
 
