@@ -7,10 +7,14 @@ import sys
 import time
 import zlib
 import socket
+import signal
 import random
+import traceback
 import subprocess
 import collections
+import multiprocessing
 import cPickle as pickle
+import numpy
 import cargo
 
 logger = cargo.get_logger(__name__, level = "INFO")
@@ -176,94 +180,70 @@ class WorkerState(object):
 
             self.assigned = None
 
-class Manager(object):
-    """Manage distributed work."""
+class ManagerCore(object):
+    """Maintain the task queue and worker assignments."""
 
-    def __init__(self, task_list, handler, rep_socket):
+    def __init__(self, task_list):
         """Initialize."""
 
-        self.handler = handler
-        self.rep_socket = rep_socket
         self.tstates = dict((t.key, TaskState(t)) for t in task_list)
         self.wstates = {}
 
-    def manage(self):
+    def handle(self, message):
         """Manage workers and tasks."""
 
-        # prepare
-        import zmq
+        logger.info(
+            "[%s/%i] %s",
+            str(self.done_count()).rjust(len(str(len(self.tstates))), "0"),
+            len(self.tstates),
+            message.get_summary(),
+            )
 
-        poller = zmq.Poller()
+        sender = self.wstates.get(message.sender)
 
-        poller.register(self.rep_socket, zmq.POLLIN)
+        if sender is None:
+            sender = WorkerState(message.sender)
 
-        # receive
-        while self.unfinished_count() > 0:
-            events = dict(poller.poll())
+            self.wstates[sender.condor_id] = sender
 
-            assert events.get(self.rep_socket) == zmq.POLLIN
+        if isinstance(message, ApplyMessage):
+            # task request
+            sender.disassociate()
+            sender.set_assigned(self.next_task())
 
-            message = recv_pyobj_gz(self.rep_socket)
+            return (sender.assigned.task, None)
+        elif isinstance(message, DoneMessage):
+            # task result
+            finished = sender.assigned
+            was_done = sender.set_done()
 
-            # and respond
-            logger.info(
-                "[%s/%i] %s",
-                str(self.done_count()).rjust(len(str(len(self.tstates))), "0"),
-                len(self.tstates),
-                message.get_summary(),
-                )
+            assert finished.task.key == message.key
 
-            sender = self.wstates.get(message.sender)
+            selected = self.next_task()
 
-            if sender is None:
-                sender = WorkerState(message.sender)
-
-                self.wstates[sender.condor_id] = sender
-
-            if isinstance(message, ApplyMessage):
-                # task request
-                sender.disassociate()
-                sender.set_assigned(self.next_task())
-
-                send_pyobj_gz(self.rep_socket, sender.assigned.task)
-            elif isinstance(message, DoneMessage):
-                # task result
-                finished = sender.assigned
-                was_done = sender.set_done()
-
-                assert finished.task.key == message.key
-
-                working_ids = [ws.condor_id for ws in finished.working]
-
-                if working_ids:
-                    try:
-                        cargo.condor_hold(working_ids)
-                    except subprocess.CalledProcessError:
-                        logger.warning("unable to hold %s", working_ids)
-
-                selected = self.next_task()
-
-                if selected is None:
-                    send_pyobj_gz(self.rep_socket, None)
-                else:
-                    sender.set_assigned(selected)
-
-                    send_pyobj_gz(self.rep_socket, selected.task)
-
-                if not was_done:
-                    self.handler(finished.task, message.result)
-            elif isinstance(message, InterruptedMessage):
-                # worker interruption
-                sender.set_interruption()
-
-                self.rep_socket.send(bytes())
-            elif isinstance(message, ErrorMessage):
-                # worker exception
-                sender.set_error()
-
-                self.rep_socket.send(bytes())
+            if selected is None:
+                selected_task = None
             else:
-                assert False
+                selected_task = selected.task
+
+                sender.set_assigned(selected)
+
+            if was_done:
+                return (selected_task, None)
+            else:
+                return (selected_task, (finished.task, message.result))
+        elif isinstance(message, InterruptedMessage):
+            # worker interruption
+            sender.set_interruption()
+
+            return (None, None)
+        elif isinstance(message, ErrorMessage):
+            # worker exception
+            sender.set_error()
+
+            return (None, None)
+        else:
+            raise TypeError("unrecognized message type")
 
     def next_task(self):
         """Select the next task on which to work."""
@@ -285,48 +265,211 @@ class Manager(object):
 
         return sum(1 for t in self.tstates.itervalues() if not t.done)
 
-def distribute_labor(tasks, workers = 32, handler = lambda _, x: x):
-    """Distribute computation to remote workers."""
+class RemoteManager(object):
+    """Manage remotely-distributed work."""
 
-    import zmq
+    def __init__(self, task_list, handler, rep_socket):
+        """Initialize."""
 
-    logger.info("distributing %i tasks to %i workers", len(tasks), workers)
+        self.handler = handler
+        self.rep_socket = rep_socket
+        self.core = ManagerCore(task_list)
 
-    # prepare zeromq
-    context = zmq.Context()
-    rep_socket = context.socket(zmq.REP)
-    rep_port = rep_socket.bind_to_random_port("tcp://*")
+    def manage(self):
+        """Manage workers and tasks."""
 
-    logger.debug("listening on port %i", rep_port)
+        import zmq
 
-    # launch condor jobs
-    cluster = cargo.submit_condor_workers(workers, "tcp://%s:%i" % (socket.getfqdn(), rep_port))
+        poller = zmq.Poller()
 
-    try:
-        # XXX workaround for bizarre pyzmq sigint behavior
+        poller.register(self.rep_socket, zmq.POLLIN)
+
+        while self.core.unfinished_count() > 0:
+            events = dict(poller.poll())
+
+            assert events.get(self.rep_socket) == zmq.POLLIN
+
+            message = recv_pyobj_gz(self.rep_socket)
+
+            (response, completed) = self.core.handle(message)
+
+            send_pyobj_gz(self.rep_socket, response)
+
+            if completed is not None:
+                self.handler(*completed)
+
+    @staticmethod
+    def distribute(tasks, workers = 8, handler = lambda _, x: x):
+        """Distribute computation to remote workers."""
+
+        import zmq
+
+        logger.info("distributing %i tasks to %i workers", len(tasks), workers)
+
+        # prepare zeromq
+        context = zmq.Context()
+        rep_socket = context.socket(zmq.REP)
+        rep_port = rep_socket.bind_to_random_port("tcp://*")
+
+        logger.debug("listening on port %i", rep_port)
+
+        # launch condor jobs
+        cluster = cargo.submit_condor_workers(workers, "tcp://%s:%i" % (socket.getfqdn(), rep_port))
+
         try:
-            return Manager(tasks, handler, rep_socket).manage()
-        except KeyboardInterrupt:
-            raise
-    finally:
-        # clean up condor jobs
-        cargo.condor_rm(cluster)
+            try:
+                return RemoteManager(tasks, handler, rep_socket).manage()
+            except KeyboardInterrupt:
+                # work around bizarre pyzmq SIGINT behavior
+                raise
+        finally:
+            # clean up condor jobs
+            cargo.condor_rm(cluster)
 
-        logger.info("removed condor jobs")
+            logger.info("removed condor jobs")
 
-        # clean up zeromq
-        rep_socket.close()
-        context.term()
+            # clean up zeromq
+            rep_socket.close()
+            context.term()
 
-        logger.info("terminated zeromq context")
+            logger.info("terminated zeromq context")
 
-def do_or_distribute(requests, workers, handler = lambda _, x: x):
+class LocalWorkerProcess(multiprocessing.Process):
+    """Work in a subprocess."""
+
+    def __init__(self, stm_queue):
+        """Initialize."""
+
+        multiprocessing.Process.__init__(self)
+
+        self.stm_queue = stm_queue
+        self.mts_queue = multiprocessing.Queue()
+
+    def run(self):
+        """Work."""
+
+        class DeathRequestedError(Exception):
+            pass
+
+        try:
+            def handle_sigusr1(number, frame):
+                raise DeathRequestedError()
+
+            signal.signal(signal.SIGUSR1, handle_sigusr1)
+
+            logger.info("subprocess running")
+
+            task = None
+
+            while True:
+                # get an assignment
+                if task is None:
+                    self.stm_queue.put(ApplyMessage(os.getpid()))
+
+                    task = self.mts_queue.get()
+
+                    if task is None:
+                        logger.info("received null assignment; terminating")
+
+                        return None
+
+                # complete the assignment
+                try:
+                    seed = abs(hash(task.key))
+
+                    logger.info("setting PRNG seed to %s", seed)
+
+                    numpy.random.seed(seed)
+                    random.seed(numpy.random.randint(2**32))
+
+                    logger.info("starting work on task %s", task.key)
+
+                    result = task()
+                except KeyboardInterrupt, error:
+                    logger.warning("interruption during task %s", task.key)
+
+                    self.stm_queue.put(InterruptedMessage(os.getpid(), task.key))
+                    self.mts_queue.get()
+
+                    break
+                except DeathRequestedError:
+                    logger.warning("death requested; terminating")
+
+                    break
+                except BaseException, error:
+                    description = traceback.format_exc(error)
+
+                    logger.warning("error during task %s:\n%s", task.key, description)
+
+                    self.stm_queue.put(ErrorMessage(os.getpid(), task.key, description))
+                    self.mts_queue.get()
+
+                    break
+                else:
+                    logger.info("finished task %s", task.key)
+
+                    self.stm_queue.put(DoneMessage(os.getpid(), task.key, result))
+
+                    task = self.mts_queue.get()
+        except DeathRequestedError:
+            pass
+
+class LocalManager(object):
+    """Manage locally-distributed work."""
+
+    def __init__(self, stm_queue, task_list, processes, handler):
+        """Initialize."""
+
+        self.stm_queue = stm_queue
+        self.core = ManagerCore(task_list)
+        self.processes = processes
+        self.handler = handler
+
+    def manage(self):
+        """Manage workers and tasks."""
+
+        process_index = dict((process.pid, process) for process in self.processes)
+
+        while self.core.unfinished_count() > 0:
+            message = self.stm_queue.get()
+
+            (response, completed) = self.core.handle(message)
+
+            process_index[message.sender].mts_queue.put(response)
+
+            if completed is not None:
+                self.handler(*completed)
+
+    @staticmethod
+    def distribute(tasks, workers = 8, handler = lambda _, x: x):
+        """Distribute computation to remote workers."""
+
+        logger.info("distributing %i tasks to %i workers", len(tasks), workers)
+
+        stm_queue = multiprocessing.Queue()
+        processes = [LocalWorkerProcess(stm_queue) for _ in xrange(workers)]
+
+        for process in processes:
+            process.start()
+
+        try:
+            return LocalManager(stm_queue, tasks, processes, handler).manage()
+        finally:
+            for process in processes:
+                os.kill(process.pid, signal.SIGUSR1)
+
+            logger.info("cleaned up child processes")
+
+def do_or_distribute(requests, workers, handler = lambda _, x: x, local = False):
     """Distribute or compute locally."""
 
     tasks = map(Task.from_request, requests)
 
     if workers > 0:
-        return distribute_labor(tasks, workers, handler)
+        if local:
+            return LocalManager.distribute(tasks, workers, handler)
+        else:
+            return RemoteManager.distribute(tasks, workers, handler)
     else:
         while tasks:
             task = tasks.pop()
